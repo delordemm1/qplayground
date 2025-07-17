@@ -1,7 +1,17 @@
-```svelte
 <script lang="ts">
   import { Modal, Heading, Button, Label, Input, Textarea, Select, Option } from "flowbite-svelte";
   import { showSuccessToast, showErrorToast } from "$lib/utils/toast";
+
+  // Import configuration components
+  import PlaywrightGotoConfig from "./ActionConfigs/PlaywrightGotoConfig.svelte";
+  import PlaywrightClickConfig from "./ActionConfigs/PlaywrightClickConfig.svelte";
+  import PlaywrightFillConfig from "./ActionConfigs/PlaywrightFillConfig.svelte";
+  import PlaywrightTypeConfig from "./ActionConfigs/PlaywrightTypeConfig.svelte";
+  import PlaywrightScreenshotConfig from "./ActionConfigs/PlaywrightScreenshotConfig.svelte";
+  import PlaywrightWaitConfig from "./ActionConfigs/PlaywrightWaitConfig.svelte";
+  import PlaywrightEvaluateConfig from "./ActionConfigs/PlaywrightEvaluateConfig.svelte";
+  import R2UploadConfig from "./ActionConfigs/R2UploadConfig.svelte";
+  import R2DeleteConfig from "./ActionConfigs/R2DeleteConfig.svelte";
 
   type Action = {
     ID: string;
@@ -12,7 +22,7 @@
 
   type Props = {
     open: boolean;
-    action?: Action | null; // Optional action for editing
+    action?: Action | null;
     onSave: (action: {
       action_type: string;
       action_config_json: string;
@@ -29,12 +39,14 @@
   }: Props = $props();
 
   let actionType = $state("");
-  let actionConfigJson = $state("{}");
   let actionOrder = $state(0);
   let isLoading = $state(false);
   let errors = $state<Record<string, string>>({});
 
-  // List of supported action types (extend as needed)
+  // This will hold the structured configuration data
+  let currentActionConfig = $state<Record<string, any>>({});
+
+  // List of supported action types
   const actionTypes = [
     "playwright:goto",
     "playwright:click",
@@ -46,13 +58,13 @@
     "playwright:select_option",
     "playwright:wait_for_selector",
     "playwright:wait_for_timeout",
+    "playwright:wait_for_load_state",
     "playwright:screenshot",
     "playwright:evaluate",
     "playwright:hover",
     "playwright:scroll",
     "playwright:get_text",
     "playwright:get_attribute",
-    "playwright:wait_for_load_state",
     "playwright:set_viewport",
     "playwright:reload",
     "playwright:go_back",
@@ -61,18 +73,55 @@
     "r2:delete",
   ];
 
+  // Map action types to their respective config components
+  const actionConfigComponents: Record<string, any> = {
+    "playwright:goto": PlaywrightGotoConfig,
+    "playwright:click": PlaywrightClickConfig,
+    "playwright:fill": PlaywrightFillConfig,
+    "playwright:type": PlaywrightTypeConfig,
+    "playwright:screenshot": PlaywrightScreenshotConfig,
+    "playwright:wait_for_selector": PlaywrightWaitConfig,
+    "playwright:wait_for_timeout": PlaywrightWaitConfig,
+    "playwright:wait_for_load_state": PlaywrightWaitConfig,
+    "playwright:evaluate": PlaywrightEvaluateConfig,
+    "r2:upload": R2UploadConfig,
+    "r2:delete": R2DeleteConfig,
+  };
+
+  // Derived state for the current config component
+  const CurrentConfigComponent = $derived(actionConfigComponents[actionType]);
+
+  // Effect to initialize form fields when modal opens or action prop changes
   $effect(() => {
     if (open) {
       actionType = action?.ActionType || "";
-      actionConfigJson = action?.ActionConfigJSON || "{}";
       actionOrder = action?.ActionOrder || 0;
-      errors = {}; // Clear errors when modal opens
+      errors = {};
+
+      // Parse existing JSON config into structured object
+      try {
+        currentActionConfig = action?.ActionConfigJSON
+          ? JSON.parse(action.ActionConfigJSON)
+          : {};
+      } catch (e) {
+        console.error("Failed to parse existing action config JSON:", e);
+        currentActionConfig = {};
+        errors.action_config_json = "Invalid existing JSON format";
+      }
+    }
+  });
+
+  // Reset config when action type changes
+  $effect(() => {
+    if (actionType && !action) {
+      // Only reset for new actions, not when editing existing ones
+      currentActionConfig = {};
     }
   });
 
   async function handleSubmit(e: Event) {
     e.preventDefault();
-    errors = {}; // Clear previous errors
+    errors = {};
 
     if (!actionType.trim()) {
       errors.action_type = "Action type is required";
@@ -83,11 +132,24 @@
       return;
     }
 
-    // Basic JSON validation for config
+    // Basic validation for currentActionConfig
+    if (typeof currentActionConfig !== 'object' || currentActionConfig === null) {
+      errors.action_config_json = "Invalid configuration data";
+      return;
+    }
+
+    // Validate required fields based on action type
+    const validationErrors = validateActionConfig(actionType, currentActionConfig);
+    if (validationErrors.length > 0) {
+      errors.action_config_json = validationErrors.join(", ");
+      return;
+    }
+
+    let actionConfigJsonString: string;
     try {
-      JSON.parse(actionConfigJson);
+      actionConfigJsonString = JSON.stringify(currentActionConfig);
     } catch (err) {
-      errors.action_config_json = "Invalid JSON format";
+      errors.action_config_json = "Failed to serialize configuration to JSON";
       return;
     }
 
@@ -95,19 +157,57 @@
     try {
       await onSave({
         action_type: actionType,
-        action_config_json: actionConfigJson,
+        action_config_json: actionConfigJsonString,
         action_order: actionOrder,
       });
-      open = false; // Close modal on success
+      open = false;
     } catch (err: any) {
+      console.error("Failed to save action:", err);
       if (err.errors) {
         errors = err.errors;
       } else {
         showErrorToast(err.message || "Failed to save action");
+        throw new Error(err.message || "Failed to save action");
       }
     } finally {
       isLoading = false;
     }
+  }
+
+  function validateActionConfig(actionType: string, config: Record<string, any>): string[] {
+    const errors: string[] = [];
+
+    switch (actionType) {
+      case "playwright:goto":
+        if (!config.url) errors.push("URL is required");
+        break;
+      case "playwright:click":
+      case "playwright:fill":
+      case "playwright:type":
+      case "playwright:wait_for_selector":
+        if (!config.selector) errors.push("Selector is required");
+        if (actionType === "playwright:fill" && !config.value) errors.push("Value is required");
+        if (actionType === "playwright:type" && !config.text) errors.push("Text is required");
+        break;
+      case "playwright:wait_for_timeout":
+        if (!config.timeout_ms || config.timeout_ms <= 0) errors.push("Timeout (ms) is required and must be positive");
+        break;
+      case "playwright:screenshot":
+        if (config.upload_to_r2 && !config.r2_key) errors.push("R2 key is required when uploading to R2");
+        break;
+      case "playwright:evaluate":
+        if (!config.expression) errors.push("JavaScript expression is required");
+        break;
+      case "r2:upload":
+        if (!config.key) errors.push("Object key is required");
+        if (!config.content) errors.push("Content is required");
+        break;
+      case "r2:delete":
+        if (!config.key) errors.push("Object key is required");
+        break;
+    }
+
+    return errors;
   }
 
   function handleClose() {
@@ -116,7 +216,7 @@
   }
 </script>
 
-<Modal bind:open outsideclose={false} class="w-full max-w-md">
+<Modal bind:open outsideclose={false} class="w-full max-w-2xl">
   <div class="p-6">
     <Heading tag="h3" class="text-xl font-semibold mb-4">
       {action ? "Edit Action" : "Create New Action"}
@@ -156,20 +256,39 @@
         {/if}
       </div>
 
-      <div>
-        <Label for="actionConfigJson" class="mb-2">Configuration (JSON)</Label>
-        <Textarea
-          id="actionConfigJson"
-          rows="8"
-          bind:value={actionConfigJson}
-          placeholder="{}"
-          class="font-mono text-sm"
-          class:border-red-500={!!errors.action_config_json}
-        />
-        {#if errors.action_config_json}
-          <p class="mt-2 text-sm text-red-600">{errors.action_config_json}</p>
-        {/if}
-      </div>
+      <!-- Dynamic Configuration Fields -->
+      {#if CurrentConfigComponent}
+        <div class="border p-4 rounded-md bg-gray-50">
+          <h4 class="text-md font-semibold mb-3">Action Configuration</h4>
+          <svelte:component 
+            this={CurrentConfigComponent} 
+            bind:config={currentActionConfig}
+            actionType={actionType}
+          />
+        </div>
+      {:else if actionType}
+        <!-- Fallback for action types without a specific component -->
+        <div>
+          <Label for="actionConfigJson" class="mb-2">Configuration (JSON)</Label>
+          <Textarea
+            id="actionConfigJson"
+            rows="8"
+            bind:value={currentActionConfig}
+            placeholder="{}"
+            class="font-mono text-sm"
+            class:border-red-500={!!errors.action_config_json}
+          />
+          <p class="text-xs text-gray-500 mt-1">
+            No specific configuration form available for this action type. Please enter JSON configuration manually.
+          </p>
+        </div>
+      {:else}
+        <p class="text-sm text-gray-500">Select an action type to configure its parameters.</p>
+      {/if}
+
+      {#if errors.action_config_json}
+        <p class="mt-2 text-sm text-red-600">{errors.action_config_json}</p>
+      {/if}
 
       <div class="flex justify-end space-x-3 pt-4">
         <Button color="alternative" onclick={handleClose} disabled={isLoading}>
@@ -206,4 +325,3 @@
     </form>
   </div>
 </Modal>
-```
