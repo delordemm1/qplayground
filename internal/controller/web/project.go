@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/delordemm1/qplayground/internal/modules/automation"
 	"github.com/delordemm1/qplayground/internal/modules/project"
 	"github.com/delordemm1/qplayground/internal/platform"
 	"github.com/go-playground/validator/v10"
@@ -30,6 +31,7 @@ func NewProjectHandler(inertia *inertia.Inertia, sessionManager *scs.SessionMana
 		inertia:        inertia,
 		sessionManager: sessionManager,
 		projectService: projectService,
+		// automationService: automationService, // Will be injected if needed
 	}
 }
 
@@ -37,6 +39,7 @@ type ProjectHandler struct {
 	inertia        *inertia.Inertia
 	sessionManager *scs.SessionManager
 	projectService project.ProjectService
+	automationService automation.AutomationService
 }
 
 type CreateProjectRequest struct {
@@ -146,9 +149,17 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Fetch automations for this project
+	automations, err := h.automationService.GetAutomationsByProject(r.Context(), projectID)
+	if err != nil {
+		platform.UtilHandleServerErr(w, err)
+		return
+	}
+
 	err = h.inertia.Render(w, r, "projects/show", inertia.Props{
 		"project": project,
 		"user":    user,
+		"automations": automations, // Pass automations to the view
 	})
 	if err != nil {
 		platform.UtilHandleServerErr(w, err)

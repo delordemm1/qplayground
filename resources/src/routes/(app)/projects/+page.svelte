@@ -1,62 +1,47 @@
+```svelte
 <script lang="ts">
   import { showErrorToast, showSuccessToast } from "$lib/utils/toast";
+  import ProjectFormModal from "$lib/components/ProjectFormModal.svelte";
+  import { formatDate } from "$lib/utils/date";
 
-  let { projects = [], user } = $props();
-  
+  type Project = {
+    ID: string;
+    Name: string;
+    Description: string;
+    CreatedAt: string;
+  };
+
+  let { projects = [], user }: { projects: Project[]; user: any } = $props();
+
   let showCreateModal = $state(false);
-  let isLoading = $state(false);
-  let errors = $state<Record<string, string>>({});
-  
-  let newProject = $state({
-    name: "",
-    description: ""
-  });
 
-  async function createProject(e) {
-    e.preventDefault();
-    if (!newProject.name.trim()) {
-      errors.name = "Project name is required";
-      return;
-    }
-
-    isLoading = true;
-    errors = {};
-
+  async function handleSaveProject(data: { name: string; description: string }) {
     try {
       const response = await fetch("/projects", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(newProject),
+        body: JSON.stringify(data),
       });
 
-      const data = await response.json();
+      const result = await response.json();
 
       if (response.ok) {
         showSuccessToast("Project created successfully");
-        showCreateModal = false;
-        newProject = { name: "", description: "" };
-        // Refresh the page to show the new project
-        window.location.reload();
+        projects = [...projects, result.project]; // Add new project to the list
       } else {
-        if (data.errors) {
-          errors = data.errors;
-        } else {
-          showErrorToast(data.error || "Failed to create project");
-        }
+        throw result;
       }
-    } catch (error) {
-      showErrorToast("Network error. Please try again.");
-    } finally {
-      isLoading = false;
+    } catch (err: any) {
+      console.error("Failed to create project:", err);
+      if (err.errors) {
+        throw err; // Re-throw to be caught by modal
+      } else {
+        showErrorToast(err.message || "Failed to create project");
+        throw new Error(err.message || "Failed to create project");
+      }
     }
-  }
-
-  function closeModal() {
-    showCreateModal = false;
-    newProject = { name: "", description: "" };
-    errors = {};
   }
 </script>
 
@@ -74,11 +59,21 @@
     </div>
     <div class="mt-4 flex md:mt-0 md:ml-4">
       <button
-        onclick={() => showCreateModal = true}
+        onclick={() => (showCreateModal = true)}
         class="ml-3 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
       >
-        <svg class="-ml-1 mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+        <svg
+          class="-ml-1 mr-2 h-5 w-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+          />
         </svg>
         New Project
       </button>
@@ -107,11 +102,21 @@
         <p class="mt-1 text-sm text-gray-500">Get started by creating a new project.</p>
         <div class="mt-6">
           <button
-            onclick={() => showCreateModal = true}
+            onclick={() => (showCreateModal = true)}
             class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
           >
-            <svg class="-ml-1 mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            <svg
+              class="-ml-1 mr-2 h-5 w-5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+              />
             </svg>
             New Project
           </button>
@@ -119,8 +124,10 @@
       </div>
     {:else}
       <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {#each projects as project}
-          <div class="bg-white overflow-hidden shadow rounded-lg hover:shadow-md transition-shadow">
+        {#each projects as project (project.ID)}
+          <div
+            class="bg-white overflow-hidden shadow rounded-lg hover:shadow-md transition-shadow"
+          >
             <div class="p-6">
               <div class="flex items-center">
                 <div class="flex-shrink-0">
@@ -140,33 +147,36 @@
                 </div>
                 <div class="ml-4 flex-1">
                   <h3 class="text-lg font-medium text-gray-900">
-                    <a href="/projects/{project.ID}/automations" class="hover:text-primary-600">
+                    <a
+                      href="/projects/{project.ID}"
+                      class="hover:text-primary-600"
+                    >
                       {project.Name}
                     </a>
                   </h3>
                   {#if project.Description}
-                    <p class="text-sm text-gray-500 mt-1">{project.Description}</p>
+                    <p class="text-sm text-gray-500 mt-1">
+                      {project.Description}
+                    </p>
                   {/if}
                 </div>
               </div>
               <div class="mt-4">
                 <div class="flex items-center justify-between text-sm text-gray-500">
                   <span>0 automations</span>
-                  <span>Created {new Date(project.CreatedAt).toLocaleDateString()}</span>
+                  <span>Created {formatDate(project.CreatedAt)}</span>
                 </div>
               </div>
             </div>
             <div class="bg-gray-50 px-6 py-3">
               <div class="flex justify-between">
                 <a
-                  href="/projects/{project.ID}/automations"
+                  href="/projects/{project.ID}"
                   class="text-sm font-medium text-primary-700 hover:text-primary-900"
                 >
-                  View automations
+                  View Project <span aria-hidden="true">&rarr;</span>
                 </a>
-                <button class="text-sm font-medium text-gray-500 hover:text-gray-700">
-                  Settings
-                </button>
+                <!-- Settings button can be added here if needed -->
               </div>
             </div>
           </div>
@@ -177,76 +187,9 @@
 </div>
 
 <!-- Create Project Modal -->
-{#if showCreateModal}
-  <div class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-      <div class="mt-3">
-        <div class="flex items-center justify-between">
-          <h3 class="text-lg font-medium text-gray-900">Create New Project</h3>
-          <button
-            onclick={closeModal}
-            class="text-gray-400 hover:text-gray-600"
-          >
-            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        
-        <form onsubmit={createProject} class="mt-6 space-y-4">
-          <div>
-            <label for="name" class="block text-sm font-medium text-gray-700">
-              Project Name
-            </label>
-            <input
-              id="name"
-              type="text"
-              required
-              bind:value={newProject.name}
-              class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-              class:border-red-300={errors.name}
-              placeholder="Enter project name"
-            />
-            {#if errors.name}
-              <p class="mt-2 text-sm text-red-600">{errors.name}</p>
-            {/if}
-          </div>
-
-          <div>
-            <label for="description" class="block text-sm font-medium text-gray-700">
-              Description (optional)
-            </label>
-            <textarea
-              id="description"
-              rows="3"
-              bind:value={newProject.description}
-              class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-              placeholder="Enter project description"
-            ></textarea>
-          </div>
-
-          <div class="flex justify-end space-x-3 pt-4">
-            <button
-              type="button"
-              onclick={closeModal}
-              class="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isLoading}
-              class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50"
-            >
-              {#if isLoading}
-                Creating...
-              {:else}
-                Create Project
-              {/if}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
-{/if}
+<ProjectFormModal
+  bind:open={showCreateModal}
+  onSave={handleSaveProject}
+  onClose={() => (showCreateModal = false)}
+/>
+```
