@@ -8,8 +8,8 @@ import (
 	"github.com/delordemm1/qplayground/internal/modules/auth"
 	"github.com/delordemm1/qplayground/internal/platform"
 
-	"github.com/alexedwards/scs/v2"
 	"github.com/go-playground/validator/v10"
+	"github.com/alexedwards/scs/v2"
 	inertia "github.com/romsar/gonertia/v2"
 )
 
@@ -48,6 +48,34 @@ func (m *SiteMiddleware) FlashMessageSharingMiddleware(next http.Handler) http.H
 			})
 		}
 
+		next.ServeHTTP(w, r)
+	})
+}
+
+// OnlyUser middleware ensures only authenticated users can access the route
+func (m *SiteMiddleware) OnlyUser(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		userID := m.sessionManager.GetString(r.Context(), auth.AuthUserIDSessionKey)
+		if userID == "" {
+			http.Redirect(w, r, "/auth", http.StatusFound)
+			return
+		}
+
+		// For now, we'll just pass the userID in context
+		// In a full implementation, you'd fetch the full user from the database
+		ctx := context.WithValue(r.Context(), "userID", userID)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// OnlyGuest middleware ensures only non-authenticated users can access the route
+func (m *SiteMiddleware) OnlyGuest(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		userID := m.sessionManager.GetString(r.Context(), auth.AuthUserIDSessionKey)
+		if userID != "" {
+			http.Redirect(w, r, "/dashboard", http.StatusFound)
+			return
+		}
 		next.ServeHTTP(w, r)
 	})
 }

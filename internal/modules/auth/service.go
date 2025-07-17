@@ -14,6 +14,7 @@ import (
 	"github.com/delordemm1/qplayground/internal/modules/notification"
 	"github.com/delordemm1/qplayground/internal/platform"
 
+	"github.com/delordemm1/qplayground/internal/modules/organization"
 	"github.com/alexedwards/scs/v2"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -21,18 +22,20 @@ import (
 
 const AuthUserIDSessionKey = "authenticatedUserID"
 
-func NewAuthService(authRepo AuthRepository, ns notification.NotificationService, sm *scs.SessionManager) *AuthService {
+func NewAuthService(authRepo AuthRepository, ns notification.NotificationService, sm *scs.SessionManager, orgService organization.OrganizationService) *AuthService {
 	return &AuthService{
-		authRepo:            authRepo,
-		notificationService: ns,
-		sessionManager:      sm,
+		authRepo:             authRepo,
+		notificationService:  ns,
+		sessionManager:       sm,
+		organizationService:  orgService,
 	}
 }
 
 type AuthService struct {
-	authRepo            AuthRepository
-	notificationService notification.NotificationService
-	sessionManager      *scs.SessionManager
+	authRepo             AuthRepository
+	notificationService  notification.NotificationService
+	sessionManager       *scs.SessionManager
+	organizationService  organization.OrganizationService
 }
 
 type OAuth interface {
@@ -93,6 +96,7 @@ func (s *AuthService) VerifyEmailOtp(ctx context.Context, uaIp *platform.UserAge
 		return nil, fmt.Errorf("failed to get verification code: %w", err)
 	}
 
+	var isNewUser bool
 	// Check if OTP has expired
 	if time.Now().After(verificationCode.ExpiresAt) {
 		slog.Warn("Expired OTP provided", "email", email, "otp", otp, "expired_at", verificationCode.ExpiresAt)
@@ -105,6 +109,7 @@ func (s *AuthService) VerifyEmailOtp(ctx context.Context, uaIp *platform.UserAge
 	user, err = s.authRepo.FindUserByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, ErrUserNotFound) {
+			isNewUser = true
 			// Create new user
 			user = &User{
 				ID:    platform.UtilGenerateUUID(),
@@ -121,6 +126,21 @@ func (s *AuthService) VerifyEmailOtp(ctx context.Context, uaIp *platform.UserAge
 		} else {
 			slog.Error("Failed to find user by email", "error", err, "email", email)
 			return nil, fmt.Errorf("failed to find user: %w", err)
+		}
+	}
+
+	// Create personal organization for new users
+	if isNewUser || user.CurrentOrgID == nil {
+		personalOrg, err := s.organizationService.CreatePersonalOrganization(ctx, user.ID, user.Email)
+		if err != nil {
+			slog.Error("Failed to create personal organization", "error", err, "userID", user.ID)
+			// Don't fail the login, but log the error
+		} else {
+			// Update user with personal organization ID
+			err = s.authRepo.UpdateUserCurrentOrgID(ctx, user.ID, &personalOrg.ID)
+			if err != nil {
+				slog.Warn("Failed to update user current org ID", "error", err, "userID", user.ID)
+			}
 		}
 	}
 
@@ -248,6 +268,21 @@ func (s *AuthService) OAuthCallback(ctx context.Context, uaIp *platform.UserAgen
 			return nil, fmt.Errorf("failed to find user: %w", err)
 		}
 	}
+
+	// Create personal organization for new users (OAuth)
+	if user.CurrentOrgID == nil {
+		personalOrg, err := s.organizationService.CreatePersonalOrganization(ctx, user.ID, user.Email)
+		if err != nil {
+			slog.Error("Failed to create personal organization for OAuth user", "error", err, "userID", user.ID)
+		} else {
+			// Update user with personal organization ID
+			err = s.authRepo.UpdateUserCurrentOrgID(ctx, user.ID, &personalOrg.ID)
+			if err != nil {
+				slog.Warn("Failed to update OAuth user current org ID", "error", err, "userID", user.ID)
+			}
+		}
+	}
+
 	// validate provider
 	err = s.validateProvider(ctx, user.ID, user.Sub, string(provider), userInfo.sub)
 	if err != nil {
