@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Label, Input, Select, Option } from "flowbite-svelte";
+  import { Label, Input, Select } from "flowbite-svelte";
 
   type PlaywrightWaitConfig = {
     selector?: string;
@@ -8,7 +8,10 @@
     timeout_ms?: number; // For wait_for_timeout action
   };
 
-  let { config = $bindable(), actionType }: { config: PlaywrightWaitConfig; actionType: string } = $props();
+  let {
+    config = $bindable(),
+    actionType,
+  }: { config: PlaywrightWaitConfig; actionType: string } = $props();
 
   $effect(() => {
     if (actionType === "playwright:wait_for_selector" && !config.selector) {
@@ -32,13 +35,17 @@
 
     <div>
       <Label for="wait-state" class="mb-2">State</Label>
-      <Select id="wait-state" bind:value={config.state}>
-        <Option value="">(Default - Visible)</Option>
-        <Option value="attached">Attached</Option>
-        <Option value="detached">Detached</Option>
-        <Option value="visible">Visible</Option>
-        <Option value="hidden">Hidden</Option>
-      </Select>
+      <Select
+        id="wait-state"
+        bind:value={config.state}
+        items={[
+          { value: "", name: "(Default - Visible)" },
+          { value: "attached", name: "Attached" },
+          { value: "detached", name: "Detached" },
+          { value: "visible", name: "Visible" },
+          { value: "hidden", name: "Hidden" },
+        ]}
+      />
     </div>
 
     <div>
@@ -66,12 +73,16 @@
   {:else if actionType === "playwright:wait_for_load_state"}
     <div>
       <Label for="wait-load-state" class="mb-2">Load State</Label>
-      <Select id="wait-load-state" bind:value={config.state}>
-        <Option value="">(Default - Load)</Option>
-        <Option value="load">Load</Option>
-        <Option value="domcontentloaded">DOM Content Loaded</Option>
-        <Option value="networkidle">Network Idle</Option>
-      </Select>
+      <Select
+        id="wait-load-state"
+        bind:value={config.state}
+        items={[
+          { value: "", name: "(Default - Load)" },
+          { value: "load", name: "Load" },
+          { value: "domcontentloaded", name: "DOM Content Loaded" },
+          { value: "networkidle", name: "Network Idle" },
+        ]}
+      />
     </div>
 
     <div>

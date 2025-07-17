@@ -1,4 +1,3 @@
-```svelte
 <script lang="ts">
   import { Modal, Heading, Button, Label, Input } from "flowbite-svelte";
   import { showSuccessToast, showErrorToast } from "$lib/utils/toast";
@@ -80,7 +79,7 @@
           bind:value={name}
           placeholder="Enter step name"
           required
-          class:border-red-500={!!errors.name}
+          class={errors.name ? "border-red-500" : ""}
         />
         {#if errors.name}
           <p class="mt-2 text-sm text-red-600">{errors.name}</p>
@@ -95,7 +94,7 @@
           bind:value={stepOrder}
           placeholder="0"
           required
-          class:border-red-500={!!errors.step_order}
+          class={errors.step_order ? "border-red-500" : ""} 
         />
         {#if errors.step_order}
           <p class="mt-2 text-sm text-red-600">{errors.step_order}</p>
@@ -129,7 +128,7 @@
               ></path>
             </svg>
             Saving...
-          {#else}
+          {:else}
             {step ? "Save Changes" : "Create Step"}
           {/if}
         </Button>
@@ -137,4 +136,3 @@
     </form>
   </div>
 </Modal>
-```

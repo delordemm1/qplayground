@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Label, Input, Select, Option, Checkbox } from "flowbite-svelte";
+  import { Label, Input, Select, Checkbox } from "flowbite-svelte";
 
   type PlaywrightScreenshotConfig = {
     full_page?: boolean;
@@ -25,10 +25,7 @@
 
   <div>
     <Label for="screenshot-format" class="mb-2">Format</Label>
-    <Select id="screenshot-format" bind:value={config.format}>
-      <Option value="png">PNG</Option>
-      <Option value="jpeg">JPEG</Option>
-    </Select>
+    <Select id="screenshot-format" bind:value={config.format} items={[{ value: "png", name: "PNG" }, { value: "jpeg", name: "JPEG" }]} />
   </div>
 
   {#if config.format === "jpeg"}

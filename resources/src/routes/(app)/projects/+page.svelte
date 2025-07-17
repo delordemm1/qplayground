@@ -1,4 +1,3 @@
-```svelte
 <script lang="ts">
   import { showErrorToast, showSuccessToast } from "$lib/utils/toast";
   import ProjectFormModal from "$lib/components/ProjectFormModal.svelte";
@@ -192,4 +191,3 @@
   onSave={handleSaveProject}
   onClose={() => (showCreateModal = false)}
 />
-```

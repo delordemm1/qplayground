@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Label, Input, Select, Option, Checkbox } from "flowbite-svelte";
+  import { Label, Input, Select, Checkbox } from "flowbite-svelte";
 
   type PlaywrightClickConfig = {
     selector: string;
@@ -29,12 +29,7 @@
 
   <div>
     <Label for="click-button" class="mb-2">Mouse Button</Label>
-    <Select id="click-button" bind:value={config.button}>
-      <Option value="">(Default - Left)</Option>
-      <Option value="left">Left</Option>
-      <Option value="right">Right</Option>
-      <Option value="middle">Middle</Option>
-    </Select>
+    <Select id="click-button" bind:value={config.button} items={[{ value: "", name: "(Default - Left)" }, { value: "left", name: "Left" }, { value: "right", name: "Right" }, { value: "middle", name: "Middle" }]} />
   </div>
 
   <div>

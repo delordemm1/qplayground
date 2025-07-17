@@ -1,13 +1,11 @@
-```svelte
 <script lang="ts">
-  import { page } from "$app/stores";
   import { showSuccessToast, showErrorToast } from "$lib/utils/toast";
   import AutomationFormModal from "$lib/components/AutomationFormModal.svelte";
   import StepFormModal from "$lib/components/StepFormModal.svelte";
   import ActionFormModal from "$lib/components/ActionFormModal.svelte";
   import ConfirmDeleteModal from "$lib/components/ConfirmDeleteModal.svelte";
-  import { goto } from "$app/navigation";
   import { formatDate } from "$lib/utils/date";
+  import { router,page } from "@inertiajs/svelte";
 
   type Project = {
     ID: string;
@@ -44,9 +42,11 @@
     automation: Automation;
     steps: { step: Step; actions: Action[] }[]; // Backend sends steps with nested actions
     user: any;
+    params: Record<string, string>;
   };
 
-  let { project, automation, steps }: Props = $props();
+  let { project, automation, steps, params }: Props = $props();
+  const { projectId, automationId } = params;
 
   let showEditAutomationModal = $state(false);
   let showDeleteAutomationConfirm = $state(false);
@@ -64,9 +64,6 @@
   let selectedAction = $state<Action | null>(null);
   let isDeletingAction = $state(false);
   let currentStepForAction = $state<Step | null>(null); // To know which step an action belongs to
-
-  const projectId = $derived($page.params.projectId);
-  const automationId = $derived($page.params.id);
 
   // --- Automation Handlers ---
   function openEditAutomationModal() {
@@ -131,7 +128,7 @@
 
       if (response.ok) {
         showSuccessToast("Automation deleted successfully");
-        goto(`/projects/${projectId}/automations`); // Redirect to automations list
+        router.visit(`/projects/${projectId}/automations`); // Redirect to automations list
       } else {
         showErrorToast(result.error || "Failed to delete automation");
       }
@@ -157,7 +154,7 @@
       if (response.ok) {
         showSuccessToast("Automation run triggered successfully!");
         // Optionally redirect to runs page or update runs list
-        goto(`/projects/${projectId}/automations/${automationId}/runs`);
+        router.visit(`/projects/${projectId}/automations/${automationId}/runs`);
       } else {
         showErrorToast(result.error || "Failed to trigger automation run");
       }
@@ -200,7 +197,11 @@
       const result = await response.json();
 
       if (response.ok) {
-        showSuccessToast(selectedStep ? "Step updated successfully" : "Step created successfully");
+        showSuccessToast(
+          selectedStep
+            ? "Step updated successfully"
+            : "Step created successfully"
+        );
         // Refresh page to get updated steps and actions
         window.location.reload();
       } else {
@@ -290,7 +291,11 @@
       const result = await response.json();
 
       if (response.ok) {
-        showSuccessToast(selectedAction ? "Action updated successfully" : "Action created successfully");
+        showSuccessToast(
+          selectedAction
+            ? "Action updated successfully"
+            : "Action created successfully"
+        );
         // Refresh page to get updated steps and actions
         window.location.reload();
       } else {
@@ -352,19 +357,24 @@
   <!-- Automation Header -->
   <div class="md:flex md:items-center md:justify-between mb-6">
     <div class="flex-1 min-w-0">
-      <h2 class="text-2xl font-bold leading-7 text-gray-900 sm:text-3xl sm:truncate">
+      <h2
+        class="text-2xl font-bold leading-7 text-gray-900 sm:text-3xl sm:truncate"
+      >
         {automation.Name}
       </h2>
       <p class="mt-2 text-sm text-gray-600">
-        Project: <a href="/projects/{project.ID}" class="text-primary-600 hover:underline"
-          >{project.Name}</a
+        Project: <a
+          href="/projects/{project.ID}"
+          class="text-primary-600 hover:underline">{project.Name}</a
         >
       </p>
       {#if automation.Description}
         <p class="mt-2 text-sm text-gray-600">{automation.Description}</p>
       {/if}
       <p class="mt-1 text-sm text-gray-500">
-        Created: {formatDate(automation.CreatedAt)} | Last Updated: {formatDate(automation.UpdatedAt)}
+        Created: {formatDate(automation.CreatedAt)} | Last Updated: {formatDate(
+          automation.UpdatedAt
+        )}
       </p>
     </div>
     <div class="mt-4 flex md:mt-0 md:ml-4">
@@ -436,10 +446,15 @@
 
   <!-- Automation Config -->
   <div class="bg-white shadow overflow-hidden sm:rounded-lg p-6 mb-6">
-    <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Configuration</h3>
-    <pre class="bg-gray-100 p-4 rounded-md text-sm overflow-auto"
-      >{JSON.stringify(JSON.parse(automation.ConfigJSON), null, 2)}</pre
-    >
+    <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
+      Configuration
+    </h3>
+    <pre
+      class="bg-gray-100 p-4 rounded-md text-sm overflow-auto">{JSON.stringify(
+        JSON.parse(automation.ConfigJSON),
+        null,
+        2
+      )}</pre>
   </div>
 
   <!-- Steps Section -->
@@ -520,16 +535,22 @@
             {#if actions.length === 0}
               <p class="text-sm text-gray-500 ml-6">No actions in this step.</p>
             {:else}
-              <ul role="list" class="divide-y divide-gray-100 border-t border-gray-100 mt-2">
+              <ul
+                role="list"
+                class="divide-y divide-gray-100 border-t border-gray-100 mt-2"
+              >
                 {#each actions as action (action.ID)}
                   <li class="py-3 flex justify-between items-center ml-6">
                     <div>
                       <p class="text-sm font-medium text-gray-700">
                         {action.ActionOrder}. {action.ActionType}
                       </p>
-                      <pre class="bg-gray-50 p-2 rounded-md text-xs overflow-auto max-w-md"
-                        >{JSON.stringify(JSON.parse(action.ActionConfigJSON), null, 2)}</pre
-                      >
+                      <pre
+                        class="bg-gray-50 p-2 rounded-md text-xs overflow-auto max-w-md">{JSON.stringify(
+                          JSON.parse(action.ActionConfigJSON),
+                          null,
+                          2
+                        )}</pre>
                     </div>
                     <div class="flex space-x-3">
                       <button
@@ -578,7 +599,7 @@
 <!-- Modals -->
 <AutomationFormModal
   bind:open={showEditAutomationModal}
-  automation={automation}
+  {automation}
   onSave={handleSaveAutomation}
   onClose={() => (showEditAutomationModal = false)}
 />
@@ -635,4 +656,3 @@
   onCancel={() => (showDeleteActionConfirm = false)}
   loading={isDeletingAction}
 />
-```

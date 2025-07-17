@@ -1,4 +1,3 @@
-```svelte
 <script lang="ts">
   import { Modal, Heading, Button, Label, Input, Textarea } from "flowbite-svelte";
   import { showSuccessToast, showErrorToast } from "$lib/utils/toast";
@@ -96,7 +95,7 @@
           bind:value={name}
           placeholder="Enter automation name"
           required
-          class:border-red-500={!!errors.name}
+          class={errors.name ? "border-red-500" : ""}
         />
         {#if errors.name}
           <p class="mt-2 text-sm text-red-600">{errors.name}</p>
@@ -107,10 +106,10 @@
         <Label for="description" class="mb-2">Description (optional)</Label>
         <Textarea
           id="description"
-          rows="3"
+          rows={3}
           bind:value={description}
           placeholder="Enter automation description"
-          class:border-red-500={!!errors.description}
+          class={errors.description ? "border-red-500" : ""}
         />
         {#if errors.description}
           <p class="mt-2 text-sm text-red-600">{errors.description}</p>
@@ -121,11 +120,9 @@
         <Label for="configJson" class="mb-2">Configuration (JSON)</Label>
         <Textarea
           id="configJson"
-          rows="6"
+          rows={6}
           bind:value={configJson}
-          placeholder="{}"
-          class="font-mono text-sm"
-          class:border-red-500={!!errors.config_json}
+          class={"font-mono text-sm " + (errors.config_json ? "border-red-500" : "")}
         />
         {#if errors.config_json}
           <p class="mt-2 text-sm text-red-600">{errors.config_json}</p>
@@ -167,4 +164,3 @@
     </form>
   </div>
 </Modal>
-```

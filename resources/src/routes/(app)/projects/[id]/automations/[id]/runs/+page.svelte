@@ -1,6 +1,5 @@
-```svelte
 <script lang="ts">
-  import { page } from "$app/stores";
+  import { page } from "@inertiajs/svelte";
   import { formatDate } from "$lib/utils/date";
 
   type Project = {
@@ -31,8 +30,8 @@
 
   let { project, automation, runs }: Props = $props();
 
-  const projectId = $derived($page.params.projectId);
-  const automationId = $derived($page.params.automationId);
+  const projectId = $derived($page.props.params.projectId);
+  const automationId = $derived($page.props.params.automationId);
 </script>
 
 <svelte:head>
@@ -131,4 +130,3 @@
     {/if}
   </div>
 </div>
-```

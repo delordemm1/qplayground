@@ -1,10 +1,8 @@
-```svelte
 <script lang="ts">
-  import { page } from "$app/stores";
+  import { page } from "@inertiajs/svelte";
   import { showSuccessToast, showErrorToast } from "$lib/utils/toast";
   import AutomationFormModal from "$lib/components/AutomationFormModal.svelte";
   import ConfirmDeleteModal from "$lib/components/ConfirmDeleteModal.svelte";
-  import { goto } from "$app/navigation";
   import { formatDate } from "$lib/utils/date";
 
   type Project = {
@@ -33,7 +31,7 @@
   let isDeletingAutomation = $state(false);
   let selectedAutomation = $state<Automation | null>(null);
 
-  const projectId = $derived($page.params.projectId);
+  const projectId = $derived($page.props.params.projectId);
 
   function openEditModal(automation: Automation) {
     selectedAutomation = automation;
@@ -253,4 +251,3 @@
   onCancel={() => (showDeleteAutomationConfirm = false)}
   loading={isDeletingAutomation}
 />
-```

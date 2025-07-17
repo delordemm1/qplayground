@@ -1,4 +1,3 @@
-```svelte
 <script lang="ts">
   import { Modal, Button } from "flowbite-svelte";
 
@@ -88,4 +87,3 @@
     </Button>
   </div>
 </Modal>
-```

@@ -133,7 +133,7 @@ func main() {
 		r.Mount("/organizations", organizationRouter)
 
 		// Project routes
-		projectHandler := web.NewProjectHandler(i, sessionManager, projectService)
+		projectHandler := web.NewProjectHandler(i, sessionManager, projectService, automationService)
 		projectRouter := web.NewProjectRouter(projectHandler)
 		r.Mount("/projects", projectRouter)
 

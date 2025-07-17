@@ -1,4 +1,3 @@
-```svelte
 <script lang="ts">
   import { Modal, Heading, Button, Label, Input, Textarea } from "flowbite-svelte";
   import { showSuccessToast, showErrorToast } from "$lib/utils/toast";
@@ -81,7 +80,7 @@
           bind:value={name}
           placeholder="Enter project name"
           required
-          class:border-red-500={!!errors.name}
+          class={errors.name ? "border-red-500" : ""}
         />
         {#if errors.name}
           <p class="mt-2 text-sm text-red-600">{errors.name}</p>
@@ -92,10 +91,10 @@
         <Label for="description" class="mb-2">Description (optional)</Label>
         <Textarea
           id="description"
-          rows="4"
+          rows={4}
           bind:value={description}
           placeholder="Enter project description"
-          class:border-red-500={!!errors.description}
+          class={errors.description ? "border-red-500" : ""}
         />
         {#if errors.description}
           <p class="mt-2 text-sm text-red-600">{errors.description}</p>
@@ -137,4 +136,3 @@
     </form>
   </div>
 </Modal>
-```

@@ -1,5 +1,13 @@
 <script lang="ts">
-  import { Modal, Heading, Button, Label, Input, Textarea, Select, Option } from "flowbite-svelte";
+  import {
+    Modal,
+    Heading,
+    Button,
+    Label,
+    Input,
+    Textarea,
+    Select,
+  } from "flowbite-svelte";
   import { showSuccessToast, showErrorToast } from "$lib/utils/toast";
 
   // Import configuration components
@@ -31,12 +39,7 @@
     onClose: () => void;
   };
 
-  let {
-    open = $bindable(),
-    action = null,
-    onSave,
-    onClose,
-  }: Props = $props();
+  let { open = $bindable(), action = null, onSave, onClose }: Props = $props();
 
   let actionType = $state("");
   let actionOrder = $state(0);
@@ -133,13 +136,19 @@
     }
 
     // Basic validation for currentActionConfig
-    if (typeof currentActionConfig !== 'object' || currentActionConfig === null) {
+    if (
+      typeof currentActionConfig !== "object" ||
+      currentActionConfig === null
+    ) {
       errors.action_config_json = "Invalid configuration data";
       return;
     }
 
     // Validate required fields based on action type
-    const validationErrors = validateActionConfig(actionType, currentActionConfig);
+    const validationErrors = validateActionConfig(
+      actionType,
+      currentActionConfig
+    );
     if (validationErrors.length > 0) {
       errors.action_config_json = validationErrors.join(", ");
       return;
@@ -174,7 +183,10 @@
     }
   }
 
-  function validateActionConfig(actionType: string, config: Record<string, any>): string[] {
+  function validateActionConfig(
+    actionType: string,
+    config: Record<string, any>
+  ): string[] {
     const errors: string[] = [];
 
     switch (actionType) {
@@ -186,17 +198,22 @@
       case "playwright:type":
       case "playwright:wait_for_selector":
         if (!config.selector) errors.push("Selector is required");
-        if (actionType === "playwright:fill" && !config.value) errors.push("Value is required");
-        if (actionType === "playwright:type" && !config.text) errors.push("Text is required");
+        if (actionType === "playwright:fill" && !config.value)
+          errors.push("Value is required");
+        if (actionType === "playwright:type" && !config.text)
+          errors.push("Text is required");
         break;
       case "playwright:wait_for_timeout":
-        if (!config.timeout_ms || config.timeout_ms <= 0) errors.push("Timeout (ms) is required and must be positive");
+        if (!config.timeout_ms || config.timeout_ms <= 0)
+          errors.push("Timeout (ms) is required and must be positive");
         break;
       case "playwright:screenshot":
-        if (config.upload_to_r2 && !config.r2_key) errors.push("R2 key is required when uploading to R2");
+        if (config.upload_to_r2 && !config.r2_key)
+          errors.push("R2 key is required when uploading to R2");
         break;
       case "playwright:evaluate":
-        if (!config.expression) errors.push("JavaScript expression is required");
+        if (!config.expression)
+          errors.push("JavaScript expression is required");
         break;
       case "r2:upload":
         if (!config.key) errors.push("Object key is required");
@@ -229,13 +246,12 @@
           id="actionType"
           bind:value={actionType}
           required
-          class:border-red-500={!!errors.action_type}
-        >
-          <Option value="" disabled>Select an action type</Option>
-          {#each actionTypes as type}
-            <Option value={type}>{type}</Option>
-          {/each}
-        </Select>
+          class={errors.action_type ? "border-red-500" : ""}
+          items={[
+            { value: "", name: "Select an action type" },
+            ...actionTypes.map((type) => ({ value: type, name: type })),
+          ]}
+        />
         {#if errors.action_type}
           <p class="mt-2 text-sm text-red-600">{errors.action_type}</p>
         {/if}
@@ -249,7 +265,7 @@
           bind:value={actionOrder}
           placeholder="0"
           required
-          class:border-red-500={!!errors.action_order}
+          class={errors.action_order ? "border-red-500" : ""}
         />
         {#if errors.action_order}
           <p class="mt-2 text-sm text-red-600">{errors.action_order}</p>
@@ -260,30 +276,33 @@
       {#if CurrentConfigComponent}
         <div class="border p-4 rounded-md bg-gray-50">
           <h4 class="text-md font-semibold mb-3">Action Configuration</h4>
-          <svelte:component 
-            this={CurrentConfigComponent} 
+          <svelte:component
+            this={CurrentConfigComponent}
             bind:config={currentActionConfig}
-            actionType={actionType}
+            {actionType}
           />
         </div>
       {:else if actionType}
         <!-- Fallback for action types without a specific component -->
         <div>
-          <Label for="actionConfigJson" class="mb-2">Configuration (JSON)</Label>
+          <Label for="actionConfigJson" class="mb-2">Configuration (JSON)</Label
+          >
           <Textarea
             id="actionConfigJson"
-            rows="8"
-            bind:value={currentActionConfig}
-            placeholder="{}"
-            class="font-mono text-sm"
-            class:border-red-500={!!errors.action_config_json}
+            rows={8}
+            bind:value={currentActionConfig[actionType]}
+            class={"font-mono text-sm " +
+              (errors.action_config_json ? "border-red-500" : "")}
           />
           <p class="text-xs text-gray-500 mt-1">
-            No specific configuration form available for this action type. Please enter JSON configuration manually.
+            No specific configuration form available for this action type.
+            Please enter JSON configuration manually.
           </p>
         </div>
       {:else}
-        <p class="text-sm text-gray-500">Select an action type to configure its parameters.</p>
+        <p class="text-sm text-gray-500">
+          Select an action type to configure its parameters.
+        </p>
       {/if}
 
       {#if errors.action_config_json}

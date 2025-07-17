@@ -4,6 +4,39 @@ import RootLayout from "./lib/components/RootLayout.svelte"; // A fallback root 
 import ErrorPage from "./routes/+error.svelte"; // A fallback error page
 import "../css/app.css";
 
+/**
+ * Parses dynamic route parameters from an Inertia page name based on a file path template.
+ * @param {string} name The Inertia page name (e.g., "projects/123/automations/456").
+ * @param {string} filePath The file path of the Svelte component (e.g., "./routes/projects/[projectId]/automations/[id]/+page.svelte").
+ * @returns {Record<string, string>} An object of the parsed parameters (e.g., { projectId: "123", id: "456" }).
+ */
+function parseRouteParams(name: string, filePath: string) {
+  const params = {};
+  if (!filePath) return params;
+
+  // 1. Clean the file path to create a template for matching.
+  // e.g., "./routes/(app)/projects/[projectId]/+page.svelte" -> "projects/[projectId]"
+  const template = filePath
+    .replace("./routes", "")
+    .replace(/\/\+page\.svelte$/, "")
+    .replace(/^\/+|\/+$/g, "") // Trim slashes
+    .replace(/\/\([^)]+\)\//g, "/"); // Remove route groups like `(app)`
+
+  const nameSegments = name.split("/").filter(Boolean);
+  const templateSegments = template.split("/").filter(Boolean);
+
+  // 2. Compare segments and extract values for dynamic parts.
+  templateSegments.forEach((segment, index) => {
+    if (segment.startsWith("[") && segment.endsWith("]")) {
+      const key = segment.slice(1, -1); // Extract key name, e.g., "projectId"
+      if (nameSegments[index]) {
+        (params as any)[key] = nameSegments[index];
+      }
+    }
+  });
+
+  return params;
+}
 createInertiaApp({
   /**
    * Resolves the page component and its layout based on the page name,

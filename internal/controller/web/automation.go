@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/delordemm1/qplayground/internal/modules/auth"
 	"github.com/delordemm1/qplayground/internal/modules/automation"
 	"github.com/delordemm1/qplayground/internal/modules/project"
 	"github.com/delordemm1/qplayground/internal/platform"
@@ -56,7 +57,7 @@ type AutomationHandler struct {
 	automationService automation.AutomationService
 	// stepService       automation.AutomationService
 	// actionService     automation.AutomationService
-	projectService    project.ProjectService
+	projectService project.ProjectService
 }
 
 type CreateAutomationRequest struct {
@@ -828,6 +829,7 @@ func (h *AutomationHandler) DeleteAction(w http.ResponseWriter, r *http.Request)
 	projectID := chi.URLParam(r, "projectId")
 	automationID := chi.URLParam(r, "id")
 	stepID := chi.URLParam(r, "stepId")
+	_ = stepID
 	actionID := chi.URLParam(r, "actionId")
 
 	if err := h.verifyAutomationAccess(r.Context(), user, projectID, automationID); err != nil {

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Label, Input, Select, Option } from "flowbite-svelte";
+  import { Label, Input, Select } from "flowbite-svelte";
 
   type PlaywrightGotoConfig = {
     url: string;
@@ -40,11 +40,6 @@
 
   <div>
     <Label for="goto-wait-until" class="mb-2">Wait Until</Label>
-    <Select id="goto-wait-until" bind:value={config.wait_until}>
-      <Option value="">(Default)</Option>
-      <Option value="load">Load</Option>
-      <Option value="domcontentloaded">DOM Content Loaded</Option>
-      <Option value="networkidle">Network Idle</Option>
-    </Select>
+    <Select id="goto-wait-until" bind:value={config.wait_until} items={[{ value: "", name: "(Default)" }, { value: "load", name: "Load" }, { value: "domcontentloaded", name: "DOM Content Loaded" }, { value: "networkidle", name: "Network Idle" }]} />
   </div>
 </div>

@@ -2,6 +2,8 @@ package web
 
 import (
 	"encoding/json"
+	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/delordemm1/qplayground/internal/modules/automation"
@@ -26,19 +28,19 @@ func NewProjectRouter(projectHandler *ProjectHandler) chi.Router {
 	return r
 }
 
-func NewProjectHandler(inertia *inertia.Inertia, sessionManager *scs.SessionManager, projectService project.ProjectService) *ProjectHandler {
+func NewProjectHandler(inertia *inertia.Inertia, sessionManager *scs.SessionManager, projectService project.ProjectService, automationService automation.AutomationService) *ProjectHandler {
 	return &ProjectHandler{
-		inertia:        inertia,
-		sessionManager: sessionManager,
-		projectService: projectService,
-		// automationService: automationService, // Will be injected if needed
+		inertia:           inertia,
+		sessionManager:    sessionManager,
+		projectService:    projectService,
+		automationService: automationService, // Will be injected if needed
 	}
 }
 
 type ProjectHandler struct {
-	inertia        *inertia.Inertia
-	sessionManager *scs.SessionManager
-	projectService project.ProjectService
+	inertia           *inertia.Inertia
+	sessionManager    *scs.SessionManager
+	projectService    project.ProjectService
 	automationService automation.AutomationService
 }
 
@@ -129,6 +131,7 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
+	slog.Info("GetProject")
 	user := getUserFromContext(r.Context())
 	if user == nil {
 		http.Redirect(w, r, "/auth", http.StatusFound)
@@ -141,24 +144,25 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 		platform.UtilHandleServerErr(w, err)
 		return
 	}
-
+	slog.Info("project", slog.String("projectID", projectID))
 	// Check if project belongs to user's organization
 	if user.CurrentOrgID == nil || project.OrganizationID != *user.CurrentOrgID {
 		w.WriteHeader(http.StatusForbidden)
 		w.Write([]byte("Access denied"))
 		return
 	}
-
+	slog.Info("project belongs to user's organization")
 	// Fetch automations for this project
 	automations, err := h.automationService.GetAutomationsByProject(r.Context(), projectID)
 	if err != nil {
 		platform.UtilHandleServerErr(w, err)
 		return
 	}
-
-	err = h.inertia.Render(w, r, "projects/show", inertia.Props{
-		"project": project,
-		"user":    user,
+	slog.Info("automations", slog.String("automations", fmt.Sprintf("%+v", automations)))
+	err = h.inertia.Render(w, r, "projects/[id]", inertia.Props{
+		"params":      map[string]string{"id": projectID},
+		"project":     project,
+		"user":        user,
 		"automations": automations, // Pass automations to the view
 	})
 	if err != nil {

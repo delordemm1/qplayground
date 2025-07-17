@@ -1,12 +1,10 @@
-```svelte
 <script lang="ts">
-  import { page } from "$app/stores";
   import { showSuccessToast, showErrorToast } from "$lib/utils/toast";
   import ProjectFormModal from "$lib/components/ProjectFormModal.svelte";
   import AutomationFormModal from "$lib/components/AutomationFormModal.svelte";
   import ConfirmDeleteModal from "$lib/components/ConfirmDeleteModal.svelte";
-  import { goto } from "$app/navigation";
   import { formatDate } from "$lib/utils/date";
+  import { router,page } from "@inertiajs/svelte";
 
   type Project = {
     ID: string;
@@ -26,17 +24,18 @@
   type Props = {
     project: Project;
     automations: Automation[];
-    user: any; // Assuming user type is defined elsewhere
+    user: any;
+    params: Record<string, string>;
   };
 
-  let { project, automations }: Props = $props();
+  let { project, automations, params }: Props = $props();
 
   let showEditProjectModal = $state(false);
   let showCreateAutomationModal = $state(false);
   let showDeleteProjectConfirm = $state(false);
   let isDeletingProject = $state(false);
 
-  const projectId = $derived($page.params.id);
+  const {id:projectId} = params;
 
   async function handleSaveProject(data: { name: string; description: string }) {
     try {
@@ -81,7 +80,7 @@
 
       if (response.ok) {
         showSuccessToast("Project deleted successfully");
-        goto("/projects"); // Redirect to projects list
+        router.visit("/projects"); // Redirect to projects list
       } else {
         showErrorToast(result.error || "Failed to delete project");
       }
@@ -213,7 +212,7 @@
       </button>
     </div>
 
-    {#if automations.length === 0}
+    {#if automations?.length === 0}
       <div class="text-center py-8">
         <svg
           class="mx-auto h-12 w-12 text-gray-400"
@@ -291,4 +290,3 @@
   onCancel={() => (showDeleteProjectConfirm = false)}
   loading={isDeletingProject}
 />
-```
