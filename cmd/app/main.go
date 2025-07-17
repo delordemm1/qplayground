@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/gob"
+	"encoding/json"
 	"log"
 	"log/slog"
 	"net/http"
@@ -18,8 +19,13 @@ import (
 	"github.com/delordemm1/qplayground/internal/modules/storage"
 	"github.com/delordemm1/qplayground/internal/platform"
 
+	// Import plugin packages so their init() functions run and register actions
+	_ "github.com/delordemm1/qplayground/internal/plugins/playwright"
+	_ "github.com/delordemm1/qplayground/internal/plugins/r2"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	inertia "github.com/romsar/gonertia/v2"
 	"github.com/joho/godotenv"
 	inertia "github.com/romsar/gonertia/v2"
 )
@@ -76,6 +82,7 @@ func main() {
 	// AUTOMATION Dependencies
 	automationRepo := automation.NewAutomationRepository(pool)
 	automationService := automation.NewAutomationService(automationRepo)
+	automationRunner := automation.NewRunner(automationRepo, storageService)
 
 	// AUTH Dependencies (updated to include organization service)
 	authRepo := auth.NewAuthRepository(pool)
@@ -137,6 +144,21 @@ func main() {
 			automationHandler := web.NewAutomationHandler(i, sessionManager, automationService, projectService)
 			automationRouter := web.NewAutomationRouter(automationHandler)
 			r.Mount("/", automationRouter)
+		})
+
+		// Test automation runner endpoint (for development)
+		r.Post("/automations/{id}/run", func(w http.ResponseWriter, r *http.Request) {
+			automationID := chi.URLParam(r, "id")
+			go func() {
+				err := automationRunner.RunAutomation(context.Background(), automationID)
+				if err != nil {
+					slog.Error("Automation run failed", "automation_id", automationID, "error", err)
+				} else {
+					slog.Info("Automation run completed", "automation_id", automationID)
+				}
+			}()
+			w.WriteHeader(http.StatusAccepted)
+			json.NewEncoder(w).Encode(map[string]string{"message": "Automation run started"})
 		})
 	})
 
