@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/gob"
 	"log"
 	"log/slog"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/delordemm1/qplayground/internal/controller/web"
 	"github.com/delordemm1/qplayground/internal/core/config"
+	"github.com/delordemm1/qplayground/internal/modules/auth"
 	"github.com/delordemm1/qplayground/internal/modules/automation"
 	"github.com/delordemm1/qplayground/internal/modules/media"
 	"github.com/delordemm1/qplayground/internal/modules/notification"
@@ -15,11 +17,11 @@ import (
 	"github.com/delordemm1/qplayground/internal/modules/project"
 	"github.com/delordemm1/qplayground/internal/modules/storage"
 	"github.com/delordemm1/qplayground/internal/platform"
-	"github.com/delordemm1/qplayground/internal/modules/auth"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/joho/godotenv"
+	inertia "github.com/romsar/gonertia/v2"
 )
 
 func main() {
@@ -61,6 +63,7 @@ func main() {
 	// MEDIA Dependencies
 	imageProcessor := media.NewBimgProcessor()
 	mediaService := media.NewMediaService(imageProcessor)
+	_ = mediaService
 
 	// ORGANIZATION Dependencies
 	organizationRepo := organization.NewOrganizationRepository(pool)
@@ -150,7 +153,7 @@ func getUserFromContext(ctx context.Context) *auth.User {
 	if !ok {
 		return nil
 	}
-	
+
 	// Return a minimal user object for now
 	// In production, you'd fetch this from the database
 	return &auth.User{

@@ -13,7 +13,7 @@
 </script>
 
 <RootLayout {flash}>
-  <PublicHeader />
+  <!-- <PublicHeader /> -->
   {@render children()}
-  <PublicFooter />
+  <!-- <PublicFooter /> -->
 </RootLayout>

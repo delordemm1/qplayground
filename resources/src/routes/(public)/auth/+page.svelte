@@ -8,7 +8,8 @@
   let isLoading = $state(false);
   let errors = $state<Record<string, string>>({});
 
-  async function requestOTP() {
+  async function requestOTP(e) {
+    e.preventDefault();
     if (!email) {
       errors.email = "Email is required";
       return;
@@ -45,7 +46,8 @@
     }
   }
 
-  async function verifyOTP() {
+  async function verifyOTP(e) {
+    e.preventDefault();
     if (!otp) {
       errors.otp = "OTP is required";
       return;
@@ -124,7 +126,7 @@
     <div class="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
       {#if !isOtpSent}
         <!-- Email Input Form -->
-        <form on:submit|preventDefault={requestOTP} class="space-y-6">
+        <form onsubmit={requestOTP} class="space-y-6">
           <div>
             <label for="email" class="block text-sm font-medium text-gray-700">
               Email address
@@ -169,7 +171,7 @@
         </form>
       {:else}
         <!-- OTP Verification Form -->
-        <form on:submit|preventDefault={verifyOTP} class="space-y-6">
+        <form onsubmit={verifyOTP} class="space-y-6">
           <div>
             <label for="otp" class="block text-sm font-medium text-gray-700">
               One-Time Password

@@ -6,6 +6,7 @@ import (
 
 	"github.com/delordemm1/qplayground/internal/modules/project"
 	"github.com/delordemm1/qplayground/internal/platform"
+	"github.com/go-playground/validator/v10"
 
 	"github.com/alexedwards/scs/v2"
 	"github.com/go-chi/chi/v5"
@@ -14,13 +15,13 @@ import (
 
 func NewProjectRouter(projectHandler *ProjectHandler) chi.Router {
 	r := chi.NewRouter()
-	
+
 	r.Get("/", projectHandler.ListProjects)
 	r.Post("/", projectHandler.CreateProject)
 	r.Get("/{id}", projectHandler.GetProject)
 	r.Put("/{id}", projectHandler.UpdateProject)
 	r.Delete("/{id}", projectHandler.DeleteProject)
-	
+
 	return r
 }
 

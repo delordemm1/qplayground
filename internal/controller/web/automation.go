@@ -7,6 +7,7 @@ import (
 	"github.com/delordemm1/qplayground/internal/modules/automation"
 	"github.com/delordemm1/qplayground/internal/modules/project"
 	"github.com/delordemm1/qplayground/internal/platform"
+	"github.com/go-playground/validator/v10"
 
 	"github.com/alexedwards/scs/v2"
 	"github.com/go-chi/chi/v5"
@@ -15,18 +16,18 @@ import (
 
 func NewAutomationRouter(automationHandler *AutomationHandler) chi.Router {
 	r := chi.NewRouter()
-	
+
 	r.Get("/", automationHandler.ListAutomations)
 	r.Post("/", automationHandler.CreateAutomation)
 	r.Get("/{id}", automationHandler.GetAutomation)
 	r.Put("/{id}", automationHandler.UpdateAutomation)
 	r.Delete("/{id}", automationHandler.DeleteAutomation)
-	
+
 	// Run management
 	r.Post("/{id}/runs", automationHandler.TriggerRun)
 	r.Get("/{id}/runs", automationHandler.ListRuns)
 	r.Get("/{id}/runs/{runId}", automationHandler.GetRun)
-	
+
 	return r
 }
 
@@ -60,7 +61,7 @@ func (h *AutomationHandler) ListAutomations(w http.ResponseWriter, r *http.Reque
 	}
 
 	projectID := chi.URLParam(r, "projectId")
-	
+
 	// Verify project belongs to user's organization
 	project, err := h.projectService.GetProjectByID(r.Context(), projectID)
 	if err != nil {
@@ -100,7 +101,7 @@ func (h *AutomationHandler) CreateAutomation(w http.ResponseWriter, r *http.Requ
 	}
 
 	projectID := chi.URLParam(r, "projectId")
-	
+
 	// Verify project belongs to user's organization
 	project, err := h.projectService.GetProjectByID(r.Context(), projectID)
 	if err != nil {

@@ -16,16 +16,17 @@ import (
 
 func NewAuthRouter(authHandler *AuthHandler) chi.Router {
 	r := chi.NewRouter()
-	
+
 	// Authentication routes
+	r.Get("/", authHandler.AuthPage)
 	r.Post("/request-otp", authHandler.RequestOTP)
 	r.Post("/verify-otp", authHandler.VerifyOTP)
 	r.Post("/logout", authHandler.Logout)
-	
+
 	// OAuth routes (for future use)
 	r.Get("/oauth/{provider}", authHandler.OAuthLogin)
 	r.Get("/oauth/{provider}/callback", authHandler.OAuthCallback)
-	
+
 	return r
 }
 
@@ -149,7 +150,7 @@ func (h *AuthHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	sessionToken := h.sessionManager.Token(r.Context())
-	
+
 	err := h.authService.Logout(r.Context(), sessionToken)
 	if err != nil {
 		platform.SetFlashError(r.Context(), h.sessionManager, "Logout failed")
@@ -165,7 +166,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 
 func (h *AuthHandler) OAuthLogin(w http.ResponseWriter, r *http.Request) {
 	provider := chi.URLParam(r, "provider")
-	
+
 	url, err := h.authService.OAuthLogin(r.Context(), provider)
 	if err != nil {
 		platform.SetFlashError(r.Context(), h.sessionManager, "OAuth login failed")
@@ -188,7 +189,7 @@ func (h *AuthHandler) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userAgent := getUserAgentProps(r)
-	
+
 	user, err := h.authService.OAuthCallback(r.Context(), userAgent, auth.OAuthProvider(provider), state, code)
 	if err != nil {
 		platform.SetFlashError(r.Context(), h.sessionManager, "OAuth authentication failed")
@@ -215,4 +216,19 @@ func (h *AuthHandler) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 
 	platform.SetFlashSuccess(r.Context(), h.sessionManager, "Login successful!")
 	http.Redirect(w, r, "/dashboard", http.StatusFound)
+}
+
+func (h *AuthHandler) AuthPage(w http.ResponseWriter, r *http.Request) {
+	user := getUserFromContext(r.Context())
+	if user != nil {
+		http.Redirect(w, r, "/dashboard", http.StatusFound)
+		return
+	}
+
+	err := h.inertia.Render(w, r, "auth", inertia.Props{})
+
+	if err != nil {
+		platform.UtilHandleServerErr(w, err)
+		return
+	}
 }

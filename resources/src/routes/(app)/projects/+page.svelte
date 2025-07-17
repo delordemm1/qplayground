@@ -12,7 +12,8 @@
     description: ""
   });
 
-  async function createProject() {
+  async function createProject(e) {
+    e.preventDefault();
     if (!newProject.name.trim()) {
       errors.name = "Project name is required";
       return;
@@ -192,7 +193,7 @@
           </button>
         </div>
         
-        <form on:submit|preventDefault={createProject} class="mt-6 space-y-4">
+        <form onsubmit={createProject} class="mt-6 space-y-4">
           <div>
             <label for="name" class="block text-sm font-medium text-gray-700">
               Project Name
