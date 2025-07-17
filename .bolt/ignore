@@ -1,0 +1,7 @@
+/bin
+/tmp
+/node_modules
+/public/build
+/public/hot
+/air.log
+/.vscode

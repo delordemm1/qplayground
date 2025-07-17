@@ -1,0 +1,199 @@
+ @import 'tailwindcss';
+/* @plugin '@tailwindcss/forms';
+@plugin '@tailwindcss/typography'; */
+
+:root {
+    --primary-color: #007bff;
+    --background-dark: #ffffff;
+    --background-light: #f1f5f9;
+    --text-primary: #1e293b;
+    --text-secondary: #64748b;
+    --border-color: #e2e8f0;
+}
+body {
+    font-family: "Inter", "Noto Sans", sans-serif;
+    background-color: var(--background-dark);
+    color: var(--text-primary);
+  }
+@plugin 'flowbite/plugin';
+@source '../../node_modules/flowbite-svelte-icons/**/*.{html,js,svelte,ts}';
+@source "../../node_modules/simple-datatables/dist";
+@source "../../node_modules/@flowbite-svelte-plugins/datatable/dist";
+
+.datatable-pagination .datatable-active a,
+.datatable-pagination .datatable-active a:focus,
+.datatable-pagination .datatable-active a:hover,
+.datatable-pagination .datatable-active button,
+.datatable-pagination .datatable-active button:focus,
+.datatable-pagination .datatable-active button:hover {
+  background-color: #ffe4de;
+  cursor: default;
+}
+
+.datatable-wrapper .datatable-table tbody tr.selected {
+  background-color: #fff1ee !important;
+}
+@custom-variant dark (&: where(.dark, .dark *));
+
+@theme {
+    --z-index-100: 100;
+    /* primary */
+    --color-primary: #007bff;
+    --color-primary-200: #e0f2fe;
+    --color-primary-300: #b3e5fc;
+    --color-primary-400: #81d4fa;
+    --color-primary-500: #4fc3f7;
+    --color-primary-600: #29b6f6;
+    --color-primary-700: #007bff;
+    --color-primary-800: #0062cc;
+    --color-primary-900: #004db3;
+    --color-primary-950: #003c8f;
+    --color-primary-1000: #002c66;
+
+    /* secondary */
+    --color-secondary: #ff3e00;
+    --color-secondary-50: #fff3e0;
+    --color-secondary-100: #ffefcc;
+    --color-secondary-200: #ffd9a8;
+    --color-secondary-300: #ffc371;
+    --color-secondary-400: #ffb74d;
+    --color-secondary-500: #ffa726;
+    --color-secondary-600: #ff8a00;
+    --color-secondary-700: #ff6d00;
+    --color-secondary-800: #ff4d00;
+    --color-secondary-900: #ff2d00;
+
+    /* tertiary */
+    --color-tertiary: #007bff;
+    --color-tertiary-50: #e0f2fe;
+    --color-tertiary-100: #b3e5fc;
+    --color-tertiary-200: #81d4fa;
+    --color-tertiary-300: #4fc3f7;
+    --color-tertiary-400: #29b6f6;
+    --color-tertiary-500: #007bff;
+    --color-tertiary-600: #0062cc;
+    --color-tertiary-700: #004db3;
+    --color-tertiary-800: #003c8f;
+    --color-tertiary-900: #002c66;
+
+    /* success */
+    --color-success: #007bff;
+    --color-success-50: #e0f2fe;
+    --color-success-100: #b3e5fc;
+    --color-success-200: #81d4fa;
+    --color-success-300: #4fc3f7;
+    --color-success-400: #29b6f6;
+    --color-success-500: #007bff;
+    --color-success-600: #0062cc;
+    --color-success-700: #004db3;
+    --color-success-800: #003c8f;
+    --color-success-900: #002c66;
+
+    /* warning */
+    --color-warning: #ff3e00;
+    --color-warning-50: #fff3e0;
+    --color-warning-100: #ffefcc;
+    --color-warning-200: #ffd9a8;
+    --color-warning-300: #ffc371;
+    --color-warning-400: #ffb74d;
+    --color-warning-500: #ffa726;
+    --color-warning-600: #ff8a00;
+    --color-warning-700: #ff6d00;
+    --color-warning-800: #ff4d00;
+    --color-warning-900: #ff2d00;
+
+    /* danger */
+    --color-danger: #ff3e00;
+    --color-danger-50: #fff3e0;
+    --color-danger-100: #ffefcc;
+    --color-danger-200: #ffd9a8;
+    --color-danger-300: #ffc371;
+    --color-danger-400: #ffb74d;
+    --color-danger-500: #ffa726;
+    --color-danger-600: #ff8a00;
+    --color-danger-700: #ff6d00;
+    --color-danger-800: #ff4d00;
+    --color-danger-900: #ff2d00;
+
+    /* info */
+    --color-info: #007bff;
+    --color-info-50: #e0f2fe;
+    --color-info-100: #b3e5fc;
+    --color-info-200: #81d4fa;
+    --color-info-300: #4fc3f7;
+    --color-info-400: #29b6f6;
+    --color-info-500: #007bff;
+    --color-info-600: #0062cc;
+    --color-info-700: #004db3;
+    --color-info-800: #003c8f;
+    --color-info-900: #002c66;
+
+    /* light */
+    --color-light: #ffffff;
+    --color-light-50: #f9fafb;
+    --color-light-100: #f3f4f6;
+    --color-light-200: #e5e7eb;
+    --color-light-300: #d1d5db;
+    --color-light-400: #9ca3af;
+    --color-light-500: #6b7280;
+    --color-light-600: #4b5563;
+    --color-light-700: #374151;
+    --color-light-800: #1f2937;
+    --color-light-900: #111827;
+
+    /* dark */
+    --color-dark: #000000;
+    --color-dark-50: #f9fafb;
+    --color-dark-100: #f3f4f6;
+    --color-dark-200: #e5e7eb;
+    --color-dark-300: #d1d5db;
+    --color-dark-400: #9ca3af;
+    --color-dark-500: #6b7280;
+    --color-dark-600: #4b5563;
+    --color-dark-700: #374151;
+    --color-dark-800: #1f2937;
+    --color-dark-900: #111827;
+}
+
+@source "../../node_modules/flowbite-svelte/dist";
+@source "../../node_modules/flowbite-svelte-icons/dist";
+
+/* Homepage styles */
+.hero-bg {
+  background: linear-gradient(135deg, #f0f4ff 0%, #d8e2ff 100%);
+}
+.text-gradient {
+  background: linear-gradient(90deg, #4f46e5, #8b5cf6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+@layer base {
+    /* disable chrome cancel button */
+    input[type="search"]::-webkit-search-cancel-button {
+        display: none;
+    }
+}
+
+.glow-effect {
+    box-shadow: 0 0 15px 5px rgba(0, 123, 255, 0.2),
+      0 0 30px 10px rgba(0, 123, 255, 0.1);
+    transition: box-shadow 0.3s ease-in-out;
+  }
+  .glow-effect:hover {
+    box-shadow: 0 0 25px 10px rgba(0, 123, 255, 0.3),
+      0 0 40px 15px rgba(0, 123, 255, 0.15);
+  }
+  .card-hover-effect {
+    transition: transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
+  }
+  .card-hover-effect:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+  }
+  .bg-grid-pattern-light {
+    background-image: linear-gradient(to right, rgba(226, 232, 240, 0.4) 1px, transparent 1px), linear-gradient(to bottom, rgba(226, 232, 240, 0.4) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+    }
+}

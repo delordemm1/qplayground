@@ -1,0 +1,8 @@
+This is a golang + inertiajs (https://github.com/romsar/gonertia) + svelte 5 (full runes mode) + tailwindcss version 4 project following strict clean architecture
+Key Components:
+
+- Goose (github.com/pressly/goose) for migrations - migration files in cmd/migrate/migrations and must contain up and down migrations
+- Cloudflare r2 for object storage (s3 compatible API)
+  Project Details:
+
+Qplayground is a powerful playground for automating testing of web apps via playwright. It provides a user-friendly interface for creating and managing test cases, as well as a powerful API for automating tests. With Qplayground, you can easily create and run tests for web applications, ensuring that they are reliable, efficient, and accurate.
