@@ -233,7 +233,7 @@
   }
 </script>
 
-<Modal bind:open outsideclose={false} class="w-full max-w-2xl">
+<Modal bind:open outsideclose={false} class="" size="xl">
   <div class="p-6">
     <Heading tag="h3" class="text-xl font-semibold mb-4">
       {action ? "Edit Action" : "Create New Action"}

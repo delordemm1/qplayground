@@ -201,7 +201,7 @@
   }
 </script>
 
-<Modal bind:open outsideclose={false} class="w-full max-w-md">
+<Modal bind:open outsideclose={false} class="" size="lg">
   <div class="p-6">
     <Heading tag="h3" class="text-xl font-semibold mb-4">
       {automation ? "Edit Automation" : "Create New Automation"}

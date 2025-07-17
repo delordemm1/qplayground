@@ -313,10 +313,10 @@
               id="screenshots-path"
               type="text"
               bind:value={config.screenshots.path}
-              placeholder="screenshots/{{timestamp}}-{{loopIndex}}.png"
+              placeholder={`screenshots/{{timestamp}}-{{loopIndex}}.png`}
             />
             <p class="text-xs text-gray-500 mt-1">
-              Use variables like {{timestamp}}, {{loopIndex}}, {{runId}} in the path
+              {`Use variables like {{timestamp}}, {{loopIndex}}, {{runId}} in the path`}
             </p>
           </div>
         </div>
