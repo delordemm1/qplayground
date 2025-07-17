@@ -2,8 +2,50 @@ package automation
 
 import (
 	"context"
+	"fmt"
 	"time"
+
+	"github.com/delordemm1/qplayground/internal/modules/storage"
+	"github.com/playwright-community/playwright-go"
+	"log/slog"
 )
+
+// RunContext holds shared resources and state for a single automation run.
+// This will be passed to each plugin action.
+type RunContext struct {
+	PlaywrightBrowser playwright.Browser
+	PlaywrightPage    playwright.Page
+	StorageService    storage.StorageService
+	Logger            *slog.Logger
+}
+
+// PluginAction defines the interface for any executable action provided by a plugin.
+type PluginAction interface {
+	// Execute performs the action.
+	// actionConfig: The specific configuration for this action (from automation_actions.action_config_json).
+	// runContext: Shared context for the entire automation run.
+	Execute(ctx context.Context, actionConfig map[string]interface{}, runContext *RunContext) error
+}
+
+// ActionFactory is a function type that creates a new instance of a PluginAction.
+type ActionFactory func() PluginAction
+
+// Global registry for plugin actions
+var actionRegistry = make(map[string]ActionFactory)
+
+// RegisterAction registers a new plugin action type with its factory function.
+func RegisterAction(actionType string, factory ActionFactory) {
+	actionRegistry[actionType] = factory
+}
+
+// GetAction retrieves a plugin action instance by type.
+func GetAction(actionType string) (PluginAction, error) {
+	factory, exists := actionRegistry[actionType]
+	if !exists {
+		return nil, fmt.Errorf("unknown action type: %s", actionType)
+	}
+	return factory(), nil
+}
 
 // Automation represents an automation workflow
 type Automation struct {
