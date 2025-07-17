@@ -142,6 +142,12 @@ func main() {
 			automationHandler := web.NewAutomationHandler(i, sessionManager, automationService, projectService)
 			automationRouter := web.NewAutomationRouter(automationHandler)
 			r.Mount("/", automationRouter)
+			// Nested routes for steps and actions
+			r.Route("/{id}/steps/{stepId}/actions", func(r chi.Router) {
+				r.Post("/", automationHandler.CreateAction)
+				r.Put("/{actionId}", automationHandler.UpdateAction)
+				r.Delete("/{actionId}", automationHandler.DeleteAction)
+			})
 		})
 
 		// Test automation runner endpoint (for development)

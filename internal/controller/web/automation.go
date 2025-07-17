@@ -1,7 +1,9 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/delordemm1/qplayground/internal/modules/automation"
@@ -23,6 +25,11 @@ func NewAutomationRouter(automationHandler *AutomationHandler) chi.Router {
 	r.Put("/{id}", automationHandler.UpdateAutomation)
 	r.Delete("/{id}", automationHandler.DeleteAutomation)
 
+	// Step management
+	r.Post("/{id}/steps", automationHandler.CreateStep)
+	r.Put("/{id}/steps/{stepId}", automationHandler.UpdateStep)
+	r.Delete("/{id}/steps/{stepId}", automationHandler.DeleteStep)
+
 	// Run management
 	r.Post("/{id}/runs", automationHandler.TriggerRun)
 	r.Get("/{id}/runs", automationHandler.ListRuns)
@@ -37,6 +44,9 @@ func NewAutomationHandler(inertia *inertia.Inertia, sessionManager *scs.SessionM
 		sessionManager:    sessionManager,
 		automationService: automationService,
 		projectService:    projectService,
+		// stepService:       automationService, // AutomationService also handles steps
+		// actionService:     automationService, // AutomationService also handles actions
+		// runService:        automationService, // AutomationService also handles runs
 	}
 }
 
@@ -44,6 +54,8 @@ type AutomationHandler struct {
 	inertia           *inertia.Inertia
 	sessionManager    *scs.SessionManager
 	automationService automation.AutomationService
+	// stepService       automation.AutomationService
+	// actionService     automation.AutomationService
 	projectService    project.ProjectService
 }
 
@@ -360,6 +372,157 @@ func (h *AutomationHandler) DeleteAutomation(w http.ResponseWriter, r *http.Requ
 	json.NewEncoder(w).Encode(map[string]string{"message": "Automation deleted successfully"})
 }
 
+type CreateStepRequest struct {
+	Name      string `json:"name" validate:"required,min=1,max=255"`
+	StepOrder int    `json:"step_order" validate:"min=0"`
+}
+
+func (h *AutomationHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
+	user := getUserFromContext(r.Context())
+	if user == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
+		return
+	}
+
+	projectID := chi.URLParam(r, "projectId")
+	automationID := chi.URLParam(r, "id")
+
+	// Verify project and automation ownership
+	if err := h.verifyAutomationAccess(r.Context(), user, projectID, automationID); err != nil {
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	var req CreateStepRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request format"})
+		return
+	}
+
+	if err := validate.Struct(&req); err != nil {
+		if validationErrors, ok := err.(validator.ValidationErrors); ok {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"errors": ConvertValidationErrorsToInertia(validationErrors),
+			})
+			return
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Validation failed"})
+		return
+	}
+
+	step, err := h.automationService.CreateStep(r.Context(), automationID, req.Name, req.StepOrder)
+	if err != nil {
+		platform.SetFlashError(r.Context(), h.sessionManager, "Failed to create step")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to create step"})
+		return
+	}
+
+	platform.SetFlashSuccess(r.Context(), h.sessionManager, "Step created successfully")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message": "Step created successfully",
+		"step":    step,
+	})
+}
+
+func (h *AutomationHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
+	user := getUserFromContext(r.Context())
+	if user == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
+		return
+	}
+
+	projectID := chi.URLParam(r, "projectId")
+	automationID := chi.URLParam(r, "id")
+	stepID := chi.URLParam(r, "stepId")
+
+	if err := h.verifyAutomationAccess(r.Context(), user, projectID, automationID); err != nil {
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	var req CreateStepRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request format"})
+		return
+	}
+
+	if err := validate.Struct(&req); err != nil {
+		if validationErrors, ok := err.(validator.ValidationErrors); ok {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"errors": ConvertValidationErrorsToInertia(validationErrors),
+			})
+			return
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Validation failed"})
+		return
+	}
+
+	step := &automation.AutomationStep{
+		ID:           stepID,
+		AutomationID: automationID,
+		Name:         req.Name,
+		StepOrder:    req.StepOrder,
+	}
+
+	err := h.automationService.UpdateStep(r.Context(), step)
+	if err != nil {
+		platform.SetFlashError(r.Context(), h.sessionManager, "Failed to update step")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update step"})
+		return
+	}
+
+	platform.SetFlashSuccess(r.Context(), h.sessionManager, "Step updated successfully")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message": "Step updated successfully",
+		"step":    step,
+	})
+}
+
+func (h *AutomationHandler) DeleteStep(w http.ResponseWriter, r *http.Request) {
+	user := getUserFromContext(r.Context())
+	if user == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
+		return
+	}
+
+	projectID := chi.URLParam(r, "projectId")
+	automationID := chi.URLParam(r, "id")
+	stepID := chi.URLParam(r, "stepId")
+
+	if err := h.verifyAutomationAccess(r.Context(), user, projectID, automationID); err != nil {
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	err := h.automationService.DeleteStep(r.Context(), stepID)
+	if err != nil {
+		platform.SetFlashError(r.Context(), h.sessionManager, "Failed to delete step")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to delete step"})
+		return
+	}
+
+	platform.SetFlashSuccess(r.Context(), h.sessionManager, "Step deleted successfully")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Step deleted successfully"})
+}
+
 func (h *AutomationHandler) TriggerRun(w http.ResponseWriter, r *http.Request) {
 	user := getUserFromContext(r.Context())
 	if user == nil {
@@ -529,4 +692,181 @@ func (h *AutomationHandler) GetRun(w http.ResponseWriter, r *http.Request) {
 		platform.UtilHandleServerErr(w, err)
 		return
 	}
+}
+
+type CreateActionRequest struct {
+	ActionType       string `json:"action_type" validate:"required"`
+	ActionConfigJSON string `json:"action_config_json"`
+	ActionOrder      int    `json:"action_order" validate:"min=0"`
+}
+
+func (h *AutomationHandler) CreateAction(w http.ResponseWriter, r *http.Request) {
+	user := getUserFromContext(r.Context())
+	if user == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
+		return
+	}
+
+	projectID := chi.URLParam(r, "projectId")
+	automationID := chi.URLParam(r, "id")
+	stepID := chi.URLParam(r, "stepId")
+
+	if err := h.verifyAutomationAccess(r.Context(), user, projectID, automationID); err != nil {
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	var req CreateActionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request format"})
+		return
+	}
+
+	if err := validate.Struct(&req); err != nil {
+		if validationErrors, ok := err.(validator.ValidationErrors); ok {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"errors": ConvertValidationErrorsToInertia(validationErrors),
+			})
+			return
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Validation failed"})
+		return
+	}
+
+	action, err := h.automationService.CreateAction(r.Context(), stepID, req.ActionType, req.ActionConfigJSON, req.ActionOrder)
+	if err != nil {
+		platform.SetFlashError(r.Context(), h.sessionManager, "Failed to create action")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to create action"})
+		return
+	}
+
+	platform.SetFlashSuccess(r.Context(), h.sessionManager, "Action created successfully")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message": "Action created successfully",
+		"action":  action,
+	})
+}
+
+func (h *AutomationHandler) UpdateAction(w http.ResponseWriter, r *http.Request) {
+	user := getUserFromContext(r.Context())
+	if user == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
+		return
+	}
+
+	projectID := chi.URLParam(r, "projectId")
+	automationID := chi.URLParam(r, "id")
+	stepID := chi.URLParam(r, "stepId")
+	actionID := chi.URLParam(r, "actionId")
+
+	if err := h.verifyAutomationAccess(r.Context(), user, projectID, automationID); err != nil {
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	var req CreateActionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request format"})
+		return
+	}
+
+	if err := validate.Struct(&req); err != nil {
+		if validationErrors, ok := err.(validator.ValidationErrors); ok {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"errors": ConvertValidationErrorsToInertia(validationErrors),
+			})
+			return
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Validation failed"})
+		return
+	}
+
+	action := &automation.AutomationAction{
+		ID:               actionID,
+		StepID:           stepID,
+		ActionType:       req.ActionType,
+		ActionConfigJSON: req.ActionConfigJSON,
+		ActionOrder:      req.ActionOrder,
+	}
+
+	err := h.automationService.UpdateAction(r.Context(), action)
+	if err != nil {
+		platform.SetFlashError(r.Context(), h.sessionManager, "Failed to update action")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update action"})
+		return
+	}
+
+	platform.SetFlashSuccess(r.Context(), h.sessionManager, "Action updated successfully")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message": "Action updated successfully",
+		"action":  action,
+	})
+}
+
+func (h *AutomationHandler) DeleteAction(w http.ResponseWriter, r *http.Request) {
+	user := getUserFromContext(r.Context())
+	if user == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
+		return
+	}
+
+	projectID := chi.URLParam(r, "projectId")
+	automationID := chi.URLParam(r, "id")
+	stepID := chi.URLParam(r, "stepId")
+	actionID := chi.URLParam(r, "actionId")
+
+	if err := h.verifyAutomationAccess(r.Context(), user, projectID, automationID); err != nil {
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	err := h.automationService.DeleteAction(r.Context(), actionID)
+	if err != nil {
+		platform.SetFlashError(r.Context(), h.sessionManager, "Failed to delete action")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to delete action"})
+		return
+	}
+
+	platform.SetFlashSuccess(r.Context(), h.sessionManager, "Action deleted successfully")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Action deleted successfully"})
+}
+
+// Helper to verify access to automation based on project and organization ownership
+func (h *AutomationHandler) verifyAutomationAccess(ctx context.Context, user *auth.User, projectID, automationID string) error {
+	project, err := h.projectService.GetProjectByID(ctx, projectID)
+	if err != nil {
+		return fmt.Errorf("project not found")
+	}
+
+	if user.CurrentOrgID == nil || project.OrganizationID != *user.CurrentOrgID {
+		return fmt.Errorf("access denied to project")
+	}
+
+	automation, err := h.automationService.GetAutomationByID(ctx, automationID)
+	if err != nil {
+		return fmt.Errorf("automation not found")
+	}
+
+	if automation.ProjectID != projectID {
+		return fmt.Errorf("access denied to automation")
+	}
+	return nil
 }

@@ -154,7 +154,7 @@ func formatValidationErrorsToMap(errs validator.ValidationErrors) map[string]str
 		case "len":
 			message = fmt.Sprintf("%s must be exactly %s characters long.", field, param)
 		case "numeric":
-			message = fmt.Sprintf("%s must contain only numbers.", field)
+			message = fmt.Sprintf("%s must contain only numbers.", field) // Changed from "must be a number"
 		default:
 			message = fmt.Sprintf("%s is not valid.", field)
 		}
