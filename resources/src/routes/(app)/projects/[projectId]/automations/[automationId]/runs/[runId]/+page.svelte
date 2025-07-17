@@ -34,7 +34,7 @@
 
   const projectId = $derived($page.props.params.projectId);
   const automationId = $derived($page.props.params.automationId);
-  const runId = $derived($page.props.params.id);
+  const runId = $derived($page.props.params.runId);
 
   let parsedLogs = $derived.by(() => {
     try {

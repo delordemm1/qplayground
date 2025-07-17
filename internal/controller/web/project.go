@@ -159,8 +159,8 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("automations", slog.String("automations", fmt.Sprintf("%+v", automations)))
-	err = h.inertia.Render(w, r, "projects/[id]", inertia.Props{
-		"params":      map[string]string{"id": projectID},
+	err = h.inertia.Render(w, r, "projects/[projectId]", inertia.Props{
+		"params":      map[string]string{"projectId": projectID},
 		"project":     project,
 		"user":        user,
 		"automations": automations, // Pass automations to the view

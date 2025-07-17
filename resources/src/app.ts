@@ -117,7 +117,7 @@ createInertiaApp({
    * Sets up the Svelte application.
    */
   setup({ el, App, props }) {
-    console.log("[App] setup", { props });
+    console.log("[App] setup", { props, path: window.location.pathname });
     // Svelte 5's `mount` handles both initial mounting and hydration.
     mount(App, { target: el!, props });
   },

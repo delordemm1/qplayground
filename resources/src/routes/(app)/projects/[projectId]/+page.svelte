@@ -35,7 +35,7 @@
   let showDeleteProjectConfirm = $state(false);
   let isDeletingProject = $state(false);
 
-  const {id:projectId} = params;
+  const {projectId} = params;
 
   async function handleSaveProject(data: { name: string; description: string }) {
     try {

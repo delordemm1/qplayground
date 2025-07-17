@@ -67,7 +67,7 @@
       if (err.errors) {
         errors = err.errors;
       } else {
-        showErrorToast(err.message || "Failed to save automation");
+        // showErrorToast(err.message || "Failed to save automation");
       }
     } finally {
       isLoading = false;

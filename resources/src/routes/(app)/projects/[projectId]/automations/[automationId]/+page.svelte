@@ -482,7 +482,7 @@
       </button>
     </div>
 
-    {#if steps.length === 0}
+    {#if steps?.length === 0}
       <div class="text-center py-8">
         <svg
           class="mx-auto h-12 w-12 text-gray-400"
@@ -532,7 +532,7 @@
                 </button>
               </div>
             </div>
-            {#if actions.length === 0}
+            {#if actions?.length === 0}
               <p class="text-sm text-gray-500 ml-6">No actions in this step.</p>
             {:else}
               <ul

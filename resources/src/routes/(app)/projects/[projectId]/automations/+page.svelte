@@ -161,7 +161,7 @@
 
   <!-- Automations List -->
   <div class="bg-white shadow overflow-hidden sm:rounded-lg p-6">
-    {#if automations.length === 0}
+    {#if automations?.length === 0}
       <div class="text-center py-8">
         <svg
           class="mx-auto h-12 w-12 text-gray-400"

@@ -229,7 +229,8 @@ func (h *AutomationHandler) GetAutomation(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	err = h.inertia.Render(w, r, "automations/show", inertia.Props{
+	err = h.inertia.Render(w, r, "projects/[projectId]/automations/[automationId]", inertia.Props{
+		"params":     map[string]string{"automationId": automationID, "projectId": projectID},
 		"automation": automation,
 		"project":    project,
 		"steps":      stepsWithActions,
@@ -621,7 +622,8 @@ func (h *AutomationHandler) ListRuns(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.inertia.Render(w, r, "automations/runs/index", inertia.Props{
+	err = h.inertia.Render(w, r, "projects/[projectId]/automations/[automationId]/runs", inertia.Props{
+		"params":     map[string]string{"automationId": automationID, "projectId": projectID},
 		"runs":       runs,
 		"automation": automation,
 		"project":    project,
@@ -683,7 +685,8 @@ func (h *AutomationHandler) GetRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.inertia.Render(w, r, "automations/runs/show", inertia.Props{
+	err = h.inertia.Render(w, r, "projects/[projectId]/automations/[automationId]/runs/[runId]", inertia.Props{
+		"params":     map[string]string{"automationId": automationID, "projectId": projectID, "runId": runID},
 		"run":        run,
 		"automation": automation,
 		"project":    project,
