@@ -8,15 +8,15 @@ import (
 	"github.com/delordemm1/qplayground/internal/modules/auth"
 	"github.com/delordemm1/qplayground/internal/platform"
 
-	"github.com/go-playground/validator/v10"
 	"github.com/alexedwards/scs/v2"
+	"github.com/go-playground/validator/v10"
 	inertia "github.com/romsar/gonertia/v2"
 )
 
 var validate = validator.New(validator.WithRequiredStructEnabled())
 
 func getUserFromContext(ctx context.Context) *auth.User {
-	if user, ok := ctx.Value("authUser").(*auth.User); ok {
+	if user, ok := ctx.Value(auth.AuthUserIDSessionKey).(*auth.User); ok {
 		return user
 	}
 	return nil
@@ -26,11 +26,23 @@ type SiteMiddleware struct {
 	inertia        *inertia.Inertia
 	sessionManager *scs.SessionManager
 }
+type AuthMiddleware struct {
+	inertia        *inertia.Inertia
+	sessionManager *scs.SessionManager
+	authService    *auth.AuthService
+}
 
 func NewSiteMiddleware(inertia *inertia.Inertia, sessionManager *scs.SessionManager) *SiteMiddleware {
 	return &SiteMiddleware{
 		inertia:        inertia,
 		sessionManager: sessionManager,
+	}
+}
+func NewAuthMiddleware(inertia *inertia.Inertia, sessionManager *scs.SessionManager, authService *auth.AuthService) *AuthMiddleware {
+	return &AuthMiddleware{
+		inertia:        inertia,
+		sessionManager: sessionManager,
+		authService:    authService,
 	}
 }
 
@@ -53,61 +65,61 @@ func (m *SiteMiddleware) FlashMessageSharingMiddleware(next http.Handler) http.H
 }
 
 // OnlyUser middleware ensures only authenticated users can access the route
-func (m *SiteMiddleware) OnlyUser(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		userID := m.sessionManager.GetString(r.Context(), auth.AuthUserIDSessionKey)
-		if userID == "" {
-			http.Redirect(w, r, "/auth", http.StatusFound)
-			return
-		}
+// func (m *SiteMiddleware) OnlyUser(next http.Handler) http.Handler {
+// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// 		userID := m.sessionManager.GetString(r.Context(), auth.AuthUserIDSessionKey)
+// 		if userID == "" {
+// 			http.Redirect(w, r, "/auth", http.StatusFound)
+// 			return
+// 		}
 
-		// For now, we'll just pass the userID in context
-		// In a full implementation, you'd fetch the full user from the database
-		ctx := context.WithValue(r.Context(), "userID", userID)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
+// 		// For now, we'll just pass the userID in context
+// 		// In a full implementation, you'd fetch the full user from the database
+// 		ctx := context.WithValue(r.Context(), "userID", userID)
+// 		next.ServeHTTP(w, r.WithContext(ctx))
+// 	})
+// }
 
 // OnlyGuest middleware ensures only non-authenticated users can access the route
-func (m *SiteMiddleware) OnlyGuest(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		userID := m.sessionManager.GetString(r.Context(), auth.AuthUserIDSessionKey)
-		if userID != "" {
-			http.Redirect(w, r, "/dashboard", http.StatusFound)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
 // func (m *SiteMiddleware) OnlyGuest(next http.Handler) http.Handler {
 // 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-// 		_, err := m.authService.Auth(r.Context())
-// 		if err == nil {
-// 			redirectURL := r.URL.Query().Get("redirectTo")
-// 			if redirectURL == "" {
-// 				redirectURL = "/user" // Default redirect destination
-// 			}
-
-// 			http.Redirect(w, r, redirectURL, http.StatusFound)
+// 		userID := m.sessionManager.GetString(r.Context(), auth.AuthUserIDSessionKey)
+// 		if userID != "" {
+// 			http.Redirect(w, r, "/dashboard", http.StatusFound)
 // 			return
 // 		}
 // 		next.ServeHTTP(w, r)
 // 	})
 // }
 
-// func (m *SiteMiddleware) OnlyUser(next http.Handler) http.Handler {
-// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-// 		authUser, err := m.authService.Auth(r.Context())
-// 		if err != nil {
-// 			http.Redirect(w, r, "/auth", http.StatusFound)
-// 			return
-// 		}
+func (m *AuthMiddleware) OnlyGuest(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, err := m.authService.Auth(r.Context())
+		if err == nil {
+			redirectURL := r.URL.Query().Get("redirectTo")
+			if redirectURL == "" {
+				redirectURL = "/user" // Default redirect destination
+			}
 
-// 		ctx := context.WithValue(r.Context(), "authUser", authUser)
-// 		next.ServeHTTP(w, r.WithContext(ctx))
-// 	})
-// }
+			http.Redirect(w, r, redirectURL, http.StatusFound)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (m *AuthMiddleware) OnlyUser(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authUser, err := m.authService.Auth(r.Context())
+		if err != nil {
+			http.Redirect(w, r, "/auth", http.StatusFound)
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), auth.AuthUserIDSessionKey, authUser)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
 
 func getUserAgentProps(r *http.Request) *platform.UserAgent {
 	return &platform.UserAgent{

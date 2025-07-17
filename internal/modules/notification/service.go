@@ -63,11 +63,11 @@ func (s *MailService) SendMail(ctx context.Context, m MailData) error {
 func (s *MailService) SendLoginCode(ctx context.Context, email string, code string) error {
 	m := MailData{
 		To:      email,
-		Subject: "Your Deltechverse Login Code",
+		Subject: "Your QPayground Login Code",
 		Content: fmt.Sprintf(`
 			<html>
 			<body>
-				<h2>Your Deltechverse Login Code</h2>
+				<h2>Your QPayground Login Code</h2>
 				<p>Your temporary login code is: <strong>%s</strong></p>
 				<p>This code will expire in 10 minutes.</p>
 				<p>If you didn't request this code, please ignore this email.</p>
@@ -89,12 +89,12 @@ func (s *MailService) SendLoginCode(ctx context.Context, email string, code stri
 func (s *MailService) SendOrganizationInvite(ctx context.Context, email, orgName, inviteURL string) error {
 	m := MailData{
 		To:      email,
-		Subject: fmt.Sprintf("You're invited to join %s on Deltechverse", orgName),
+		Subject: fmt.Sprintf("You're invited to join %s on QPayground", orgName),
 		Content: fmt.Sprintf(`
 			<html>
 			<body>
 				<h2>You're invited to join %s</h2>
-				<p>You've been invited to join <strong>%s</strong> on Deltechverse.</p>
+				<p>You've been invited to join <strong>%s</strong> on QPayground.</p>
 				<p>Click the link below to accept the invitation:</p>
 				<p><a href="%s" style="background-color: #007BFF; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Accept Invitation</a></p>
 				<p>If the button doesn't work, copy and paste this link into your browser:</p>
@@ -125,7 +125,7 @@ func (s *MailService) SendJudgeNotification(ctx context.Context, email, contestN
 			<body>
 				<h2>It's Time to Judge %s</h2>
 				<p>The application phase for the contest has ended, and it's now time for judging.</p>
-				<p>Please log in to your Deltechverse account to review and score the submissions.</p>
+				<p>Please log in to your QPayground account to review and score the submissions.</p>
 				<p><a href="%s/contest/%s" style="background-color: #007BFF; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Start Judging</a></p>
 				<p>Thank you for your participation as a judge!</p>
 			</body>

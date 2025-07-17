@@ -22,4 +22,5 @@ type ObjectStorage interface {
 type StorageService interface {
 	UploadFile(ctx context.Context, key string, data io.Reader, contentType string) (string, error)
 	DeleteFile(ctx context.Context, key string) error
+	GetPublicURL(key string) string
 }

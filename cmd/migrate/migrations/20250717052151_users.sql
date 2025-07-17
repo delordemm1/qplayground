@@ -15,7 +15,7 @@
     - `created_at` (timestamptz, default now())
     - `updated_at` (timestamptz, default now())
 */
-
+-- +goose StatementBegin
 CREATE TABLE IF NOT EXISTS users (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     email text UNIQUE NOT NULL,
@@ -34,8 +34,11 @@ CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 
 -- Create index for sub lookups (OAuth)
 CREATE INDEX IF NOT EXISTS idx_users_sub ON users(sub);
+-- +goose StatementEnd
 
 -- +goose Down
+-- +goose StatementBegin
 DROP INDEX IF EXISTS idx_users_email;
 DROP INDEX IF EXISTS idx_users_sub;
 DROP TABLE IF EXISTS users;
+-- +goose StatementEnd

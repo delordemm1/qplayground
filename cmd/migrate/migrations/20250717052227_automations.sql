@@ -13,6 +13,7 @@
     - `updated_at` (timestamptz, default now())
 */
 
+-- +goose StatementBegin
 CREATE TABLE IF NOT EXISTS automations (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id uuid NOT NULL,
@@ -26,7 +27,10 @@ CREATE TABLE IF NOT EXISTS automations (
 
 -- Create index for project lookups
 CREATE INDEX IF NOT EXISTS idx_automations_project_id ON automations(project_id);
+-- +goose StatementEnd
 
 -- +goose Down
+-- +goose StatementBegin
 DROP INDEX IF EXISTS idx_automations_project_id;
 DROP TABLE IF EXISTS automations;
+-- +goose StatementEnd

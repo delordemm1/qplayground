@@ -108,7 +108,7 @@
             <section>
                 <h3 class="text-lg font-semibold mb-2">10. Contact Us</h3>
                 <p>
-                    If you have any questions about this privacy policy, please contact us at privacy@deltechverse.com.
+                    If you have any questions about this privacy policy, please contact us at privacy@qplayground.com.
                 </p>
             </section>
         </div>

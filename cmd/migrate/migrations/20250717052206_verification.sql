@@ -14,6 +14,7 @@
     - `created_at` (timestamptz, default now())
 */
 
+-- +goose StatementBegin
 CREATE TABLE IF NOT EXISTS verification_codes (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id uuid,
@@ -31,8 +32,11 @@ CREATE INDEX IF NOT EXISTS idx_verification_codes_contact_code ON verification_c
 
 -- Create index for cleanup of expired codes
 CREATE INDEX IF NOT EXISTS idx_verification_codes_expires_at ON verification_codes(expires_at);
+-- +goose StatementEnd
 
 -- +goose Down
+-- +goose StatementBegin
 DROP INDEX IF EXISTS idx_verification_codes_contact_code;
 DROP INDEX IF EXISTS idx_verification_codes_expires_at;
 DROP TABLE IF EXISTS verification_codes;
+-- +goose StatementEnd

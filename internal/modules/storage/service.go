@@ -43,3 +43,7 @@ func (s *storageService) DeleteFile(ctx context.Context, key string) error {
 	slog.Info("File deleted successfully", "key", key)
 	return nil
 }
+
+func (s *storageService) GetPublicURL(key string) string {
+	return s.storage.GetPublicURL(key)
+}

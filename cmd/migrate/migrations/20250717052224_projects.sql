@@ -12,6 +12,7 @@
     - `updated_at` (timestamptz, default now())
 */
 
+-- +goose StatementBegin
 CREATE TABLE IF NOT EXISTS projects (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id uuid NOT NULL,
@@ -24,7 +25,10 @@ CREATE TABLE IF NOT EXISTS projects (
 
 -- Create index for organization lookups
 CREATE INDEX IF NOT EXISTS idx_projects_organization_id ON projects(organization_id);
+-- +goose StatementEnd
 
 -- +goose Down
+-- +goose StatementBegin
 DROP INDEX IF EXISTS idx_projects_organization_id;
 DROP TABLE IF EXISTS projects;
+-- +goose StatementEnd

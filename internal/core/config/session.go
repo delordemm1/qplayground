@@ -23,7 +23,7 @@ type SessionConfig struct {
 func DefaultSessionConfig() SessionConfig {
 	return SessionConfig{
 		Lifetime:   120 * time.Hour, // 5 days
-		CookieName: "deltechverse_session_token",
+		CookieName: "qplayground_session_token",
 		HttpOnly:   true,
 		Secure:     true, // Set to false for development if not using HTTPS
 		SameSite:   http.SameSiteLaxMode,

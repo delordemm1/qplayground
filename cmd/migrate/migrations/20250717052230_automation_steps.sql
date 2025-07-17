@@ -15,6 +15,7 @@
   - Index on automation_id and step_order for efficient ordering
 */
 
+-- +goose StatementBegin
 CREATE TABLE IF NOT EXISTS automation_steps (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     automation_id uuid NOT NULL,
@@ -28,7 +29,10 @@ CREATE TABLE IF NOT EXISTS automation_steps (
 -- Create index for efficient ordering
 CREATE INDEX IF NOT EXISTS idx_automation_steps_automation_order 
     ON automation_steps(automation_id, step_order);
+-- +goose StatementEnd
 
 -- +goose Down
+-- +goose StatementBegin
 DROP INDEX IF EXISTS idx_automation_steps_automation_order;
 DROP TABLE IF EXISTS automation_steps;
+-- +goose StatementEnd

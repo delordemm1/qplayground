@@ -13,6 +13,7 @@
     - `created_at` (timestamptz, default now())
 */
 
+-- +goose StatementBegin
 CREATE TABLE IF NOT EXISTS user_active_sessions (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id uuid NOT NULL,
@@ -29,8 +30,11 @@ CREATE INDEX IF NOT EXISTS idx_user_active_sessions_user_id ON user_active_sessi
 
 -- Create index for session token lookups
 CREATE INDEX IF NOT EXISTS idx_user_active_sessions_token ON user_active_sessions(session_token);
+-- +goose StatementEnd
 
 -- +goose Down
+-- +goose StatementBegin
 DROP INDEX IF EXISTS idx_user_active_sessions_user_id;
 DROP INDEX IF EXISTS idx_user_active_sessions_token;
 DROP TABLE IF EXISTS user_active_sessions;
+-- +goose StatementEnd

@@ -33,7 +33,7 @@ func (r *Runner) RunAutomation(ctx context.Context, automationID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get automation: %w", err)
 	}
-
+	_ = automation
 	// 2. Create a new AutomationRun record (status: running)
 	run := &AutomationRun{
 		ID:              platform.UtilGenerateUUID(),
@@ -42,11 +42,11 @@ func (r *Runner) RunAutomation(ctx context.Context, automationID string) error {
 		LogsJSON:        "[]",
 		OutputFilesJSON: "[]",
 	}
-	
+
 	// Set start time
 	now := time.Now()
 	run.StartTime = &now
-	
+
 	err = r.automationRepo.CreateRun(ctx, run)
 	if err != nil {
 		return fmt.Errorf("failed to create automation run record: %w", err)
@@ -56,21 +56,21 @@ func (r *Runner) RunAutomation(ctx context.Context, automationID string) error {
 	defer func() {
 		endTime := time.Now()
 		run.EndTime = &endTime
-		
+
 		if rec := recover(); rec != nil {
 			run.Status = "failed"
 			run.ErrorMessage = fmt.Sprintf("panic: %v", rec)
 			r.automationRepo.UpdateRun(ctx, run)
 			panic(rec) // Re-throw panic
 		}
-		
+
 		if err != nil {
 			run.Status = "failed"
 			run.ErrorMessage = err.Error()
 		} else {
 			run.Status = "completed"
 		}
-		
+
 		r.automationRepo.UpdateRun(ctx, run)
 	}()
 
@@ -125,7 +125,7 @@ func (r *Runner) RunAutomation(ctx context.Context, automationID string) error {
 
 	for _, step := range steps {
 		runContext.Logger.Info("Executing step", "step_name", step.Name, "step_order", step.StepOrder)
-		
+
 		// Get actions for this step
 		stepActions, err := r.automationRepo.GetActionsByStepID(ctx, step.ID)
 		if err != nil {
@@ -135,7 +135,7 @@ func (r *Runner) RunAutomation(ctx context.Context, automationID string) error {
 
 		for _, action := range stepActions {
 			startTime := time.Now()
-			
+
 			// Parse action config
 			actionConfigMap := make(map[string]interface{})
 			if action.ActionConfigJSON != "" {
@@ -171,17 +171,17 @@ func (r *Runner) RunAutomation(ctx context.Context, automationID string) error {
 				logEntry["status"] = "failed"
 				logEntry["error"] = actionErr.Error()
 				logs = append(logs, logEntry)
-				
+
 				// Update logs in DB immediately on failure
 				logsBytes, _ := json.Marshal(logs)
 				run.LogsJSON = string(logsBytes)
 				r.automationRepo.UpdateRun(ctx, run)
-				
-				runContext.Logger.Error("Action failed", 
-					"action_type", action.ActionType, 
-					"error", actionErr, 
+
+				runContext.Logger.Error("Action failed",
+					"action_type", action.ActionType,
+					"error", actionErr,
 					"duration", duration)
-				
+
 				err = fmt.Errorf("action '%s' failed: %w", action.ActionType, actionErr)
 				return err // Stop execution on first action failure
 			}
@@ -199,8 +199,8 @@ func (r *Runner) RunAutomation(ctx context.Context, automationID string) error {
 			}
 
 			logs = append(logs, logEntry)
-			runContext.Logger.Info("Action completed", 
-				"action_type", action.ActionType, 
+			runContext.Logger.Info("Action completed",
+				"action_type", action.ActionType,
 				"duration", duration)
 		}
 	}
@@ -208,12 +208,12 @@ func (r *Runner) RunAutomation(ctx context.Context, automationID string) error {
 	// 6. Update run record with final logs and output files
 	logsBytes, _ := json.Marshal(logs)
 	run.LogsJSON = string(logsBytes)
-	
+
 	outputFilesBytes, _ := json.Marshal(outputFiles)
 	run.OutputFilesJSON = string(outputFilesBytes)
 
-	runContext.Logger.Info("Automation completed successfully", 
-		"total_steps", len(steps), 
+	runContext.Logger.Info("Automation completed successfully",
+		"total_steps", len(steps),
 		"total_output_files", len(outputFiles))
 
 	return nil

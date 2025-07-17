@@ -25,7 +25,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	inertia "github.com/romsar/gonertia/v2"
 	"github.com/joho/godotenv"
 	inertia "github.com/romsar/gonertia/v2"
 )
@@ -56,7 +55,6 @@ func main() {
 	// initializeServices()
 	// NOTIFICATION Dependencies
 	notificationService := notification.NewMailService()
-	_ = notificationService
 
 	// STORAGE Dependencies
 	r2Storage, err := storage.NewR2Storage()
@@ -64,7 +62,6 @@ func main() {
 		log.Fatalf("Failed to initialize R2 storage: %v", err)
 	}
 	storageService := storage.NewStorageService(r2Storage)
-	_ = storageService
 
 	// MEDIA Dependencies
 	imageProcessor := media.NewBimgProcessor()
@@ -89,7 +86,8 @@ func main() {
 	authService := auth.NewAuthService(authRepo, notificationService, sessionManager, organizationService)
 
 	// Initialize middleware
-	appMiddleware := web.NewSiteMiddleware(i, sessionManager)
+	siteMiddleware := web.NewSiteMiddleware(i, sessionManager)
+	authMiddleware := web.NewAuthMiddleware(i, sessionManager, authService)
 
 	// Setup router
 	r := chi.NewRouter()
@@ -100,7 +98,7 @@ func main() {
 	r.Use(sessionManager.LoadAndSave)
 
 	// Apply flash message sharing middleware
-	r.Use(appMiddleware.FlashMessageSharingMiddleware)
+	r.Use(siteMiddleware.FlashMessageSharingMiddleware)
 
 	// Apply Inertia middleware
 	r.Use(i.Middleware)
@@ -116,7 +114,7 @@ func main() {
 
 	// Protected routes (authenticated users only)
 	r.Group(func(r chi.Router) {
-		r.Use(appMiddleware.OnlyUser)
+		r.Use(authMiddleware.OnlyUser)
 
 		// Dashboard
 		r.Get("/dashboard", func(w http.ResponseWriter, r *http.Request) {

@@ -87,7 +87,7 @@
 
   <!-- Projects Grid -->
   <div class="mt-8">
-    {#if projects.length === 0}
+    {#if projects?.length === 0}
       <div class="text-center">
         <svg
           class="mx-auto h-12 w-12 text-gray-400"

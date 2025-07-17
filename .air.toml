@@ -4,9 +4,9 @@ tmp_dir = "bin/tmp"
 
 [build]
   args_bin = []
-  bin = "./bin/tmp/deltechverse"
+  bin = "./bin/tmp/qplayground"
   pre_cmd = []
-  cmd = "go build -o ./bin/tmp/deltechverse ./cmd/app/main.go"
+  cmd = "go build -o ./bin/tmp/qplayground ./cmd/app/main.go"
   post_cmd = []
   delay = 1000
   exclude_dir = ["assets", "tmp", "node_modules", "vendor", "testdata"]

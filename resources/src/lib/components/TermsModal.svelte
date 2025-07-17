@@ -16,7 +16,7 @@
             <section>
                 <h3 class="text-lg font-semibold mb-2">1. Acceptance of Terms</h3>
                 <p>
-                    By accessing and using Deltechverse, you accept and agree to be bound by the terms and provision of this agreement. 
+                    By accessing and using QPayground, you accept and agree to be bound by the terms and provision of this agreement. 
                     If you do not agree to abide by the above, please do not use this service.
                 </p>
             </section>
@@ -24,13 +24,13 @@
             <section>
                 <h3 class="text-lg font-semibold mb-2">2. Use License</h3>
                 <p>
-                    Permission is granted to temporarily download one copy of Deltechverse per device for personal, 
+                    Permission is granted to temporarily download one copy of QPayground per device for personal, 
                     non-commercial transitory viewing only. This is the grant of a license, not a transfer of title, and under this license you may not:
                 </p>
                 <ul class="list-disc list-inside ml-4 mt-2">
                     <li>modify or copy the materials</li>
                     <li>use the materials for any commercial purpose or for any public display</li>
-                    <li>attempt to reverse engineer any software contained on Deltechverse</li>
+                    <li>attempt to reverse engineer any software contained on QPayground</li>
                     <li>remove any copyright or other proprietary notations from the materials</li>
                 </ul>
             </section>
@@ -67,7 +67,7 @@
             <section>
                 <h3 class="text-lg font-semibold mb-2">6. Disclaimer</h3>
                 <p>
-                    The materials on Deltechverse are provided on an 'as is' basis. Deltechverse makes no warranties, 
+                    The materials on QPayground are provided on an 'as is' basis. QPayground makes no warranties, 
                     expressed or implied, and hereby disclaims and negates all other warranties including without limitation, 
                     implied warranties or conditions of merchantability, fitness for a particular purpose, 
                     or non-infringement of intellectual property or other violation of rights.
@@ -77,9 +77,9 @@
             <section>
                 <h3 class="text-lg font-semibold mb-2">7. Limitations</h3>
                 <p>
-                    In no event shall Deltechverse or its suppliers be liable for any damages (including, without limitation, 
+                    In no event shall QPayground or its suppliers be liable for any damages (including, without limitation, 
                     damages for loss of data or profit, or due to business interruption) arising out of the use or inability 
-                    to use the materials on Deltechverse, even if Deltechverse or a Deltechverse authorized representative has been 
+                    to use the materials on QPayground, even if QPayground or a QPayground authorized representative has been 
                     notified orally or in writing of the possibility of such damage.
                 </p>
             </section>
@@ -87,8 +87,8 @@
             <section>
                 <h3 class="text-lg font-semibold mb-2">8. Revisions and Errata</h3>
                 <p>
-                    The materials appearing on Deltechverse could include technical, typographical, or photographic errors. 
-                    Deltechverse does not warrant that any of the materials on its website are accurate, complete, or current.
+                    The materials appearing on QPayground could include technical, typographical, or photographic errors. 
+                    QPayground does not warrant that any of the materials on its website are accurate, complete, or current.
                 </p>
             </section>
 

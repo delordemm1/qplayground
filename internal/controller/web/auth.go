@@ -125,7 +125,7 @@ func (h *AuthHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create session
-	h.sessionManager.Put(r.Context(), auth.AuthUserIDSessionKey, user.ID)
+	h.sessionManager.Put(r.Context(), string(auth.AuthUserIDSessionKey), user.ID)
 	sessionToken := h.sessionManager.Token(r.Context())
 
 	// Create active session record
@@ -204,7 +204,7 @@ func (h *AuthHandler) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create session
-	h.sessionManager.Put(r.Context(), auth.AuthUserIDSessionKey, user.ID)
+	h.sessionManager.Put(r.Context(), string(auth.AuthUserIDSessionKey), user.ID)
 	sessionToken := h.sessionManager.Token(r.Context())
 
 	// Create active session record

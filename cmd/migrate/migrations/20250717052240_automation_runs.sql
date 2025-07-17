@@ -21,6 +21,7 @@
   - Index on created_at for chronological ordering
 */
 
+-- +goose StatementBegin
 CREATE TABLE IF NOT EXISTS automation_runs (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     automation_id uuid NOT NULL,
@@ -44,9 +45,12 @@ CREATE INDEX IF NOT EXISTS idx_automation_runs_status
 
 CREATE INDEX IF NOT EXISTS idx_automation_runs_created_at 
     ON automation_runs(created_at DESC);
+-- +goose StatementEnd
 
 -- +goose Down
+-- +goose StatementBegin
 DROP INDEX IF EXISTS idx_automation_runs_automation_id;
 DROP INDEX IF EXISTS idx_automation_runs_status;
 DROP INDEX IF EXISTS idx_automation_runs_created_at;
 DROP TABLE IF EXISTS automation_runs;
+-- +goose StatementEnd

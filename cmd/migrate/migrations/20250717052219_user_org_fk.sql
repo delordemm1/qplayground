@@ -8,7 +8,8 @@
 */
 
 -- Add foreign key constraints to users table
-DO $$
+-- +goose StatementBegin
+DO $$ 
 BEGIN
     -- Add foreign key for current_org_id if it doesn't exist
     IF NOT EXISTS (
@@ -30,7 +31,11 @@ BEGIN
             FOREIGN KEY (personal_organization_id) REFERENCES organizations(id) ON DELETE SET NULL;
     END IF;
 END $$;
+-- +goose StatementEnd
 
 -- +goose Down
+
+-- +goose StatementBegin
 ALTER TABLE users DROP CONSTRAINT IF EXISTS fk_users_current_org_id;
 ALTER TABLE users DROP CONSTRAINT IF EXISTS fk_users_personal_organization_id;
+-- +goose StatementEnd

@@ -64,7 +64,7 @@
       </svg>
       <a href="/" use:inertia>
         <h2 class="text-[var(--text-primary)] text-xl font-bold">
-          Deltechverse
+          QPayground
         </h2>
       </a>
     </div>

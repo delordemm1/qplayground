@@ -14,28 +14,30 @@ import (
 	"github.com/delordemm1/qplayground/internal/modules/notification"
 	"github.com/delordemm1/qplayground/internal/platform"
 
-	"github.com/delordemm1/qplayground/internal/modules/organization"
 	"github.com/alexedwards/scs/v2"
+	"github.com/delordemm1/qplayground/internal/modules/organization"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 )
 
-const AuthUserIDSessionKey = "authenticatedUserID"
+type key string
+
+const AuthUserIDSessionKey key = "authenticatedUserID"
 
 func NewAuthService(authRepo AuthRepository, ns notification.NotificationService, sm *scs.SessionManager, orgService organization.OrganizationService) *AuthService {
 	return &AuthService{
-		authRepo:             authRepo,
-		notificationService:  ns,
-		sessionManager:       sm,
-		organizationService:  orgService,
+		authRepo:            authRepo,
+		notificationService: ns,
+		sessionManager:      sm,
+		organizationService: orgService,
 	}
 }
 
 type AuthService struct {
-	authRepo             AuthRepository
-	notificationService  notification.NotificationService
-	sessionManager       *scs.SessionManager
-	organizationService  organization.OrganizationService
+	authRepo            AuthRepository
+	notificationService notification.NotificationService
+	sessionManager      *scs.SessionManager
+	organizationService organization.OrganizationService
 }
 
 type OAuth interface {
@@ -445,7 +447,7 @@ func httpCall(method, url, accessToken string) (map[string]any, error) {
 }
 
 func (s *AuthService) Auth(ctx context.Context) (*User, error) {
-	userID := s.sessionManager.GetString(ctx, AuthUserIDSessionKey)
+	userID := s.sessionManager.GetString(ctx, string(AuthUserIDSessionKey))
 	if userID == "" {
 		return nil, ErrUnauthorized // No user ID in session.
 	}

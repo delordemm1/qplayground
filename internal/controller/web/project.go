@@ -64,7 +64,7 @@ func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.inertia.Render(w, r, "projects/index", inertia.Props{
+	err = h.inertia.Render(w, r, "projects", inertia.Props{
 		"projects": projects,
 		"user":     user,
 	})

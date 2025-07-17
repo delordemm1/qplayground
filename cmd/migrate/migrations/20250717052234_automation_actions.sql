@@ -17,6 +17,7 @@
   - Index on action_type for filtering by plugin type
 */
 
+-- +goose StatementBegin
 CREATE TABLE IF NOT EXISTS automation_actions (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     step_id uuid NOT NULL,
@@ -34,8 +35,11 @@ CREATE INDEX IF NOT EXISTS idx_automation_actions_step_order
 
 CREATE INDEX IF NOT EXISTS idx_automation_actions_type 
     ON automation_actions(action_type);
+-- +goose StatementEnd
 
 -- +goose Down
+-- +goose StatementBegin
 DROP INDEX IF EXISTS idx_automation_actions_step_order;
 DROP INDEX IF EXISTS idx_automation_actions_type;
 DROP TABLE IF EXISTS automation_actions;
+-- +goose StatementEnd

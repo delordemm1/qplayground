@@ -2,7 +2,7 @@
   "lockfileVersion": 1,
   "workspaces": {
     "": {
-      "name": "deltechverse",
+      "name": "qplayground",
       "dependencies": {
         "@flowbite-svelte-plugins/texteditor": "^0.23.1",
         "@tailwindcss/container-queries": "^0.1.1",

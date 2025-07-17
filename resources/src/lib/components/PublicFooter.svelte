@@ -6,7 +6,7 @@
   <div class="container mx-auto px-6 py-12">
     <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-8">
       <div class="col-span-2 md:col-span-4 lg:col-span-1">
-        <h3 class="text-xl font-bold text-white mb-4">Deltechverse</h3>
+        <h3 class="text-xl font-bold text-white mb-4">QPayground</h3>
         <p class="text-sm">Your Stage for Creativity & Competition.</p>
       </div>
       <div>
@@ -44,7 +44,7 @@
     <div
       class="mt-12 border-t border-gray-700 pt-8 flex flex-col md:flex-row justify-between items-center text-sm"
     >
-      <p>© 2024 Deltechverse. All Rights Reserved.</p>
+      <p>© 2024 QPayground. All Rights Reserved.</p>
       <div class="flex space-x-4 mt-4 md:mt-0">
         <a class="hover:text-white" href="#facebook">
           <svg

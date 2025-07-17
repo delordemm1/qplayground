@@ -13,6 +13,7 @@
     - `updated_at` (timestamptz, default now())
 */
 
+-- +goose StatementBegin
 CREATE TABLE IF NOT EXISTS oauth_states (
     state text PRIMARY KEY,
     provider text NOT NULL CHECK (provider IN ('google', 'facebook', 'github', 'x', 'linkedin')),
@@ -26,7 +27,10 @@ CREATE TABLE IF NOT EXISTS oauth_states (
 
 -- Create index for cleanup of expired states
 CREATE INDEX IF NOT EXISTS idx_oauth_states_expires_at ON oauth_states(expires_at);
+-- +goose StatementEnd
 
 -- +goose Down
+-- +goose StatementBegin
 DROP INDEX IF EXISTS idx_oauth_states_expires_at;
 DROP TABLE IF EXISTS oauth_states;
+-- +goose StatementEnd
