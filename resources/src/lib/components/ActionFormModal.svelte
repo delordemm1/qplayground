@@ -233,7 +233,7 @@
   }
 </script>
 
-<Modal bind:open outsideclose={false} class="" size="xl">
+<Modal bind:open outsideclose={false} class="" size="lg">
   <div class="p-6">
     <Heading tag="h3" class="text-xl font-semibold mb-4">
       {action ? "Edit Action" : "Create New Action"}
@@ -276,11 +276,12 @@
       {#if CurrentConfigComponent}
         <div class="border p-4 rounded-md bg-gray-50">
           <h4 class="text-md font-semibold mb-3">Action Configuration</h4>
-          <svelte:component
+          <!-- <svelte:component
             this={CurrentConfigComponent}
             bind:config={currentActionConfig}
             {actionType}
-          />
+          /> -->
+          <CurrentConfigComponent bind:config={currentActionConfig} {actionType} />
         </div>
       {:else if actionType}
         <!-- Fallback for action types without a specific component -->
