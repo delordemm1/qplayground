@@ -17,6 +17,9 @@
     if (actionType === "playwright:wait_for_selector" && !config.selector) {
       config.selector = "";
     }
+    if (actionType === "playwright:wait_for_timeout" && !config.timeout_ms) {
+      config.timeout_ms = 5000;
+    }
   });
 </script>
 

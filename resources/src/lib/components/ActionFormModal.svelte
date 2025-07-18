@@ -15,6 +15,18 @@
   import PlaywrightClickConfig from "./ActionConfigs/PlaywrightClickConfig.svelte";
   import PlaywrightFillConfig from "./ActionConfigs/PlaywrightFillConfig.svelte";
   import PlaywrightTypeConfig from "./ActionConfigs/PlaywrightTypeConfig.svelte";
+  import PlaywrightPressConfig from "./ActionConfigs/PlaywrightPressConfig.svelte";
+  import PlaywrightCheckConfig from "./ActionConfigs/PlaywrightCheckConfig.svelte";
+  import PlaywrightUncheckConfig from "./ActionConfigs/PlaywrightUncheckConfig.svelte";
+  import PlaywrightSelectOptionConfig from "./ActionConfigs/PlaywrightSelectOptionConfig.svelte";
+  import PlaywrightHoverConfig from "./ActionConfigs/PlaywrightHoverConfig.svelte";
+  import PlaywrightScrollConfig from "./ActionConfigs/PlaywrightScrollConfig.svelte";
+  import PlaywrightGetTextConfig from "./ActionConfigs/PlaywrightGetTextConfig.svelte";
+  import PlaywrightGetAttributeConfig from "./ActionConfigs/PlaywrightGetAttributeConfig.svelte";
+  import PlaywrightSetViewportConfig from "./ActionConfigs/PlaywrightSetViewportConfig.svelte";
+  import PlaywrightReloadConfig from "./ActionConfigs/PlaywrightReloadConfig.svelte";
+  import PlaywrightGoBackConfig from "./ActionConfigs/PlaywrightGoBackConfig.svelte";
+  import PlaywrightGoForwardConfig from "./ActionConfigs/PlaywrightGoForwardConfig.svelte";
   import PlaywrightScreenshotConfig from "./ActionConfigs/PlaywrightScreenshotConfig.svelte";
   import PlaywrightWaitConfig from "./ActionConfigs/PlaywrightWaitConfig.svelte";
   import PlaywrightEvaluateConfig from "./ActionConfigs/PlaywrightEvaluateConfig.svelte";
@@ -82,6 +94,18 @@
     "playwright:click": PlaywrightClickConfig,
     "playwright:fill": PlaywrightFillConfig,
     "playwright:type": PlaywrightTypeConfig,
+    "playwright:press": PlaywrightPressConfig,
+    "playwright:check": PlaywrightCheckConfig,
+    "playwright:uncheck": PlaywrightUncheckConfig,
+    "playwright:select_option": PlaywrightSelectOptionConfig,
+    "playwright:hover": PlaywrightHoverConfig,
+    "playwright:scroll": PlaywrightScrollConfig,
+    "playwright:get_text": PlaywrightGetTextConfig,
+    "playwright:get_attribute": PlaywrightGetAttributeConfig,
+    "playwright:set_viewport": PlaywrightSetViewportConfig,
+    "playwright:reload": PlaywrightReloadConfig,
+    "playwright:go_back": PlaywrightGoBackConfig,
+    "playwright:go_forward": PlaywrightGoForwardConfig,
     "playwright:screenshot": PlaywrightScreenshotConfig,
     "playwright:wait_for_selector": PlaywrightWaitConfig,
     "playwright:wait_for_timeout": PlaywrightWaitConfig,
@@ -196,16 +220,38 @@
       case "playwright:click":
       case "playwright:fill":
       case "playwright:type":
+      case "playwright:press":
+      case "playwright:check":
+      case "playwright:uncheck":
+      case "playwright:select_option":
+      case "playwright:hover":
+      case "playwright:get_text":
+      case "playwright:get_attribute":
       case "playwright:wait_for_selector":
         if (!config.selector) errors.push("Selector is required");
         if (actionType === "playwright:fill" && !config.value)
           errors.push("Value is required");
         if (actionType === "playwright:type" && !config.text)
           errors.push("Text is required");
+        if (actionType === "playwright:press" && !config.key)
+          errors.push("Key is required");
+        if (actionType === "playwright:get_attribute" && !config.attribute)
+          errors.push("Attribute name is required");
+        if (actionType === "playwright:select_option") {
+          if (!config.value && !config.values && !config.label && config.index === undefined) {
+            errors.push("Value, label, or index is required");
+          }
+        }
         break;
       case "playwright:wait_for_timeout":
         if (!config.timeout_ms || config.timeout_ms <= 0)
           errors.push("Timeout (ms) is required and must be positive");
+        break;
+      case "playwright:set_viewport":
+        if (!config.width || config.width <= 0)
+          errors.push("Width is required and must be positive");
+        if (!config.height || config.height <= 0)
+          errors.push("Height is required and must be positive");
         break;
       case "playwright:screenshot":
         if (config.upload_to_r2 && !config.r2_key)
@@ -281,23 +327,6 @@
             bind:config={currentActionConfig}
             {actionType}
           />
-        </div>
-      {:else if actionType}
-        <!-- Fallback for action types without a specific component -->
-        <div>
-          <Label for="actionConfigJson" class="mb-2">Configuration (JSON)</Label
-          >
-          <Textarea
-            id="actionConfigJson"
-            rows={8}
-            bind:value={currentActionConfig[actionType]}
-            class={"font-mono text-sm " +
-              (errors.action_config_json ? "border-red-500" : "")}
-          />
-          <p class="text-xs text-gray-500 mt-1">
-            No specific configuration form available for this action type.
-            Please enter JSON configuration manually.
-          </p>
         </div>
       {:else}
         <p class="text-sm text-gray-500">
