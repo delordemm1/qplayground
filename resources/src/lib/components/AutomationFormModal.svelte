@@ -24,6 +24,14 @@
     delay: number;
   };
 
+  type NotificationChannelConfig = {
+    id: string;
+    type: "slack" | "email" | "webhook";
+    onComplete: boolean;
+    onError: boolean;
+    config: Record<string, any>;
+  };
+
   type AutomationConfig = {
     variables: Variable[];
     multirun: MultiRunConfig;
@@ -35,11 +43,7 @@
       onSuccess: boolean;
       path: string;
     };
-    notifications: {
-      onComplete: boolean;
-      onError: boolean;
-      webhook?: string;
-    };
+    notifications: NotificationChannelConfig[];
   };
 
   type Props = {
@@ -113,11 +117,7 @@
               onSuccess: parsed.screenshots?.onSuccess || false,
               path: parsed.screenshots?.path || "screenshots/{{timestamp}}-{{loopIndex}}.png",
             },
-            notifications: {
-              onComplete: parsed.notifications?.onComplete || false,
-              onError: parsed.notifications?.onError !== undefined ? parsed.notifications.onError : true,
-              webhook: parsed.notifications?.webhook || "",
-            },
+            notifications: parsed.notifications || [],
           };
         }
       } catch (err) {
@@ -172,6 +172,22 @@
       if (variableKeys.length !== uniqueKeys.size) {
         errors.config = "Variable keys must be unique";
         return;
+      }
+      
+      // Validate notification channels
+      for (const channel of automationConfig.notifications) {
+        if (!channel.type) {
+          errors.config = "All notification channels must have a type";
+          return;
+        }
+        if (channel.type === "slack" && !channel.config.webhook_url) {
+          errors.config = "Slack notifications require a webhook URL";
+          return;
+        }
+        if (!channel.onComplete && !channel.onError) {
+          errors.config = "Each notification channel must be enabled for at least one event (completion or error)";
+          return;
+        }
       }
     } catch (err) {
       errors.config = "Invalid configuration";

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/delordemm1/qplayground/internal/modules/storage"
+	"github.com/delordemm1/qplayground/internal/modules/notification"
 	"github.com/delordemm1/qplayground/internal/platform"
 	"github.com/brianvoe/gofakeit/v6"
 	"github.com/playwright-community/playwright-go"
@@ -42,20 +43,22 @@ type ScreenshotConfig struct {
 }
 
 // NotificationConfig represents notification configuration
-type NotificationConfig struct {
-	OnComplete bool   `json:"onComplete"`
-	OnError    bool   `json:"onError"`
-	Webhook    string `json:"webhook,omitempty"`
+type NotificationChannelConfig struct {
+	ID         string                 `json:"id"`
+	Type       string                 `json:"type"` // "slack", "email", "webhook"
+	OnComplete bool                   `json:"onComplete"`
+	OnError    bool                   `json:"onError"`
+	Config     map[string]interface{} `json:"config"`
 }
 
 // AutomationConfig represents the parsed automation configuration
 type AutomationConfig struct {
-	Variables     []Variable           `json:"variables"`
-	Multirun      MultiRunConfig       `json:"multirun"`
-	Timeout       int                  `json:"timeout"`       // in seconds
-	Retries       int                  `json:"retries"`
-	Screenshots   ScreenshotConfig     `json:"screenshots"`
-	Notifications NotificationConfig   `json:"notifications"`
+	Variables     []Variable                   `json:"variables"`
+	Multirun      MultiRunConfig               `json:"multirun"`
+	Timeout       int                          `json:"timeout"`       // in seconds
+	Retries       int                          `json:"retries"`
+	Screenshots   ScreenshotConfig             `json:"screenshots"`
+	Notifications []NotificationChannelConfig  `json:"notifications"`
 }
 
 // VariableContext holds context variables for resolution
@@ -71,15 +74,17 @@ type VariableContext struct {
 
 // Runner orchestrates the execution of automations.
 type Runner struct {
-	automationRepo AutomationRepository
-	storageService storage.StorageService
+	automationRepo      AutomationRepository
+	storageService      storage.StorageService
+	notificationService notification.NotificationService
 }
 
 // NewRunner creates a new Runner instance.
-func NewRunner(automationRepo AutomationRepository, storageService storage.StorageService) *Runner {
+func NewRunner(automationRepo AutomationRepository, storageService storage.StorageService, notificationService notification.NotificationService) *Runner {
 	return &Runner{
-		automationRepo: automationRepo,
-		storageService: storageService,
+		automationRepo:      automationRepo,
+		storageService:      storageService,
+		notificationService: notificationService,
 	}
 }
 
@@ -110,7 +115,7 @@ func (r *Runner) RunAutomation(ctx context.Context, automationID string) error {
 			Timeout:     300,
 			Retries:     0,
 			Screenshots: ScreenshotConfig{Enabled: true, OnError: true, OnSuccess: false, Path: "screenshots/{{timestamp}}-{{loopIndex}}.png"},
-			Notifications: NotificationConfig{OnComplete: false, OnError: true},
+			Notifications: []NotificationChannelConfig{},
 		}
 	}
 
@@ -226,6 +231,8 @@ func (r *Runner) RunAutomation(ctx context.Context, automationID string) error {
 
 	if executionError != nil {
 		err = executionError
+		// Send error notifications
+		go r.sendNotifications(context.Background(), automation, run, &automationConfig, allLogs, allOutputFiles)
 		return err
 	}
 
@@ -234,6 +241,9 @@ func (r *Runner) RunAutomation(ctx context.Context, automationID string) error {
 		"run_id", run.ID,
 		"total_runs", runCount,
 		"total_output_files", len(allOutputFiles))
+
+	// Send completion notifications
+	go r.sendNotifications(context.Background(), automation, run, &automationConfig, allLogs, allOutputFiles)
 
 	return nil
 }
@@ -508,5 +518,52 @@ func (r *Runner) generateFakerValue(method string) string {
 	default:
 		slog.Warn("Unknown faker method", "method", method)
 		return fmt.Sprintf("{{faker.%s}}", method)
+	}
+}
+
+// sendNotifications sends notifications based on the automation configuration
+func (r *Runner) sendNotifications(ctx context.Context, automation *Automation, run *AutomationRun, automationConfig *AutomationConfig, logs []map[string]interface{}, outputFiles []string) {
+	if len(automationConfig.Notifications) == 0 {
+		return // No notifications configured
+	}
+
+	// Get project information (you might need to add this to the Runner or pass it in)
+	// For now, we'll use the project ID from the automation
+	projectName := "Unknown Project" // TODO: Fetch actual project name if needed
+
+	// Build notification message
+	message := notification.NotificationMessage{
+		AutomationID:   automation.ID,
+		AutomationName: automation.Name,
+		ProjectID:      automation.ProjectID,
+		ProjectName:    projectName,
+		RunID:          run.ID,
+		Status:         run.Status,
+		StartTime:      run.StartTime,
+		EndTime:        run.EndTime,
+		ErrorMessage:   run.ErrorMessage,
+		OutputFiles:    outputFiles,
+		LogsCount:      len(logs),
+	}
+
+	// Convert our config to the notification service format
+	channels := make([]notification.NotificationChannelConfig, len(automationConfig.Notifications))
+	for i, channel := range automationConfig.Notifications {
+		channels[i] = notification.NotificationChannelConfig{
+			ID:         channel.ID,
+			Type:       channel.Type,
+			OnComplete: channel.OnComplete,
+			OnError:    channel.OnError,
+			Config:     channel.Config,
+		}
+	}
+
+	// Dispatch notifications
+	err := r.notificationService.DispatchAutomationNotification(ctx, message, channels)
+	if err != nil {
+		slog.Error("Failed to dispatch automation notifications", 
+			"automation_id", automation.ID,
+			"run_id", run.ID,
+			"error", err)
 	}
 }

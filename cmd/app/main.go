@@ -79,7 +79,7 @@ func main() {
 	// AUTOMATION Dependencies
 	automationRepo := automation.NewAutomationRepository(pool)
 	automationService := automation.NewAutomationService(automationRepo)
-	automationRunner := automation.NewRunner(automationRepo, storageService)
+	automationRunner := automation.NewRunner(automationRepo, storageService, notificationService)
 
 	// AUTH Dependencies (updated to include organization service)
 	authRepo := auth.NewAuthRepository(pool)

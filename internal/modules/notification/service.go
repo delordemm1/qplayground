@@ -17,6 +17,9 @@ type MailService struct {
 	username string
 	password string
 	from     string
+	
+	// Notification channel implementations
+	slackNotifier ChannelNotifier
 }
 
 func NewMailService() *MailService {
@@ -26,6 +29,8 @@ func NewMailService() *MailService {
 		username: platform.ENV_SMTP_USERNAME,
 		password: platform.ENV_SMTP_PASSWORD,
 		from:     platform.ENV_SMTP_FROM,
+		
+		slackNotifier: NewSlackNotifier(),
 	}
 }
 
@@ -112,6 +117,56 @@ func (s *MailService) SendOrganizationInvite(ctx context.Context, email, orgName
 			slog.Error("Failed to send organization invite", "error", err, "email", email)
 		}
 	}(ctx, m)
+
+	return nil
+}
+
+func (s *MailService) DispatchAutomationNotification(ctx context.Context, message NotificationMessage, channels []NotificationChannelConfig) error {
+	for _, channel := range channels {
+		// Check if this channel should be triggered based on the message status
+		shouldSend := false
+		if message.Status == "completed" && channel.OnComplete {
+			shouldSend = true
+		} else if message.Status == "failed" && channel.OnError {
+			shouldSend = true
+		}
+
+		if !shouldSend {
+			continue
+		}
+
+		// Send notification based on channel type
+		var err error
+		switch channel.Type {
+		case "slack":
+			err = s.slackNotifier.Send(ctx, message, channel.Config)
+		case "email":
+			// TODO: Implement email notifications
+			slog.Warn("Email notifications not yet implemented", "channel_id", channel.ID)
+			continue
+		case "webhook":
+			// TODO: Implement generic webhook notifications
+			slog.Warn("Generic webhook notifications not yet implemented", "channel_id", channel.ID)
+			continue
+		default:
+			slog.Warn("Unknown notification channel type", "type", channel.Type, "channel_id", channel.ID)
+			continue
+		}
+
+		if err != nil {
+			slog.Error("Failed to send notification", 
+				"channel_type", channel.Type,
+				"channel_id", channel.ID,
+				"automation_id", message.AutomationID,
+				"error", err)
+			// Continue with other channels even if one fails
+		} else {
+			slog.Info("Notification sent successfully",
+				"channel_type", channel.Type,
+				"channel_id", channel.ID,
+				"automation_id", message.AutomationID)
+		}
+	}
 
 	return nil
 }

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Label, Input, Select, Checkbox, Button, Textarea } from "flowbite-svelte";
   import { PlusOutline, TrashBinOutline } from "flowbite-svelte-icons";
+  import SlackNotificationConfig from "../NotificationConfigs/SlackNotificationConfig.svelte";
 
   type Variable = {
     key: string;
@@ -16,6 +17,14 @@
     delay: number; // delay between runs in ms
   };
 
+  type NotificationChannelConfig = {
+    id: string;
+    type: "slack" | "email" | "webhook";
+    onComplete: boolean;
+    onError: boolean;
+    config: Record<string, any>;
+  };
+
   type AutomationConfig = {
     variables: Variable[];
     multirun: MultiRunConfig;
@@ -27,11 +36,7 @@
       onSuccess: boolean;
       path: string;
     };
-    notifications: {
-      onComplete: boolean;
-      onError: boolean;
-      webhook?: string;
-    };
+    notifications: NotificationChannelConfig[];
   };
 
   let { config = $bindable() }: { config: AutomationConfig } = $props();
@@ -58,11 +63,7 @@
       };
     }
     if (!config.notifications) {
-      config.notifications = {
-        onComplete: false,
-        onError: true,
-        webhook: "",
-      };
+      config.notifications = [];
     }
   });
 
@@ -80,6 +81,21 @@
 
   function removeVariable(index: number) {
     config.variables = config.variables.filter((_, i) => i !== index);
+  }
+
+  function addNotificationChannel() {
+    const newChannel: NotificationChannelConfig = {
+      id: `channel-${Date.now()}`,
+      type: "slack",
+      onComplete: false,
+      onError: true,
+      config: {},
+    };
+    config.notifications = [...config.notifications, newChannel];
+  }
+
+  function removeNotificationChannel(index: number) {
+    config.notifications = config.notifications.filter((_, i) => i !== index);
   }
 
   // Predefined dynamic variable options for gofakeit
@@ -326,34 +342,77 @@
 
   <!-- Notification Configuration -->
   <div class="border p-4 rounded-md bg-gray-50">
-    <h4 class="text-md font-semibold mb-4">Notification Configuration</h4>
+    <div class="flex items-center justify-between mb-4">
+      <h4 class="text-md font-semibold">Notification Channels</h4>
+      <Button size="sm" onclick={addNotificationChannel}>
+        <PlusOutline class="w-4 h-4 mr-2" />
+        Add Channel
+      </Button>
+    </div>
     
-    <div class="space-y-4">
-      <div class="flex items-center space-x-4">
-        <div class="flex items-center">
-          <Checkbox id="notify-complete" bind:checked={config.notifications.onComplete} />
-          <Label for="notify-complete" class="ml-2">On Completion</Label>
-        </div>
-        <div class="flex items-center">
-          <Checkbox id="notify-error" bind:checked={config.notifications.onError} />
-          <Label for="notify-error" class="ml-2">On Error</Label>
+    {#if config.notifications.length === 0}
+      <p class="text-sm text-gray-500">No notification channels configured. Click "Add Channel" to create one.</p>
+    {:else}
+      <div class="space-y-4">
+        {#each config.notifications as channel, index (channel.id)}
+          <div class="border p-4 rounded-md bg-white">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div>
+                <Label for="channel-type-{index}" class="mb-2">Channel Type</Label>
+                <Select
+                  id="channel-type-{index}"
+                  bind:value={channel.type}
+                  items={[
+                    { value: "slack", name: "Slack Webhook" },
+                    { value: "email", name: "Email (Coming Soon)" },
+                    { value: "webhook", name: "Generic Webhook" },
+                  ]}
+                />
+              </div>
+              <div class="flex items-center space-x-4">
+                <div class="flex items-center">
+                  <Checkbox id="channel-complete-{index}" bind:checked={channel.onComplete} />
+                  <Label for="channel-complete-{index}" class="ml-2">On Complete</Label>
+                </div>
+                <div class="flex items-center">
+                  <Checkbox id="channel-error-{index}" bind:checked={channel.onError} />
+                  <Label for="channel-error-{index}" class="ml-2">On Error</Label>
+                </div>
+              </div>
+              <div class="flex items-end">
+                <Button
+                  size="sm"
+                  color="red"
+                  onclick={() => removeNotificationChannel(index)}
+                  class="w-full"
+                >
+                  <TrashBinOutline class="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+            
+            <!-- Channel-specific configuration -->
+            {#if channel.type === "slack"}
+              <SlackNotificationConfig bind:config={channel.config} />
+            {:else if channel.type === "webhook"}
+              <div>
+                <Label for="webhook-url-{index}" class="mb-2">Webhook URL</Label>
+                <Input
+                  id="webhook-url-{index}"
+                  type="url"
+                  bind:value={channel.config.webhook_url}
+                  placeholder="https://your-webhook-url.com/notify"
+                />
+              </div>
+            {:else if channel.type === "email"}
+              <div class="text-sm text-gray-500 italic">
+                Email notifications are coming soon. Please use Slack or generic webhook for now.
+              </div>
+            {/if}
+          </div>
+        {/each}
         </div>
       </div>
-
-      {#if config.notifications.onComplete || config.notifications.onError}
-        <div>
-          <Label for="webhook-url" class="mb-2">Webhook URL (optional)</Label>
-          <Input
-            id="webhook-url"
-            type="url"
-            bind:value={config.notifications.webhook}
-            placeholder="https://your-webhook-url.com/notify"
-          />
-          <p class="text-xs text-gray-500 mt-1">
-            POST request will be sent to this URL with automation results
-          </p>
-        </div>
-      {/if}
-    </div>
+    {/if}
   </div>
 </div>
