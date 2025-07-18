@@ -15,6 +15,7 @@
   function applyDefaults(targetConfig: PlaywrightFillConfig) {
     if (!targetConfig.selector) targetConfig.selector = "";
     if (!targetConfig.value) targetConfig.value = "";
+    if (!targetConfig.force) targetConfig.force = false;
   }
 
   // Apply defaults immediately for initial render

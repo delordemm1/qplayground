@@ -14,7 +14,6 @@ import (
 	"github.com/brianvoe/gofakeit/v7"
 	"github.com/delordemm1/qplayground/internal/modules/notification"
 	"github.com/delordemm1/qplayground/internal/modules/storage"
-	"github.com/delordemm1/qplayground/internal/platform"
 	"github.com/playwright-community/playwright-go"
 )
 
@@ -91,13 +90,13 @@ func NewRunner(automationRepo AutomationRepository, storageService storage.Stora
 }
 
 // RunAutomation executes a given automation.
-func (r *Runner) RunAutomation(ctx context.Context, automationID string) error {
+func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *AutomationRun) error {
 	// Create a ticker for polling cancellation status every 5 seconds
 	statusTicker := time.NewTicker(5 * time.Second)
 	defer statusTicker.Stop()
-	
+
 	// 1. Fetch Automation details from DB
-	automation, err := r.automationRepo.GetAutomationByID(ctx, automationID)
+	automation, err := r.automationRepo.GetAutomationByID(ctx, run.AutomationID)
 	if err != nil {
 		return fmt.Errorf("failed to get automation: %w", err)
 	}
@@ -126,19 +125,19 @@ func (r *Runner) RunAutomation(ctx context.Context, automationID string) error {
 	}
 
 	// 2. Create a new AutomationRun record (status: running)
-	run := &AutomationRun{
-		ID:              platform.UtilGenerateUUID(),
-		AutomationID:    automationID,
-		Status:          "running",
-		LogsJSON:        "[]",
-		OutputFilesJSON: "[]",
-	}
+	// run := &AutomationRun{
+	// 	ID:              platform.UtilGenerateUUID(),
+	// 	AutomationID:    automationID,
+	// 	Status:          "running",
+	// 	LogsJSON:        "[]",
+	// 	OutputFilesJSON: "[]",
+	// }
 
 	// Set start time
 	now := time.Now()
 	run.StartTime = &now
 
-	err = r.automationRepo.CreateRun(ctx, run)
+	// err = r.automationRepo.CreateRun(ctx, run)
 	if err != nil {
 		return fmt.Errorf("failed to create automation run record: %w", err)
 	}
@@ -177,14 +176,14 @@ func (r *Runner) RunAutomation(ctx context.Context, automationID string) error {
 	}
 
 	slog.Info("Starting automation execution",
-		"automation_id", automationID,
+		"automation_id", run.AutomationID,
 		"run_id", run.ID,
 		"run_count", runCount,
 		"run_mode", runMode)
 
 	// Send initial status update via SSE
 	if r.sseManager != nil {
-		r.sseManager.SendRunStatusUpdate(run.ID, "running")
+		r.sseManager.SendRunStatusUpdate(projectID, run.AutomationID, run.ID, "running")
 	}
 
 	// 4. Execute runs based on configuration
@@ -248,7 +247,7 @@ func (r *Runner) RunAutomation(ctx context.Context, automationID string) error {
 	}
 
 	slog.Info("Automation completed successfully",
-		"automation_id", automationID,
+		"automation_id", run.AutomationID,
 		"run_id", run.ID,
 		"total_runs", runCount,
 		"total_output_files", len(allOutputFiles))
@@ -259,7 +258,7 @@ func (r *Runner) RunAutomation(ctx context.Context, automationID string) error {
 		if run.StartTime != nil && run.EndTime != nil {
 			totalDuration = run.EndTime.Sub(*run.StartTime).Milliseconds()
 		}
-		r.sseManager.SendRunComplete(run.ID, "completed", totalDuration, allOutputFiles)
+		r.sseManager.SendRunComplete(projectID, run.AutomationID, run.ID, "completed", totalDuration, allOutputFiles)
 	}
 
 	// Send completion notifications
@@ -273,7 +272,7 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 	// Create a ticker for polling cancellation status every 5 seconds
 	statusTicker := time.NewTicker(5 * time.Second)
 	defer statusTicker.Stop()
-	
+
 	// Start a goroutine to poll for cancellation
 	cancelCh := make(chan struct{})
 	go func() {
@@ -288,7 +287,7 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 			}
 		}
 	}()
-	
+
 	// Initialize Playwright for this run
 	pw, err := playwright.Run()
 	if err != nil {
@@ -360,12 +359,12 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 			return logs, outputFiles, fmt.Errorf("automation cancelled")
 		default:
 		}
-		
+
 		runContext.Logger.Info("Executing step", "step_name", step.Name, "step_order", step.StepOrder, "loop_index", loopIndex)
 
 		// Send step progress update via SSE
 		if r.sseManager != nil {
-			r.sseManager.SendRunStep(run.ID, step.Name, stepIndex+1, totalSteps)
+			r.sseManager.SendRunStep(automation.ProjectID, run.AutomationID, run.ID, step.Name, stepIndex+1, totalSteps)
 		}
 
 		// Get actions for this step
@@ -381,7 +380,7 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 				return logs, outputFiles, fmt.Errorf("automation cancelled")
 			default:
 			}
-			
+
 			startTime := time.Now()
 
 			// Parse action config
@@ -411,9 +410,9 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 			// Send real-time log update via SSE
 			if r.sseManager != nil {
 				if actionErr != nil {
-					r.sseManager.SendRunError(run.ID, step.Name, action.ActionType, actionErr.Error())
+					r.sseManager.SendRunError(automation.ProjectID, run.AutomationID, run.ID, step.Name, action.ActionType, actionErr.Error())
 				} else {
-					r.sseManager.SendRunLog(run.ID, step.Name, action.ActionType, "Action completed successfully", duration.Milliseconds())
+					r.sseManager.SendRunLog(automation.ProjectID, run.AutomationID, run.ID, step.Name, action.ActionType, "Action completed successfully", duration.Milliseconds())
 				}
 			}
 
@@ -451,10 +450,10 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 						publicURL := r.storageService.GetPublicURL(r2Key)
 						outputFiles = append(outputFiles, publicURL)
 						logEntry["output_file"] = publicURL
-						
+
 						// Send output file update via SSE
 						if r.sseManager != nil {
-							r.sseManager.SendRunOutputFile(run.ID, publicURL)
+							r.sseManager.SendRunOutputFile(automation.ProjectID, run.AutomationID, run.ID, publicURL)
 						}
 					}
 				}

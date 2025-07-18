@@ -3,11 +3,9 @@ package main
 import (
 	"context"
 	"encoding/gob"
-	"encoding/json"
 	"log"
 	"log/slog"
 	"net/http"
-	"sync"
 
 	"github.com/delordemm1/qplayground/internal/controller/web"
 	"github.com/delordemm1/qplayground/internal/core/config"
@@ -19,6 +17,8 @@ import (
 	"github.com/delordemm1/qplayground/internal/modules/project"
 	"github.com/delordemm1/qplayground/internal/modules/storage"
 	"github.com/delordemm1/qplayground/internal/platform"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	// Import plugin packages so their init() functions run and register actions
 	_ "github.com/delordemm1/qplayground/internal/plugins/playwright"
@@ -42,11 +42,11 @@ func main() {
 	// Initialize database
 	pool := config.InitDatabase()
 	defer pool.Close()
-	
+
 	// Initialize Redis
 	redisClient := config.InitRedis()
 	defer redisClient.Close()
-	
+
 	// Initialize SSE Manager
 	sseManager := automation.NewSSEManager()
 	defer sseManager.Shutdown()
@@ -90,7 +90,7 @@ func main() {
 	runCache := automation.NewRedisRunCache(redisClient)
 	automationService := automation.NewAutomationService(automationRepo, runCache)
 	automationRunner := automation.NewRunner(automationRepo, storageService, notificationService, sseManager)
-	
+
 	// Initialize automation scheduler
 	scheduler := automation.NewScheduler(automationRepo, automationService, runCache, automationRunner, sseManager)
 
@@ -115,10 +115,10 @@ func main() {
 
 	// Apply Inertia middleware
 	r.Use(i.Middleware)
-	
+
 	// Sync Redis with database on startup
 	syncRedisRunsOnStartup(pool, runCache)
-	
+
 	// Start automation scheduler
 	scheduler.Start(context.Background())
 	defer scheduler.Stop()
@@ -169,7 +169,7 @@ func main() {
 				r.Delete("/{actionId}", automationHandler.DeleteAction)
 			})
 		})
-		
+
 		// Mount SSE server for automation events
 		r.Mount("/events/", sseManager.GetServer())
 
@@ -200,7 +200,7 @@ func getUserFromContext(ctx context.Context) *auth.User {
 // syncRedisRunsOnStartup syncs all runs from database to Redis on application startup
 func syncRedisRunsOnStartup(pool *pgxpool.Pool, runCache automation.RunCache) {
 	ctx := context.Background()
-	
+
 	// Query all runs from database
 	query := `
 		SELECT id, automation_id, status, start_time, end_time, logs_json, output_files_json, error_message, created_at, updated_at
@@ -208,20 +208,20 @@ func syncRedisRunsOnStartup(pool *pgxpool.Pool, runCache automation.RunCache) {
 		WHERE status IN ('pending', 'running', 'queued', 'completed', 'failed', 'cancelled')
 		ORDER BY created_at DESC
 	`
-	
+
 	rows, err := pool.Query(ctx, query)
 	if err != nil {
 		slog.Error("Failed to query runs for Redis sync", "error", err)
 		return
 	}
 	defer rows.Close()
-	
+
 	var runs []*automation.AutomationRun
 	for rows.Next() {
 		var run automation.AutomationRun
 		var startTime, endTime, createdAt, updatedAt pgtype.Timestamp
 		var logsJSON, outputFilesJSON, errorMessage pgtype.Text
-		
+
 		err := rows.Scan(
 			&run.ID, &run.AutomationID, &run.Status, &startTime, &endTime,
 			&logsJSON, &outputFilesJSON, &errorMessage, &createdAt, &updatedAt,
@@ -230,7 +230,7 @@ func syncRedisRunsOnStartup(pool *pgxpool.Pool, runCache automation.RunCache) {
 			slog.Error("Failed to scan run for Redis sync", "error", err)
 			continue
 		}
-		
+
 		// Convert pgtype timestamps
 		if startTime.Valid {
 			run.StartTime = &startTime.Time
@@ -249,22 +249,16 @@ func syncRedisRunsOnStartup(pool *pgxpool.Pool, runCache automation.RunCache) {
 		}
 		run.CreatedAt = createdAt.Time
 		run.UpdatedAt = updatedAt.Time
-		
+
 		runs = append(runs, &run)
 	}
-	
+
 	// Upsert all runs to Redis
 	err = runCache.UpsertAllRuns(ctx, runs)
 	if err != nil {
 		slog.Error("Failed to upsert runs to Redis", "error", err)
 		return
 	}
-	
+
 	slog.Info("Successfully synced runs to Redis on startup", "count", len(runs))
 }
-
-// Add required imports
-import (
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
-)

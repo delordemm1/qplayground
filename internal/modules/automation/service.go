@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/delordemm1/qplayground/internal/platform"
 )
@@ -201,31 +202,31 @@ func (s *automationService) UpdateRunStatus(ctx context.Context, runID, status s
 	if err != nil {
 		return fmt.Errorf("failed to get run: %w", err)
 	}
-	
+
 	// Update status
 	run.Status = status
 	if status == "completed" || status == "failed" || status == "cancelled" {
 		endTime := time.Now()
 		run.EndTime = &endTime
 	}
-	
+
 	// Update in database
 	err = s.automationRepo.UpdateRun(ctx, run)
 	if err != nil {
 		return fmt.Errorf("failed to update run in database: %w", err)
 	}
-	
+
 	// Update in cache
 	if status == "completed" || status == "failed" || status == "cancelled" {
 		err = s.runCache.SetRunStatusWithExpiry(ctx, runID, status, 1*time.Minute)
 	} else {
 		err = s.runCache.SetRunStatus(ctx, runID, status)
 	}
-	
+
 	if err != nil {
 		slog.Warn("Failed to update run status in cache", "run_id", runID, "error", err)
 	}
-	
+
 	return nil
 }
 
@@ -259,7 +260,7 @@ func (s *automationService) TriggerRun(ctx context.Context, automationID string)
 		slog.Info("Run queued due to capacity limit", "runID", run.ID, "automationID", automationID, "running_count", runningCount)
 		return run, nil
 	}
-	
+
 	run := &AutomationRun{
 		ID:              platform.UtilGenerateUUID(),
 		AutomationID:    automationID,
@@ -268,7 +269,7 @@ func (s *automationService) TriggerRun(ctx context.Context, automationID string)
 		OutputFilesJSON: "[]",
 	}
 
-	err := s.automationRepo.CreateRun(ctx, run)
+	err = s.automationRepo.CreateRun(ctx, run)
 	if err != nil {
 		slog.Error("Failed to create run", "error", err, "automationID", automationID)
 		return nil, fmt.Errorf("failed to create run: %w", err)

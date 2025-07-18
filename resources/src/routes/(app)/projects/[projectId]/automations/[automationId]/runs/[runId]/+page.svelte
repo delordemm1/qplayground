@@ -307,7 +307,7 @@
         {#if isCancelling}
           Cancelling...
         {:else}
-          Cancel Run
+          Back to Runs
         {/if}
       </a>
       {#if liveStatus === "running" || liveStatus === "pending"}

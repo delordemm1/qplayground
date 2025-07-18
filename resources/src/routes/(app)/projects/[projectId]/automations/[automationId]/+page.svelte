@@ -152,11 +152,12 @@
       );
 
       const result = await response.json();
+      console.log(result);
 
       if (response.ok) {
         showSuccessToast("Automation run triggered successfully!");
         // Optionally redirect to runs page or update runs list
-        router.visit(`/projects/${projectId}/automations/${automationId}/runs`);
+        router.visit(`/projects/${projectId}/automations/${automationId}/runs/${result.run.ID}`);
       } else {
         showErrorToast(result.error || "Failed to trigger automation run");
       }

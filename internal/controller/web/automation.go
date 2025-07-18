@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
 
 	"github.com/delordemm1/qplayground/internal/modules/auth"
 	"github.com/delordemm1/qplayground/internal/modules/automation"
@@ -36,7 +37,7 @@ func NewAutomationRouter(automationHandler *AutomationHandler) chi.Router {
 	r.Get("/{id}/runs", automationHandler.ListRuns)
 	r.Get("/{id}/runs/{runId}", automationHandler.GetRun)
 	r.Post("/{id}/runs/{runId}/cancel", automationHandler.CancelRun)
-	
+
 	// SSE endpoint for run progress
 	r.Get("/{id}/runs/{runId}/events", automationHandler.GetRunEvents)
 
@@ -234,14 +235,14 @@ func (h *AutomationHandler) GetAutomation(w http.ResponseWriter, r *http.Request
 			platform.UtilHandleServerErr(w, err)
 			return
 		}
-		
+
 		// Get max action order for this step
 		maxActionOrder, err := h.automationService.GetMaxActionOrder(r.Context(), step.ID)
 		if err != nil {
 			platform.UtilHandleServerErr(w, err)
 			return
 		}
-		
+
 		stepsWithActions[i] = map[string]interface{}{
 			"step":           step,
 			"actions":        actions,
@@ -945,7 +946,7 @@ func (h *AutomationHandler) CancelRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Cancel the run using the scheduler
-	err = h.scheduler.CancelRun(r.Context(), runID)
+	err = h.scheduler.CancelRun(r.Context(), projectID, runID)
 	if err != nil {
 		platform.SetFlashError(r.Context(), h.sessionManager, "Failed to cancel automation run")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -989,7 +990,7 @@ func (h *AutomationHandler) GetRunEvents(w http.ResponseWriter, r *http.Request)
 
 	// Create SSE channel for this specific run
 	channel := fmt.Sprintf("/events/run/%s", runID)
-	
+
 	// Set SSE headers
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
