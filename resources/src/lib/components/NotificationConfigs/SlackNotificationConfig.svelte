@@ -8,12 +8,21 @@
     icon_emoji?: string;
   };
 
+  const applyDefaults = (targetConfig: SlackConfig) => {
+    if (!targetConfig.webhook_url) targetConfig.webhook_url = "";
+    if (!targetConfig.username) targetConfig.username = "QPlayground Bot";
+    if (!targetConfig.icon_emoji) targetConfig.icon_emoji = ":robot_face:";
+  };
   let { config = $bindable() }: { config: SlackConfig } = $props();
 
+  // Ensure config is always an object
+  config = config ?? {};
+
+  // Apply defaults immediately for initial render
+  applyDefaults(config);  
+
   $effect(() => {
-    if (!config.webhook_url) config.webhook_url = "";
-    if (!config.username) config.username = "QPlayground Bot";
-    if (!config.icon_emoji) config.icon_emoji = ":robot_face:";
+    applyDefaults(config);
   });
 </script>
 

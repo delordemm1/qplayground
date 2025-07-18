@@ -29,7 +29,7 @@
     type: "slack" | "email" | "webhook";
     onComplete: boolean;
     onError: boolean;
-    config: Record<string, any>;
+    config: any;
   };
 
   type AutomationConfig = {
@@ -47,22 +47,21 @@
   };
 
   let { config = $bindable() }: { config: AutomationConfig } = $props();
-
   // Initialize config with defaults if empty
-  $effect(() => {
-    if (!config.variables) config.variables = [];
-    if (!config.multirun) {
-      config.multirun = {
+  function applyDefaults(targetConfig: AutomationConfig) {
+    if (!targetConfig.variables) targetConfig.variables = [];
+    if (!targetConfig.multirun) {
+      targetConfig.multirun = {
         enabled: false,
         mode: "sequential",
         count: 1,
         delay: 1000,
       };
     }
-    if (!config.timeout) config.timeout = 300; // 5 minutes default
-    if (!config.retries) config.retries = 0;
-    if (!config.screenshots) {
-      config.screenshots = {
+    if (!targetConfig.timeout) targetConfig.timeout = 300; // 5 minutes default
+    if (!targetConfig.retries) targetConfig.retries = 0;
+    if (!targetConfig.screenshots) {
+      targetConfig.screenshots = {
         enabled: true,
         onError: true,
         onSuccess: false,
@@ -72,6 +71,11 @@
     if (!config?.notifications) {
       config.notifications = [];
     }
+  }
+  config = config ?? {};
+  applyDefaults(config);
+  $effect(() => {
+    applyDefaults(config);
   });
 
   function addVariable() {
@@ -98,7 +102,10 @@
       onError: true,
       config: {},
     };
-    config.notifications = [...(config?.notifications?.length ? config.notifications : []), newChannel];
+    config.notifications = [
+      ...(config?.notifications?.length ? config.notifications : []),
+      newChannel,
+    ];
   }
 
   function removeNotificationChannel(index: number) {
