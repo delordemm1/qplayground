@@ -11,10 +11,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/delordemm1/qplayground/internal/modules/storage"
+	"github.com/brianvoe/gofakeit/v7"
 	"github.com/delordemm1/qplayground/internal/modules/notification"
+	"github.com/delordemm1/qplayground/internal/modules/storage"
 	"github.com/delordemm1/qplayground/internal/platform"
-	"github.com/brianvoe/gofakeit/v6"
 	"github.com/playwright-community/playwright-go"
 )
 
@@ -53,23 +53,23 @@ type NotificationChannelConfig struct {
 
 // AutomationConfig represents the parsed automation configuration
 type AutomationConfig struct {
-	Variables     []Variable                   `json:"variables"`
-	Multirun      MultiRunConfig               `json:"multirun"`
-	Timeout       int                          `json:"timeout"`       // in seconds
-	Retries       int                          `json:"retries"`
-	Screenshots   ScreenshotConfig             `json:"screenshots"`
-	Notifications []NotificationChannelConfig  `json:"notifications"`
+	Variables     []Variable                  `json:"variables"`
+	Multirun      MultiRunConfig              `json:"multirun"`
+	Timeout       int                         `json:"timeout"` // in seconds
+	Retries       int                         `json:"retries"`
+	Screenshots   ScreenshotConfig            `json:"screenshots"`
+	Notifications []NotificationChannelConfig `json:"notifications"`
 }
 
 // VariableContext holds context variables for resolution
 type VariableContext struct {
-	LoopIndex     int
-	Timestamp     string
-	RunID         string
-	UserID        string
-	ProjectID     string
-	AutomationID  string
-	StaticVars    map[string]string
+	LoopIndex    int
+	Timestamp    string
+	RunID        string
+	UserID       string
+	ProjectID    string
+	AutomationID string
+	StaticVars   map[string]string
 }
 
 // Runner orchestrates the execution of automations.
@@ -112,9 +112,9 @@ func (r *Runner) RunAutomation(ctx context.Context, automationID string) error {
 				Count:   1,
 				Delay:   1000,
 			},
-			Timeout:     300,
-			Retries:     0,
-			Screenshots: ScreenshotConfig{Enabled: true, OnError: true, OnSuccess: false, Path: "screenshots/{{timestamp}}-{{loopIndex}}.png"},
+			Timeout:       300,
+			Retries:       0,
+			Screenshots:   ScreenshotConfig{Enabled: true, OnError: true, OnSuccess: false, Path: "screenshots/{{timestamp}}-{{loopIndex}}.png"},
 			Notifications: []NotificationChannelConfig{},
 		}
 	}
@@ -170,8 +170,8 @@ func (r *Runner) RunAutomation(ctx context.Context, automationID string) error {
 		runDelay = time.Duration(automationConfig.Multirun.Delay) * time.Millisecond
 	}
 
-	slog.Info("Starting automation execution", 
-		"automation_id", automationID, 
+	slog.Info("Starting automation execution",
+		"automation_id", automationID,
 		"run_id", run.ID,
 		"run_count", runCount,
 		"run_mode", runMode)
@@ -185,14 +185,14 @@ func (r *Runner) RunAutomation(ctx context.Context, automationID string) error {
 		// Parallel execution
 		var wg sync.WaitGroup
 		var mu sync.Mutex
-		
+
 		for i := 0; i < runCount; i++ {
 			wg.Add(1)
 			go func(loopIndex int) {
 				defer wg.Done()
-				
+
 				logs, outputFiles, err := r.executeSingleRun(ctx, automation, &automationConfig, run, loopIndex)
-				
+
 				mu.Lock()
 				allLogs = append(allLogs, logs...)
 				allOutputFiles = append(allOutputFiles, outputFiles...)
@@ -209,12 +209,12 @@ func (r *Runner) RunAutomation(ctx context.Context, automationID string) error {
 			logs, outputFiles, err := r.executeSingleRun(ctx, automation, &automationConfig, run, i)
 			allLogs = append(allLogs, logs...)
 			allOutputFiles = append(allOutputFiles, outputFiles...)
-			
+
 			if err != nil {
 				executionError = err
 				break // Stop on first error in sequential mode
 			}
-			
+
 			// Add delay between sequential runs (except for the last one)
 			if i < runCount-1 && runDelay > 0 {
 				time.Sleep(runDelay)
@@ -280,13 +280,13 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 
 	// Create variable context for this run
 	varContext := &VariableContext{
-		LoopIndex:     loopIndex,
-		Timestamp:     time.Now().Format("20060102-150405"),
-		RunID:         run.ID,
-		UserID:        "", // TODO: Get from context if available
-		ProjectID:     automation.ProjectID,
-		AutomationID:  automation.ID,
-		StaticVars:    make(map[string]string),
+		LoopIndex:    loopIndex,
+		Timestamp:    time.Now().Format("20060102-150405"),
+		RunID:        run.ID,
+		UserID:       "", // TODO: Get from context if available
+		ProjectID:    automation.ProjectID,
+		AutomationID: automation.ID,
+		StaticVars:   make(map[string]string),
 	}
 
 	// Build static variables map
@@ -401,7 +401,7 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 // resolveVariablesInConfig resolves variables in action configuration
 func (r *Runner) resolveVariablesInConfig(config map[string]interface{}, varContext *VariableContext, automationConfig *AutomationConfig) (map[string]interface{}, error) {
 	resolved := make(map[string]interface{})
-	
+
 	for key, value := range config {
 		switch v := value.(type) {
 		case string:
@@ -422,7 +422,7 @@ func (r *Runner) resolveVariablesInConfig(config map[string]interface{}, varCont
 			resolved[key] = value
 		}
 	}
-	
+
 	return resolved, nil
 }
 
@@ -430,11 +430,11 @@ func (r *Runner) resolveVariablesInConfig(config map[string]interface{}, varCont
 func (r *Runner) resolveVariablesInString(input string, varContext *VariableContext, automationConfig *AutomationConfig) (string, error) {
 	// Pattern to match {{variableName}} or {{faker.method}}
 	re := regexp.MustCompile(`\{\{([^}]+)\}\}`)
-	
+
 	result := re.ReplaceAllStringFunc(input, func(match string) string {
 		// Extract variable name (remove {{ and }})
 		varName := strings.Trim(match, "{}")
-		
+
 		// Handle environment variables
 		switch varName {
 		case "loopIndex":
@@ -450,18 +450,18 @@ func (r *Runner) resolveVariablesInString(input string, varContext *VariableCont
 		case "automationId":
 			return varContext.AutomationID
 		}
-		
+
 		// Handle faker variables
 		if strings.HasPrefix(varName, "faker.") {
 			fakerMethod := strings.TrimPrefix(varName, "faker.")
 			return r.generateFakerValue(fakerMethod)
 		}
-		
+
 		// Handle static variables
 		if value, exists := varContext.StaticVars[varName]; exists {
 			return value
 		}
-		
+
 		// Handle dynamic variables from config
 		for _, variable := range automationConfig.Variables {
 			if variable.Key == varName {
@@ -477,23 +477,27 @@ func (r *Runner) resolveVariablesInString(input string, varContext *VariableCont
 					return variable.Value
 				case "environment":
 					// Variable.Value contains the environment variable (e.g., "{{timestamp}}")
-					return r.resolveVariablesInString(variable.Value, varContext, automationConfig)
+					v, err := r.resolveVariablesInString(variable.Value, varContext, automationConfig)
+					if err != nil {
+						return ""
+					}
+					return v
 				}
 			}
 		}
-		
+
 		// If no match found, return the original placeholder
 		slog.Warn("Unresolved variable", "variable", varName)
 		return match
 	})
-	
+
 	return result, nil
 }
 
 // generateFakerValue generates a fake value based on the faker method
 func (r *Runner) generateFakerValue(method string) string {
 	gofakeit.Seed(time.Now().UnixNano()) // Ensure randomness
-	
+
 	switch method {
 	case "name":
 		return gofakeit.Name()
@@ -561,7 +565,7 @@ func (r *Runner) sendNotifications(ctx context.Context, automation *Automation, 
 	// Dispatch notifications
 	err := r.notificationService.DispatchAutomationNotification(ctx, message, channels)
 	if err != nil {
-		slog.Error("Failed to dispatch automation notifications", 
+		slog.Error("Failed to dispatch automation notifications",
 			"automation_id", automation.ID,
 			"run_id", run.ID,
 			"error", err)

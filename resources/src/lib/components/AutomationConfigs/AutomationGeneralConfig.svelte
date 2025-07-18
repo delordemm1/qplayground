@@ -1,5 +1,12 @@
 <script lang="ts">
-  import { Label, Input, Select, Checkbox, Button, Textarea } from "flowbite-svelte";
+  import {
+    Label,
+    Input,
+    Select,
+    Checkbox,
+    Button,
+    Textarea,
+  } from "flowbite-svelte";
   import { PlusOutline, TrashBinOutline } from "flowbite-svelte-icons";
   import SlackNotificationConfig from "../NotificationConfigs/SlackNotificationConfig.svelte";
 
@@ -62,7 +69,7 @@
         path: "screenshots/{{timestamp}}-{{loopIndex}}.png",
       };
     }
-    if (!config.notifications) {
+    if (!config?.notifications) {
       config.notifications = [];
     }
   });
@@ -91,7 +98,7 @@
       onError: true,
       config: {},
     };
-    config.notifications = [...config.notifications, newChannel];
+    config.notifications = [...(config?.notifications?.length ? config.notifications : []), newChannel];
   }
 
   function removeNotificationChannel(index: number) {
@@ -135,7 +142,9 @@
     </div>
 
     {#if config.variables.length === 0}
-      <p class="text-sm text-gray-500">No variables defined. Click "Add Variable" to create one.</p>
+      <p class="text-sm text-gray-500">
+        No variables defined. Click "Add Variable" to create one.
+      </p>
     {:else}
       <div class="space-y-3">
         {#each config.variables as variable, index (index)}
@@ -165,7 +174,8 @@
                 />
               </div>
               <div>
-                <Label for="var-value-{index}" class="mb-1 text-xs">Value</Label>
+                <Label for="var-value-{index}" class="mb-1 text-xs">Value</Label
+                >
                 {#if variable.type === "dynamic"}
                   <Select
                     id="var-value-{index}"
@@ -173,7 +183,10 @@
                     size="sm"
                     items={[
                       { value: "", name: "Select a dynamic value..." },
-                      ...dynamicVariableOptions.map(opt => ({ value: opt.value, name: opt.label }))
+                      ...dynamicVariableOptions.map((opt) => ({
+                        value: opt.value,
+                        name: opt.label,
+                      })),
                     ]}
                   />
                 {:else if variable.type === "environment"}
@@ -183,7 +196,10 @@
                     size="sm"
                     items={[
                       { value: "", name: "Select an environment value..." },
-                      ...environmentVariableOptions.map(opt => ({ value: opt.value, name: opt.label }))
+                      ...environmentVariableOptions.map((opt) => ({
+                        value: opt.value,
+                        name: opt.label,
+                      })),
                     ]}
                   />
                 {:else}
@@ -208,7 +224,9 @@
               </div>
             </div>
             <div class="mt-2">
-              <Label for="var-desc-{index}" class="mb-1 text-xs">Description (optional)</Label>
+              <Label for="var-desc-{index}" class="mb-1 text-xs"
+                >Description (optional)</Label
+              >
               <Input
                 id="var-desc-{index}"
                 type="text"
@@ -226,10 +244,13 @@
   <!-- Multi-Run Configuration -->
   <div class="border p-4 rounded-md bg-gray-50">
     <h4 class="text-md font-semibold mb-4">Multi-Run Configuration</h4>
-    
+
     <div class="space-y-4">
       <div class="flex items-center">
-        <Checkbox id="multirun-enabled" bind:checked={config.multirun.enabled} />
+        <Checkbox
+          id="multirun-enabled"
+          bind:checked={config.multirun.enabled}
+        />
         <Label for="multirun-enabled" class="ml-2">Enable Multi-Run</Label>
       </div>
 
@@ -257,7 +278,9 @@
             />
           </div>
           <div>
-            <Label for="multirun-delay" class="mb-2">Delay Between Runs (ms)</Label>
+            <Label for="multirun-delay" class="mb-2"
+              >Delay Between Runs (ms)</Label
+            >
             <Input
               id="multirun-delay"
               type="number"
@@ -273,7 +296,7 @@
   <!-- General Settings -->
   <div class="border p-4 rounded-md bg-gray-50">
     <h4 class="text-md font-semibold mb-4">General Settings</h4>
-    
+
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div>
         <Label for="timeout" class="mb-2">Global Timeout (seconds)</Label>
@@ -284,7 +307,9 @@
           min={1}
           placeholder="300"
         />
-        <p class="text-xs text-gray-500 mt-1">Maximum time for the entire automation to complete</p>
+        <p class="text-xs text-gray-500 mt-1">
+          Maximum time for the entire automation to complete
+        </p>
       </div>
       <div>
         <Label for="retries" class="mb-2">Retry Count</Label>
@@ -296,7 +321,9 @@
           max={10}
           placeholder="0"
         />
-        <p class="text-xs text-gray-500 mt-1">Number of times to retry on failure</p>
+        <p class="text-xs text-gray-500 mt-1">
+          Number of times to retry on failure
+        </p>
       </div>
     </div>
   </div>
@@ -304,10 +331,13 @@
   <!-- Screenshot Configuration -->
   <div class="border p-4 rounded-md bg-gray-50">
     <h4 class="text-md font-semibold mb-4">Screenshot Configuration</h4>
-    
+
     <div class="space-y-4">
       <div class="flex items-center">
-        <Checkbox id="screenshots-enabled" bind:checked={config.screenshots.enabled} />
+        <Checkbox
+          id="screenshots-enabled"
+          bind:checked={config.screenshots.enabled}
+        />
         <Label for="screenshots-enabled" class="ml-2">Enable Screenshots</Label>
       </div>
 
@@ -315,16 +345,24 @@
         <div class="space-y-3">
           <div class="flex items-center space-x-4">
             <div class="flex items-center">
-              <Checkbox id="screenshots-error" bind:checked={config.screenshots.onError} />
+              <Checkbox
+                id="screenshots-error"
+                bind:checked={config.screenshots.onError}
+              />
               <Label for="screenshots-error" class="ml-2">On Error</Label>
             </div>
             <div class="flex items-center">
-              <Checkbox id="screenshots-success" bind:checked={config.screenshots.onSuccess} />
+              <Checkbox
+                id="screenshots-success"
+                bind:checked={config.screenshots.onSuccess}
+              />
               <Label for="screenshots-success" class="ml-2">On Success</Label>
             </div>
           </div>
           <div>
-            <Label for="screenshots-path" class="mb-2">Screenshot Path Template</Label>
+            <Label for="screenshots-path" class="mb-2"
+              >Screenshot Path Template</Label
+            >
             <Input
               id="screenshots-path"
               type="text"
@@ -349,16 +387,20 @@
         Add Channel
       </Button>
     </div>
-    
-    {#if config.notifications.length === 0}
-      <p class="text-sm text-gray-500">No notification channels configured. Click "Add Channel" to create one.</p>
+
+    {#if config?.notifications?.length === 0}
+      <p class="text-sm text-gray-500">
+        No notification channels configured. Click "Add Channel" to create one.
+      </p>
     {:else}
       <div class="space-y-4">
-        {#each config.notifications as channel, index (channel.id)}
+        {#each config?.notifications as channel, index (channel.id)}
           <div class="border p-4 rounded-md bg-white">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
               <div>
-                <Label for="channel-type-{index}" class="mb-2">Channel Type</Label>
+                <Label for="channel-type-{index}" class="mb-2"
+                  >Channel Type</Label
+                >
                 <Select
                   id="channel-type-{index}"
                   bind:value={channel.type}
@@ -371,12 +413,22 @@
               </div>
               <div class="flex items-center space-x-4">
                 <div class="flex items-center">
-                  <Checkbox id="channel-complete-{index}" bind:checked={channel.onComplete} />
-                  <Label for="channel-complete-{index}" class="ml-2">On Complete</Label>
+                  <Checkbox
+                    id="channel-complete-{index}"
+                    bind:checked={channel.onComplete}
+                  />
+                  <Label for="channel-complete-{index}" class="ml-2"
+                    >On Complete</Label
+                  >
                 </div>
                 <div class="flex items-center">
-                  <Checkbox id="channel-error-{index}" bind:checked={channel.onError} />
-                  <Label for="channel-error-{index}" class="ml-2">On Error</Label>
+                  <Checkbox
+                    id="channel-error-{index}"
+                    bind:checked={channel.onError}
+                  />
+                  <Label for="channel-error-{index}" class="ml-2"
+                    >On Error</Label
+                  >
                 </div>
               </div>
               <div class="flex items-end">
@@ -390,13 +442,14 @@
                 </Button>
               </div>
             </div>
-            
+
             <!-- Channel-specific configuration -->
             {#if channel.type === "slack"}
               <SlackNotificationConfig bind:config={channel.config} />
             {:else if channel.type === "webhook"}
               <div>
-                <Label for="webhook-url-{index}" class="mb-2">Webhook URL</Label>
+                <Label for="webhook-url-{index}" class="mb-2">Webhook URL</Label
+                >
                 <Input
                   id="webhook-url-{index}"
                   type="url"
@@ -406,13 +459,14 @@
               </div>
             {:else if channel.type === "email"}
               <div class="text-sm text-gray-500 italic">
-                Email notifications are coming soon. Please use Slack or generic webhook for now.
+                Email notifications are coming soon. Please use Slack or generic
+                webhook for now.
               </div>
             {/if}
           </div>
         {/each}
-        </div>
       </div>
+      <!-- </div> -->
     {/if}
   </div>
 </div>

@@ -5,7 +5,7 @@
   import ActionFormModal from "$lib/components/ActionFormModal.svelte";
   import ConfirmDeleteModal from "$lib/components/ConfirmDeleteModal.svelte";
   import { formatDate } from "$lib/utils/date";
-  import { router,page } from "@inertiajs/svelte";
+  import { router } from "@inertiajs/svelte";
 
   type Project = {
     ID: string;

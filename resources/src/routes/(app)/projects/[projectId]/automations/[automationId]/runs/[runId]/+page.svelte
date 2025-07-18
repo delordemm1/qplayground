@@ -59,17 +59,17 @@
   // Helper function to get status badge styling
   function getStatusBadgeClass(status: string): string {
     switch (status?.toLowerCase()) {
-      case 'success':
-        return 'bg-green-100 text-green-800';
-      case 'failed':
-      case 'error':
-        return 'bg-red-100 text-red-800';
-      case 'running':
-        return 'bg-blue-100 text-blue-800';
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800';
+      case "success":
+        return "bg-green-100 text-green-800";
+      case "failed":
+      case "error":
+        return "bg-red-100 text-red-800";
+      case "running":
+        return "bg-blue-100 text-blue-800";
+      case "pending":
+        return "bg-yellow-100 text-yellow-800";
       default:
-        return 'bg-gray-100 text-gray-800';
+        return "bg-gray-100 text-gray-800";
     }
   }
 
@@ -88,22 +88,22 @@
 
   // Helper function to get file type from URL
   function getFileType(url: string): string {
-    const extension = url.split('.').pop()?.toLowerCase();
+    const extension = url.split(".").pop()?.toLowerCase();
     switch (extension) {
-      case 'png':
-      case 'jpg':
-      case 'jpeg':
-      case 'gif':
-      case 'webp':
-        return 'image';
-      case 'pdf':
-        return 'pdf';
-      case 'json':
-        return 'json';
-      case 'txt':
-        return 'text';
+      case "png":
+      case "jpg":
+      case "jpeg":
+      case "gif":
+      case "webp":
+        return "image";
+      case "pdf":
+        return "pdf";
+      case "json":
+        return "json";
+      case "txt":
+        return "text";
       default:
-        return 'file';
+        return "file";
     }
   }
 </script>
@@ -116,19 +116,21 @@
   <!-- Header -->
   <div class="md:flex md:items-center md:justify-between mb-6">
     <div class="flex-1 min-w-0">
-      <h2 class="text-2xl font-bold leading-7 text-gray-900 sm:text-3xl sm:truncate">
+      <h2
+        class="text-2xl font-bold leading-7 text-gray-900 sm:text-3xl sm:truncate"
+      >
         Automation Run: {run.ID.substring(0, 8)}...
       </h2>
       <p class="mt-2 text-sm text-gray-600">
         Automation: <a
           href="/projects/{projectId}/automations/{automationId}"
-          class="text-primary-600 hover:underline"
-          >{automation.Name}</a
+          class="text-primary-600 hover:underline">{automation.Name}</a
         >
       </p>
       <p class="mt-1 text-sm text-gray-500">
-        Project: <a href="/projects/{project.ID}" class="text-primary-600 hover:underline"
-          >{project.Name}</a
+        Project: <a
+          href="/projects/{project.ID}"
+          class="text-primary-600 hover:underline">{project.Name}</a
         >
       </p>
     </div>
@@ -162,7 +164,11 @@
       <div class="sm:col-span-1">
         <dt class="text-sm font-medium text-gray-500">Status</dt>
         <dd class="mt-1">
-          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {getStatusBadgeClass(run.Status)}">
+          <span
+            class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {getStatusBadgeClass(
+              run.Status
+            )}"
+          >
             {run.Status}
           </span>
         </dd>
@@ -176,14 +182,22 @@
       <div class="sm:col-span-1">
         <dt class="text-sm font-medium text-gray-500">Ended At</dt>
         <dd class="mt-1 text-sm text-gray-900">
-          {run.EndTime ? formatDate(run.EndTime) : (run.Status === "running" ? "Still running..." : "N/A")}
+          {run.EndTime
+            ? formatDate(run.EndTime)
+            : run.Status === "running"
+              ? "Still running..."
+              : "N/A"}
         </dd>
       </div>
       <div class="sm:col-span-1">
         <dt class="text-sm font-medium text-gray-500">Duration</dt>
         <dd class="mt-1 text-sm text-gray-900">
           {#if run.StartTime && run.EndTime}
-            {((new Date(run.EndTime).getTime() - new Date(run.StartTime).getTime()) / 1000).toFixed(2)} seconds
+            {(
+              (new Date(run.EndTime).getTime() -
+                new Date(run.StartTime).getTime()) /
+              1000
+            ).toFixed(2)} seconds
           {:else}
             N/A
           {/if}
@@ -209,14 +223,20 @@
           <div class="border border-gray-200 rounded-lg p-4 bg-gray-50">
             <div class="flex items-center justify-between mb-2">
               <div class="flex items-center space-x-3">
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {getStatusBadgeClass(logEntry.status)}">
-                  {logEntry.status?.toUpperCase() || 'UNKNOWN'}
+                <span
+                  class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {getStatusBadgeClass(
+                    logEntry.status
+                  )}"
+                >
+                  {logEntry.status?.toUpperCase() || "UNKNOWN"}
                 </span>
                 <span class="text-sm font-medium text-gray-900">
-                  {logEntry.action_type || 'Unknown Action'}
+                  {logEntry.action_type || "Unknown Action"}
                 </span>
                 {#if logEntry.loop_index !== undefined}
-                  <span class="text-xs text-gray-500 bg-gray-200 px-2 py-1 rounded">
+                  <span
+                    class="text-xs text-gray-500 bg-gray-200 px-2 py-1 rounded"
+                  >
                     Run #{logEntry.loop_index}
                   </span>
                 {/if}
@@ -226,33 +246,37 @@
                   <span>{formatDuration(logEntry.duration_ms)}</span>
                 {/if}
                 {#if logEntry.timestamp}
-                  <span>{new Date(logEntry.timestamp).toLocaleTimeString()}</span>
+                  <span
+                    >{new Date(logEntry.timestamp).toLocaleTimeString()}</span
+                  >
                 {/if}
               </div>
             </div>
-            
+
             {#if logEntry.step_name}
               <p class="text-sm text-gray-600 mb-2">
-                <span class="font-medium">Step:</span> {logEntry.step_name}
+                <span class="font-medium">Step:</span>
+                {logEntry.step_name}
               </p>
             {/if}
-            
+
             {#if logEntry.error}
               <div class="bg-red-50 border border-red-200 rounded-md p-3 mb-2">
                 <p class="text-sm text-red-800">
-                  <span class="font-medium">Error:</span> {logEntry.error}
+                  <span class="font-medium">Error:</span>
+                  {logEntry.error}
                 </p>
               </div>
             {/if}
-            
+
             {#if logEntry.output_file}
               <div class="bg-blue-50 border border-blue-200 rounded-md p-3">
                 <p class="text-sm text-blue-800">
                   <span class="font-medium">Output File:</span>
-                  <a 
-                    href={logEntry.output_file} 
-                    target="_blank" 
-                    rel="noopener noreferrer" 
+                  <a
+                    href={logEntry.output_file}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     class="ml-2 underline hover:text-blue-900"
                   >
                     View File →
@@ -268,32 +292,68 @@
 
   <!-- Output Files -->
   <div class="bg-white shadow overflow-hidden sm:rounded-lg p-6">
-    <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Output Files</h3>
+    <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
+      Output Files
+    </h3>
     {#if parsedOutputFiles.length === 0}
-      <p class="text-sm text-gray-500">No output files generated for this run.</p>
+      <p class="text-sm text-gray-500">
+        No output files generated for this run.
+      </p>
     {:else}
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {#each parsedOutputFiles as fileUrl, index (index)}
-          <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+          <div
+            class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+          >
             <div class="flex items-center space-x-3">
               <div class="flex-shrink-0">
-                {#if getFileType(fileUrl) === 'image'}
-                  <svg class="h-8 w-8 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                {#if getFileType(fileUrl) === "image"}
+                  <svg
+                    class="h-8 w-8 text-green-500"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                    />
                   </svg>
-                {:else if getFileType(fileUrl) === 'pdf'}
-                  <svg class="h-8 w-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                {:else if getFileType(fileUrl) === "pdf"}
+                  <svg
+                    class="h-8 w-8 text-red-500"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
+                    />
                   </svg>
                 {:else}
-                  <svg class="h-8 w-8 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  <svg
+                    class="h-8 w-8 text-blue-500"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                    />
                   </svg>
                 {/if}
               </div>
               <div class="flex-1 min-w-0">
                 <p class="text-sm font-medium text-gray-900 truncate">
-                  {fileUrl.split('/').pop() || 'Unknown File'}
+                  {fileUrl.split("/").pop() || "Unknown File"}
                 </p>
                 <p class="text-xs text-gray-500 capitalize">
                   {getFileType(fileUrl)} file
@@ -307,13 +367,23 @@
                 rel="noopener noreferrer"
                 class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-primary-700 bg-primary-100 hover:bg-primary-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors"
               >
-                <svg class="mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                <svg
+                  class="mr-2 h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                  />
                 </svg>
                 Open File
               </a>
             </div>
-          </li>
+          </div>
         {/each}
       </div>
     {/if}
