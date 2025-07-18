@@ -35,16 +35,19 @@ func NewAutomationRouter(automationHandler *AutomationHandler) chi.Router {
 	r.Post("/{id}/runs", automationHandler.TriggerRun)
 	r.Get("/{id}/runs", automationHandler.ListRuns)
 	r.Get("/{id}/runs/{runId}", automationHandler.GetRun)
+	r.Post("/{id}/runs/{runId}/cancel", automationHandler.CancelRun)
 
 	return r
 }
 
-func NewAutomationHandler(inertia *inertia.Inertia, sessionManager *scs.SessionManager, automationService automation.AutomationService, projectService project.ProjectService) *AutomationHandler {
+func NewAutomationHandler(inertia *inertia.Inertia, sessionManager *scs.SessionManager, automationService automation.AutomationService, projectService project.ProjectService, scheduler *automation.Scheduler) *AutomationHandler {
 	return &AutomationHandler{
 		inertia:           inertia,
 		sessionManager:    sessionManager,
 		automationService: automationService,
 		projectService:    projectService,
+		scheduler:         scheduler,
+		runContexts:       make(map[string]context.CancelFunc),
 		// stepService:       automationService, // AutomationService also handles steps
 		// actionService:     automationService, // AutomationService also handles actions
 		// runService:        automationService, // AutomationService also handles runs
@@ -58,6 +61,9 @@ type AutomationHandler struct {
 	// stepService       automation.AutomationService
 	// actionService     automation.AutomationService
 	projectService project.ProjectService
+	scheduler      *automation.Scheduler
+	runContexts    map[string]context.CancelFunc
+	mu             sync.Mutex
 }
 
 type CreateAutomationRequest struct {
@@ -891,4 +897,58 @@ func (h *AutomationHandler) verifyAutomationAccess(ctx context.Context, user *au
 		return fmt.Errorf("access denied to automation")
 	}
 	return nil
+}
+
+func (h *AutomationHandler) CancelRun(w http.ResponseWriter, r *http.Request) {
+	user := getUserFromContext(r.Context())
+	if user == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
+		return
+	}
+
+	projectID := chi.URLParam(r, "projectId")
+	automationID := chi.URLParam(r, "id")
+	runID := chi.URLParam(r, "runId")
+
+	// Verify project belongs to user's organization
+	project, err := h.projectService.GetProjectByID(r.Context(), projectID)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Project not found"})
+		return
+	}
+
+	if user.CurrentOrgID == nil || project.OrganizationID != *user.CurrentOrgID {
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Access denied"})
+		return
+	}
+
+	automation, err := h.automationService.GetAutomationByID(r.Context(), automationID)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Automation not found"})
+		return
+	}
+
+	// Verify automation belongs to the project
+	if automation.ProjectID != projectID {
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Access denied"})
+		return
+	}
+
+	// Cancel the run using the scheduler
+	err = h.scheduler.CancelRun(r.Context(), runID)
+	if err != nil {
+		platform.SetFlashError(r.Context(), h.sessionManager, "Failed to cancel automation run")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	platform.SetFlashSuccess(r.Context(), h.sessionManager, "Automation run cancelled successfully")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Run cancelled successfully"})
 }

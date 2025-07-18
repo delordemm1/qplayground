@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from "@inertiajs/svelte";
   import { formatDate } from "$lib/utils/date";
+  import { showSuccessToast, showErrorToast } from "$lib/utils/toast";
 
   type Project = {
     ID: string;
@@ -35,7 +36,36 @@
   const projectId = $derived($page.props.params.projectId);
   const automationId = $derived($page.props.params.automationId);
   const runId = $derived($page.props.params.runId);
+  
+  let isCancelling = $state(false);
+  
+  async function handleCancelRun() {
+    if (isCancelling) return;
+    
+    isCancelling = true;
+    try {
+      const response = await fetch(
+        `/projects/${projectId}/automations/${automationId}/runs/${runId}/cancel`,
+        {
+          method: "POST",
+        }
+      );
 
+      const result = await response.json();
+
+      if (response.ok) {
+        showSuccessToast("Automation run cancelled successfully");
+        // Refresh the page to show updated status
+        window.location.reload();
+      } else {
+        showErrorToast(result.error || "Failed to cancel automation run");
+      }
+    } catch (err: any) {
+      showErrorToast("Network error. Please try again.");
+    } finally {
+      isCancelling = false;
+    }
+  }
   let parsedLogs = $derived.by(() => {
     try {
       const logs = JSON.parse(run.LogsJSON);
@@ -68,6 +98,10 @@
         return "bg-blue-100 text-blue-800";
       case "pending":
         return "bg-yellow-100 text-yellow-800";
+      case "queued":
+        return "bg-purple-100 text-purple-800";
+      case "cancelled":
+        return "bg-gray-100 text-gray-800";
       default:
         return "bg-gray-100 text-gray-800";
     }
@@ -154,6 +188,44 @@
         </svg>
         Back to All Runs
       </a>
+      {#if run.Status === "running" || run.Status === "pending"}
+        <button
+          onclick={handleCancelRun}
+          class="ml-3 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+        >
+          <svg
+            class="-ml-1 mr-2 h-5 w-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M6 18L18 6M6 6l12 12"
+            />
+          </svg>
+          Cancel Run
+        </button>
+        {:else if run.Status === "queued"}
+        <span class="ml-3 inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-500 bg-gray-100">
+          <svg
+            class="-ml-1 mr-2 h-5 w-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
+          </svg>
+          Queued
+        </span>
+      {/if}
     </div>
   </div>
 

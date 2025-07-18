@@ -159,4 +159,7 @@ type AutomationService interface {
 	// Order management helpers
 	GetMaxStepOrder(ctx context.Context, automationID string) (int, error)
 	GetMaxActionOrder(ctx context.Context, stepID string) (int, error)
+	
+	// Run cache management
+	UpdateRunStatus(ctx context.Context, runID, status string) error
 }
