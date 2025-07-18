@@ -46,6 +46,10 @@ func main() {
 	// Initialize Redis
 	redisClient := config.InitRedis()
 	defer redisClient.Close()
+	
+	// Initialize SSE Manager
+	sseManager := automation.NewSSEManager()
+	defer sseManager.Shutdown()
 
 	// Initialize session manager
 	sessionConfig := config.DefaultSessionConfig()
@@ -85,10 +89,10 @@ func main() {
 	automationRepo := automation.NewAutomationRepository(pool)
 	runCache := automation.NewRedisRunCache(redisClient)
 	automationService := automation.NewAutomationService(automationRepo, runCache)
-	automationRunner := automation.NewRunner(automationRepo, storageService, notificationService)
+	automationRunner := automation.NewRunner(automationRepo, storageService, notificationService, sseManager)
 	
 	// Initialize automation scheduler
-	scheduler := automation.NewScheduler(automationRepo, automationService, runCache, automationRunner)
+	scheduler := automation.NewScheduler(automationRepo, automationService, runCache, automationRunner, sseManager)
 
 	// AUTH Dependencies (updated to include organization service)
 	authRepo := auth.NewAuthRepository(pool)
@@ -155,7 +159,7 @@ func main() {
 
 		// Automation routes (nested under projects)
 		r.Route("/projects/{projectId}/automations", func(r chi.Router) {
-			automationHandler := web.NewAutomationHandler(i, sessionManager, automationService, projectService, scheduler)
+			automationHandler := web.NewAutomationHandler(i, sessionManager, automationService, projectService, scheduler, sseManager)
 			automationRouter := web.NewAutomationRouter(automationHandler)
 			r.Mount("/", automationRouter)
 			// Nested routes for steps and actions
@@ -165,6 +169,9 @@ func main() {
 				r.Delete("/{actionId}", automationHandler.DeleteAction)
 			})
 		})
+		
+		// Mount SSE server for automation events
+		r.Mount("/events/", sseManager.GetServer())
 
 	})
 

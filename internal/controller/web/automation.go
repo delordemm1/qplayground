@@ -36,17 +36,21 @@ func NewAutomationRouter(automationHandler *AutomationHandler) chi.Router {
 	r.Get("/{id}/runs", automationHandler.ListRuns)
 	r.Get("/{id}/runs/{runId}", automationHandler.GetRun)
 	r.Post("/{id}/runs/{runId}/cancel", automationHandler.CancelRun)
+	
+	// SSE endpoint for run progress
+	r.Get("/{id}/runs/{runId}/events", automationHandler.GetRunEvents)
 
 	return r
 }
 
-func NewAutomationHandler(inertia *inertia.Inertia, sessionManager *scs.SessionManager, automationService automation.AutomationService, projectService project.ProjectService, scheduler *automation.Scheduler) *AutomationHandler {
+func NewAutomationHandler(inertia *inertia.Inertia, sessionManager *scs.SessionManager, automationService automation.AutomationService, projectService project.ProjectService, scheduler *automation.Scheduler, sseManager *automation.SSEManager) *AutomationHandler {
 	return &AutomationHandler{
 		inertia:           inertia,
 		sessionManager:    sessionManager,
 		automationService: automationService,
 		projectService:    projectService,
 		scheduler:         scheduler,
+		sseManager:        sseManager,
 		runContexts:       make(map[string]context.CancelFunc),
 		// stepService:       automationService, // AutomationService also handles steps
 		// actionService:     automationService, // AutomationService also handles actions
@@ -62,6 +66,7 @@ type AutomationHandler struct {
 	// actionService     automation.AutomationService
 	projectService project.ProjectService
 	scheduler      *automation.Scheduler
+	sseManager     *automation.SSEManager
 	runContexts    map[string]context.CancelFunc
 	mu             sync.Mutex
 }
@@ -951,4 +956,49 @@ func (h *AutomationHandler) CancelRun(w http.ResponseWriter, r *http.Request) {
 	platform.SetFlashSuccess(r.Context(), h.sessionManager, "Automation run cancelled successfully")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Run cancelled successfully"})
+}
+
+func (h *AutomationHandler) GetRunEvents(w http.ResponseWriter, r *http.Request) {
+	user := getUserFromContext(r.Context())
+	if user == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	projectID := chi.URLParam(r, "projectId")
+	automationID := chi.URLParam(r, "id")
+	runID := chi.URLParam(r, "runId")
+
+	// Verify access (same as other methods)
+	if err := h.verifyAutomationAccess(r.Context(), user, projectID, automationID); err != nil {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
+	// Verify run belongs to automation
+	run, err := h.automationService.GetRunByID(r.Context(), runID)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	if run.AutomationID != automationID {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
+	// Create SSE channel for this specific run
+	channel := fmt.Sprintf("/events/run/%s", runID)
+	
+	// Set SSE headers
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Cache-Control")
+
+	// Handle the SSE connection
+	h.sseManager.GetServer().ServeHTTP(w, r.WithContext(
+		context.WithValue(r.Context(), "channel", channel),
+	))
 }

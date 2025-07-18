@@ -15,6 +15,7 @@ type Scheduler struct {
 	automationService AutomationService
 	runCache          RunCache
 	runner            *Runner
+	sseManager        *SSEManager
 	maxConcurrentRuns int
 	ticker            *time.Ticker
 	stopCh            chan struct{}
@@ -28,12 +29,14 @@ func NewScheduler(
 	automationService AutomationService,
 	runCache RunCache,
 	runner *Runner,
+	sseManager *SSEManager,
 ) *Scheduler {
 	return &Scheduler{
 		automationRepo:    automationRepo,
 		automationService: automationService,
 		runCache:          runCache,
 		runner:            runner,
+		sseManager:        sseManager,
 		maxConcurrentRuns: platform.ENV_MAX_CONCURRENT_RUNS,
 		stopCh:            make(chan struct{}),
 		runContexts:       make(map[string]context.CancelFunc),
@@ -155,6 +158,11 @@ func (s *Scheduler) startRun(ctx context.Context, run *AutomationRun) {
 		slog.Error("Failed to add run to running set", "run_id", run.ID, "error", err)
 	}
 	
+	// Send status update via SSE
+	if s.sseManager != nil {
+		s.sseManager.SendRunStatusUpdate(run.ID, "running")
+	}
+
 	// Create cancellable context for this run
 	runCtx, cancel := context.WithCancel(ctx)
 	
@@ -203,6 +211,11 @@ func (s *Scheduler) startRun(ctx context.Context, run *AutomationRun) {
 		if cacheErr := s.runCache.SetRunStatusWithExpiry(context.Background(), run.ID, run.Status, 1*time.Minute); cacheErr != nil {
 			slog.Error("Failed to update final run status in cache", "run_id", run.ID, "error", cacheErr)
 		}
+		
+		// Send final status update via SSE
+		if s.sseManager != nil {
+			s.sseManager.SendRunStatusUpdate(run.ID, run.Status)
+		}
 	}()
 }
 
@@ -243,6 +256,11 @@ func (s *Scheduler) CancelRun(ctx context.Context, runID string) error {
 		slog.Error("Failed to update cancelled status in cache", "run_id", runID, "error", err)
 	}
 	
+	// Send cancellation update via SSE
+	if s.sseManager != nil {
+		s.sseManager.SendRunStatusUpdate(runID, "cancelled")
+	}
+
 	slog.Info("Automation run cancelled", "run_id", runID)
 	return nil
 }
