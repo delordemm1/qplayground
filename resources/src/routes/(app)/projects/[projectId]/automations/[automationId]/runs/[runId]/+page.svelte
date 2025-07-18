@@ -2,6 +2,7 @@
   import { page } from "@inertiajs/svelte";
   import { formatDate } from "$lib/utils/date";
   import { showSuccessToast, showErrorToast } from "$lib/utils/toast";
+  import ImageViewerModal from "$lib/components/ImageViewerModal.svelte";
 
   type Project = {
     ID: string;
@@ -44,6 +45,11 @@
   let liveLogs = $state<any[]>([]);
   let liveOutputFiles = $state<string[]>([]);
   let eventSource: EventSource | null = null;
+  
+  // Image viewer modal state
+  let showImageViewerModal = $state(false);
+  let currentImageIndex = $state(0);
+  let imageFilesForModal = $state<string[]>([]);
   
   // Initialize SSE connection for real-time updates
   $effect(() => {
@@ -191,6 +197,25 @@
       return liveOutputFiles;
     }
   });
+
+  // Filter output files to get only images for the modal
+  const imageFiles = $derived.by(() => {
+    return parsedOutputFiles.filter(fileUrl => getFileType(fileUrl) === "image");
+  });
+
+  // Update imageFilesForModal when imageFiles changes
+  $effect(() => {
+    imageFilesForModal = imageFiles;
+  });
+
+  // Function to open image viewer
+  function openImageViewer(imageUrl: string) {
+    const index = imageFilesForModal.indexOf(imageUrl);
+    if (index !== -1) {
+      currentImageIndex = index;
+      showImageViewerModal = true;
+    }
+  }
 
   // Helper function to get status badge styling
   function getStatusBadgeClass(status: string): string {
@@ -600,27 +625,55 @@
               </div>
             </div>
             <div class="mt-3">
-              <a
-                href={fileUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-primary-700 bg-primary-100 hover:bg-primary-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors"
-              >
-                <svg
-                  class="mr-2 h-4 w-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
+              {#if getFileType(fileUrl) === "image"}
+                <button
+                  onclick={() => openImageViewer(fileUrl)}
+                  class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-primary-700 bg-primary-100 hover:bg-primary-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors"
                 >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                  />
-                </svg>
-                Open File
-              </a>
+                  <svg
+                    class="mr-2 h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                    />
+                  </svg>
+                  View Image
+                </button>
+              {:else}
+                <a
+                  href={fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-primary-700 bg-primary-100 hover:bg-primary-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors"
+                >
+                  <svg
+                    class="mr-2 h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                    />
+                  </svg>
+                  Open File
+                </a>
+              {/if}
             </div>
           </div>
         {/each}
@@ -628,3 +681,11 @@
     {/if}
   </div>
 </div>
+
+<!-- Image Viewer Modal -->
+<ImageViewerModal
+  bind:open={showImageViewerModal}
+  imageUrls={imageFilesForModal}
+  startIndex={currentImageIndex}
+  onClose={() => showImageViewerModal = false}
+/>

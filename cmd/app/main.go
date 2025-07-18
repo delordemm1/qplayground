@@ -88,7 +88,7 @@ func main() {
 	// AUTOMATION Dependencies
 	automationRepo := automation.NewAutomationRepository(pool)
 	runCache := automation.NewRedisRunCache(redisClient)
-	automationService := automation.NewAutomationService(automationRepo, runCache)
+	automationService := automation.NewAutomationService(automationRepo, runCache, pool)
 	automationRunner := automation.NewRunner(automationRepo, storageService, notificationService, sseManager)
 
 	// Initialize automation scheduler

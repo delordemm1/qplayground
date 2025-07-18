@@ -606,6 +606,66 @@ func (r *automationRepository) GetMaxActionOrder(ctx context.Context, stepID str
 	return maxOrder, nil
 }
 
+// GetStepByAutomationIDAndOrder retrieves a step by automation ID and order
+func (r *automationRepository) GetStepByAutomationIDAndOrder(ctx context.Context, automationID string, order int) (*AutomationStep, error) {
+	query, args, err := r.sq.Select("id", "automation_id", "name", "step_order", "created_at", "updated_at").
+		From("automation_steps").
+		Where(sq.And{
+			sq.Eq{"automation_id": automationID},
+			sq.Eq{"step_order": order},
+		}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var step AutomationStep
+	var createdAt, updatedAt pgtype.Timestamp
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("step not found")
+		}
+		return nil, fmt.Errorf("failed to get step: %w", err)
+	}
+
+	step.CreatedAt = createdAt.Time
+	step.UpdatedAt = updatedAt.Time
+	return &step, nil
+}
+
+// GetActionByStepIDAndOrder retrieves an action by step ID and order
+func (r *automationRepository) GetActionByStepIDAndOrder(ctx context.Context, stepID string, order int) (*AutomationAction, error) {
+	query, args, err := r.sq.Select("id", "step_id", "action_type", "action_config_json", "action_order", "created_at", "updated_at").
+		From("automation_actions").
+		Where(sq.And{
+			sq.Eq{"step_id": stepID},
+			sq.Eq{"action_order": order},
+		}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var action AutomationAction
+	var createdAt, updatedAt pgtype.Timestamp
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&action.ID, &action.StepID, &action.ActionType, &action.ActionConfigJSON, &action.ActionOrder, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("action not found")
+		}
+		return nil, fmt.Errorf("failed to get action: %w", err)
+	}
+
+	action.CreatedAt = createdAt.Time
+	action.UpdatedAt = updatedAt.Time
+	return &action, nil
+}
+
 func (r *automationRepository) ShiftStepOrders(ctx context.Context, automationID string, startOrder, endOrder int, increment bool) error {
 	var query string
 	var args []interface{}

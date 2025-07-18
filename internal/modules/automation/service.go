@@ -165,10 +165,76 @@ func (s *automationService) GetActionsByStep(ctx context.Context, stepID string)
 }
 
 func (s *automationService) UpdateAction(ctx context.Context, action *AutomationAction) error {
-	err := s.automationRepo.UpdateAction(ctx, action)
+	// Get the original action to compare orders
+	originalAction, err := s.automationRepo.GetActionByID(ctx, action.ID)
 	if err != nil {
-		slog.Error("Failed to update action", "error", err, "actionID", action.ID)
-		return fmt.Errorf("failed to update action: %w", err)
+		slog.Error("Failed to get original action", "error", err, "actionID", action.ID)
+		return fmt.Errorf("failed to get original action: %w", err)
+	}
+
+	// If order hasn't changed, perform regular update
+	if originalAction.ActionOrder == action.ActionOrder {
+		err := s.automationRepo.UpdateAction(ctx, action)
+		if err != nil {
+			slog.Error("Failed to update action", "error", err, "actionID", action.ID)
+			return fmt.Errorf("failed to update action: %w", err)
+		}
+		slog.Info("Action updated", "actionID", action.ID, "actionType", action.ActionType)
+		return nil
+	}
+
+	// Order has changed, need to swap with the action at the new order
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		slog.Error("Failed to begin transaction", "error", err)
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Create transactional repository
+	txRepo := NewAutomationRepository(tx)
+
+	// Find the action that currently occupies the new order
+	otherAction, err := txRepo.GetActionByStepIDAndOrder(ctx, action.StepID, action.ActionOrder)
+	if err != nil {
+		if err.Error() == "action not found" {
+			// No action at the new order, just update this action
+			err = txRepo.UpdateAction(ctx, action)
+			if err != nil {
+				slog.Error("Failed to update action to new order", "error", err, "actionID", action.ID)
+				return fmt.Errorf("failed to update action: %w", err)
+			}
+		} else {
+			slog.Error("Failed to get action at new order", "error", err, "stepID", action.StepID, "order", action.ActionOrder)
+			return fmt.Errorf("failed to get action at new order: %w", err)
+		}
+	} else {
+		// Swap the orders
+		otherAction.ActionOrder = originalAction.ActionOrder
+		
+		// Update both actions
+		err = txRepo.UpdateAction(ctx, action)
+		if err != nil {
+			slog.Error("Failed to update action with new order", "error", err, "actionID", action.ID)
+			return fmt.Errorf("failed to update action: %w", err)
+		}
+
+		err = txRepo.UpdateAction(ctx, otherAction)
+		if err != nil {
+			slog.Error("Failed to update other action with swapped order", "error", err, "actionID", otherAction.ID)
+			return fmt.Errorf("failed to update other action: %w", err)
+		}
+
+		slog.Info("Actions order swapped", 
+			"actionID", action.ID, "newOrder", action.ActionOrder,
+			"otherActionID", otherAction.ID, "otherNewOrder", otherAction.ActionOrder)
+	}
+
+	// Commit transaction
+	err = tx.Commit(ctx)
+	if err != nil {
+		slog.Error("Failed to commit transaction", "error", err)
+		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	slog.Info("Action updated", "actionID", action.ID, "actionType", action.ActionType)

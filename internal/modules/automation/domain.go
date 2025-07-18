@@ -124,6 +124,8 @@ type AutomationRepository interface {
 	// Order management
 	GetStepByID(ctx context.Context, id string) (*AutomationStep, error)
 	GetActionByID(ctx context.Context, id string) (*AutomationAction, error)
+	GetStepByAutomationIDAndOrder(ctx context.Context, automationID string, order int) (*AutomationStep, error)
+	GetActionByStepIDAndOrder(ctx context.Context, stepID string, order int) (*AutomationAction, error)
 	GetMaxStepOrder(ctx context.Context, automationID string) (int, error)
 	GetMaxActionOrder(ctx context.Context, stepID string) (int, error)
 	ShiftStepOrders(ctx context.Context, automationID string, startOrder, endOrder int, increment bool) error

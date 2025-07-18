@@ -257,12 +257,26 @@ func (h *AutomationHandler) GetAutomation(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Get recent runs for this automation (limit to 5)
+	allRuns, err := h.automationService.GetRunsByAutomation(r.Context(), automationID)
+	if err != nil {
+		platform.UtilHandleServerErr(w, err)
+		return
+	}
+
+	// Limit to 5 most recent runs
+	recentRuns := allRuns
+	if len(allRuns) > 5 {
+		recentRuns = allRuns[:5]
+	}
+
 	err = h.inertia.Render(w, r, "projects/[projectId]/automations/[automationId]", inertia.Props{
 		"params":       map[string]string{"automationId": automationID, "projectId": projectID},
 		"automation":   automation,
 		"project":      project,
 		"steps":        stepsWithActions,
 		"maxStepOrder": maxStepOrder,
+		"recentRuns":   recentRuns,
 		"user":         user,
 	})
 	if err != nil {

@@ -357,6 +357,26 @@
     }
   }
 
+  // Helper function to get status badge styling
+  function getStatusBadgeClass(status: string): string {
+    switch (status?.toLowerCase()) {
+      case "completed":
+        return "bg-green-100 text-green-800";
+      case "failed":
+        return "bg-red-100 text-red-800";
+      case "running":
+        return "bg-blue-100 text-blue-800";
+      case "pending":
+        return "bg-yellow-100 text-yellow-800";
+      case "queued":
+        return "bg-purple-100 text-purple-800";
+      case "cancelled":
+        return "bg-gray-100 text-gray-800";
+      default:
+        return "bg-gray-100 text-gray-800";
+    }
+  }
+
   // --- Move Handlers ---
   async function handleMoveStep(step: Step, direction: 'up' | 'down') {
     const newOrder = direction === 'up' ? step.StepOrder - 1 : step.StepOrder + 1;
