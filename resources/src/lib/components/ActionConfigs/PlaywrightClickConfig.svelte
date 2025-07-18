@@ -8,10 +8,17 @@
     force?: boolean;
   };
 
+  const applyDefaults = (targetConfig: PlaywrightClickConfig) => {
+    if (!targetConfig.button) targetConfig.button = "left";
+    if (!targetConfig.click_count) targetConfig.click_count = 1;
+    if (!targetConfig.force) targetConfig.force = false;
+    if (!targetConfig.selector) targetConfig.selector = "";
+  };
   let { config = $bindable() }: { config: PlaywrightClickConfig } = $props();
+  applyDefaults(config);
 
   $effect(() => {
-    if (!config.selector) config.selector = "";
+    applyDefaults(config);
   });
 </script>
 
@@ -29,7 +36,16 @@
 
   <div>
     <Label for="click-button" class="mb-2">Mouse Button</Label>
-    <Select id="click-button" bind:value={config.button} items={[{ value: "", name: "(Default - Left)" }, { value: "left", name: "Left" }, { value: "right", name: "Right" }, { value: "middle", name: "Middle" }]} />
+    <Select
+      id="click-button"
+      bind:value={config.button}
+      items={[
+        { value: "", name: "(Default - Left)" },
+        { value: "left", name: "Left" },
+        { value: "right", name: "Right" },
+        { value: "middle", name: "Middle" },
+      ]}
+    />
   </div>
 
   <div>
@@ -46,6 +62,8 @@
 
   <div class="flex items-center">
     <Checkbox id="click-force" bind:checked={config.force} />
-    <Label for="click-force" class="ml-2">Force click (bypass actionability checks)</Label>
+    <Label for="click-force" class="ml-2"
+      >Force click (bypass actionability checks)</Label
+    >
   </div>
 </div>

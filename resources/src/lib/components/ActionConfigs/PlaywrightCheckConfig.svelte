@@ -5,11 +5,14 @@
     selector: string;
     force?: boolean;
   };
-
+  function applyDefaults(targetConfig: PlaywrightCheckConfig) {
+    if (!targetConfig.force) targetConfig.force = false;
+    if (!targetConfig.selector) targetConfig.selector = "";
+  }
   let { config = $bindable() }: { config: PlaywrightCheckConfig } = $props();
-
+  applyDefaults(config);
   $effect(() => {
-    if (!config.selector) config.selector = "";
+    applyDefaults(config);
   });
 </script>
 
@@ -27,6 +30,8 @@
 
   <div class="flex items-center">
     <Checkbox id="check-force" bind:checked={config.force} />
-    <Label for="check-force" class="ml-2">Force check (bypass actionability checks)</Label>
+    <Label for="check-force" class="ml-2"
+      >Force check (bypass actionability checks)</Label
+    >
   </div>
 </div>

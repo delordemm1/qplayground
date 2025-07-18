@@ -82,11 +82,7 @@
       onSuccess: false,
       path: "screenshots/{{timestamp}}-{{loopIndex}}.png",
     },
-    notifications: {
-      onComplete: false,
-      onError: true,
-      webhook: "",
-    },
+    notifications: [],
   });
   let isLoading = $state(false);
   let errors = $state<Record<string, string>>({});

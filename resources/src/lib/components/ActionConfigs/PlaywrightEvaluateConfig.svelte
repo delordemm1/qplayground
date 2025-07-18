@@ -17,7 +17,7 @@
     <Label for="evaluate-expression" class="mb-2">JavaScript Expression *</Label>
     <Textarea
       id="evaluate-expression"
-      rows="6"
+      rows={6}
       bind:value={config.expression}
       placeholder="console.log('Hello from browser'); return document.title;"
       class="font-mono text-sm"

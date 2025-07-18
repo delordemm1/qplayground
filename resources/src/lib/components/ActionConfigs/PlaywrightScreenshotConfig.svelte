@@ -9,11 +9,19 @@
     r2_key?: string;
   };
 
+  function applyDefaults(targetConfig: PlaywrightScreenshotConfig) {
+    if (targetConfig.full_page === undefined) targetConfig.full_page = true;
+    if (!targetConfig.format) targetConfig.format = "png";
+    if (targetConfig.upload_to_r2 === undefined) targetConfig.upload_to_r2 = true;
+  }
+
   let { config = $bindable() }: { config: PlaywrightScreenshotConfig } = $props();
 
+  // initial setup.
+  applyDefaults(config);
+
   $effect(() => {
-    if (config.full_page === undefined) config.full_page = true;
-    if (!config.format) config.format = "png";
+    applyDefaults(config);
   });
 </script>
 
