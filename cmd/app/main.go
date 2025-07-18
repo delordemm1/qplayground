@@ -7,6 +7,7 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
+	"sync"
 
 	"github.com/delordemm1/qplayground/internal/controller/web"
 	"github.com/delordemm1/qplayground/internal/core/config"
@@ -41,6 +42,10 @@ func main() {
 	// Initialize database
 	pool := config.InitDatabase()
 	defer pool.Close()
+	
+	// Initialize Redis
+	redisClient := config.InitRedis()
+	defer redisClient.Close()
 
 	// Initialize session manager
 	sessionConfig := config.DefaultSessionConfig()
@@ -78,8 +83,12 @@ func main() {
 
 	// AUTOMATION Dependencies
 	automationRepo := automation.NewAutomationRepository(pool)
-	automationService := automation.NewAutomationService(automationRepo)
+	runCache := automation.NewRedisRunCache(redisClient)
+	automationService := automation.NewAutomationService(automationRepo, runCache)
 	automationRunner := automation.NewRunner(automationRepo, storageService, notificationService)
+	
+	// Initialize automation scheduler
+	scheduler := automation.NewScheduler(automationRepo, automationService, runCache, automationRunner)
 
 	// AUTH Dependencies (updated to include organization service)
 	authRepo := auth.NewAuthRepository(pool)
@@ -102,6 +111,13 @@ func main() {
 
 	// Apply Inertia middleware
 	r.Use(i.Middleware)
+	
+	// Sync Redis with database on startup
+	syncRedisRunsOnStartup(pool, runCache)
+	
+	// Start automation scheduler
+	scheduler.Start(context.Background())
+	defer scheduler.Stop()
 
 	// Public routes (guest only)
 	publicRouter := web.NewPublicRouter(web.NewPublicHandler(i, sessionManager))
@@ -139,7 +155,7 @@ func main() {
 
 		// Automation routes (nested under projects)
 		r.Route("/projects/{projectId}/automations", func(r chi.Router) {
-			automationHandler := web.NewAutomationHandler(i, sessionManager, automationService, projectService)
+			automationHandler := web.NewAutomationHandler(i, sessionManager, automationService, projectService, scheduler)
 			automationRouter := web.NewAutomationRouter(automationHandler)
 			r.Mount("/", automationRouter)
 			// Nested routes for steps and actions
@@ -150,20 +166,6 @@ func main() {
 			})
 		})
 
-		// Test automation runner endpoint (for development)
-		r.Post("/automations/{id}/run", func(w http.ResponseWriter, r *http.Request) {
-			automationID := chi.URLParam(r, "id")
-			go func() {
-				err := automationRunner.RunAutomation(context.Background(), automationID)
-				if err != nil {
-					slog.Error("Automation run failed", "automation_id", automationID, "error", err)
-				} else {
-					slog.Info("Automation run completed", "automation_id", automationID)
-				}
-			}()
-			w.WriteHeader(http.StatusAccepted)
-			json.NewEncoder(w).Encode(map[string]string{"message": "Automation run started"})
-		})
 	})
 
 	slog.Info("Server starting on :8084")
@@ -188,6 +190,74 @@ func getUserFromContext(ctx context.Context) *auth.User {
 	}
 }
 
-// func initializeServices() {
+// syncRedisRunsOnStartup syncs all runs from database to Redis on application startup
+func syncRedisRunsOnStartup(pool *pgxpool.Pool, runCache automation.RunCache) {
+	ctx := context.Background()
+	
+	// Query all runs from database
+	query := `
+		SELECT id, automation_id, status, start_time, end_time, logs_json, output_files_json, error_message, created_at, updated_at
+		FROM automation_runs
+		WHERE status IN ('pending', 'running', 'queued', 'completed', 'failed', 'cancelled')
+		ORDER BY created_at DESC
+	`
+	
+	rows, err := pool.Query(ctx, query)
+	if err != nil {
+		slog.Error("Failed to query runs for Redis sync", "error", err)
+		return
+	}
+	defer rows.Close()
+	
+	var runs []*automation.AutomationRun
+	for rows.Next() {
+		var run automation.AutomationRun
+		var startTime, endTime, createdAt, updatedAt pgtype.Timestamp
+		var logsJSON, outputFilesJSON, errorMessage pgtype.Text
+		
+		err := rows.Scan(
+			&run.ID, &run.AutomationID, &run.Status, &startTime, &endTime,
+			&logsJSON, &outputFilesJSON, &errorMessage, &createdAt, &updatedAt,
+		)
+		if err != nil {
+			slog.Error("Failed to scan run for Redis sync", "error", err)
+			continue
+		}
+		
+		// Convert pgtype timestamps
+		if startTime.Valid {
+			run.StartTime = &startTime.Time
+		}
+		if endTime.Valid {
+			run.EndTime = &endTime.Time
+		}
+		if logsJSON.Valid {
+			run.LogsJSON = logsJSON.String
+		}
+		if outputFilesJSON.Valid {
+			run.OutputFilesJSON = outputFilesJSON.String
+		}
+		if errorMessage.Valid {
+			run.ErrorMessage = errorMessage.String
+		}
+		run.CreatedAt = createdAt.Time
+		run.UpdatedAt = updatedAt.Time
+		
+		runs = append(runs, &run)
+	}
+	
+	// Upsert all runs to Redis
+	err = runCache.UpsertAllRuns(ctx, runs)
+	if err != nil {
+		slog.Error("Failed to upsert runs to Redis", "error", err)
+		return
+	}
+	
+	slog.Info("Successfully synced runs to Redis on startup", "count", len(runs))
+}
 
-// }
+// Add required imports
+import (
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
+)

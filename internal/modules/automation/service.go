@@ -10,11 +10,13 @@ import (
 
 type automationService struct {
 	automationRepo AutomationRepository
+	runCache       RunCache
 }
 
-func NewAutomationService(automationRepo AutomationRepository) AutomationService {
+func NewAutomationService(automationRepo AutomationRepository, runCache RunCache) AutomationService {
 	return &automationService{
 		automationRepo: automationRepo,
+		runCache:       runCache,
 	}
 }
 
@@ -192,8 +194,72 @@ func (s *automationService) GetMaxActionOrder(ctx context.Context, stepID string
 	return s.automationRepo.GetMaxActionOrder(ctx, stepID)
 }
 
+// UpdateRunStatus updates run status in both database and cache
+func (s *automationService) UpdateRunStatus(ctx context.Context, runID, status string) error {
+	// Get current run
+	run, err := s.automationRepo.GetRunByID(ctx, runID)
+	if err != nil {
+		return fmt.Errorf("failed to get run: %w", err)
+	}
+	
+	// Update status
+	run.Status = status
+	if status == "completed" || status == "failed" || status == "cancelled" {
+		endTime := time.Now()
+		run.EndTime = &endTime
+	}
+	
+	// Update in database
+	err = s.automationRepo.UpdateRun(ctx, run)
+	if err != nil {
+		return fmt.Errorf("failed to update run in database: %w", err)
+	}
+	
+	// Update in cache
+	if status == "completed" || status == "failed" || status == "cancelled" {
+		err = s.runCache.SetRunStatusWithExpiry(ctx, runID, status, 1*time.Minute)
+	} else {
+		err = s.runCache.SetRunStatus(ctx, runID, status)
+	}
+	
+	if err != nil {
+		slog.Warn("Failed to update run status in cache", "run_id", runID, "error", err)
+	}
+	
+	return nil
+}
+
 // Run management
 func (s *automationService) TriggerRun(ctx context.Context, automationID string) (*AutomationRun, error) {
+	// Check current running count against max concurrent runs
+	runningCount, err := s.runCache.GetRunningRunCount(ctx)
+	if err != nil {
+		slog.Warn("Failed to get running run count, proceeding anyway", "error", err)
+	} else if runningCount >= int64(platform.ENV_MAX_CONCURRENT_RUNS) {
+		// At capacity, queue the run
+		run := &AutomationRun{
+			ID:              platform.UtilGenerateUUID(),
+			AutomationID:    automationID,
+			Status:          "queued",
+			LogsJSON:        "[]",
+			OutputFilesJSON: "[]",
+		}
+
+		err := s.automationRepo.CreateRun(ctx, run)
+		if err != nil {
+			slog.Error("Failed to create queued run", "error", err, "automationID", automationID)
+			return nil, fmt.Errorf("failed to create run: %w", err)
+		}
+
+		// Set status in Redis
+		if cacheErr := s.runCache.SetRunStatus(ctx, run.ID, "queued"); cacheErr != nil {
+			slog.Warn("Failed to set queued status in cache", "run_id", run.ID, "error", cacheErr)
+		}
+
+		slog.Info("Run queued due to capacity limit", "runID", run.ID, "automationID", automationID, "running_count", runningCount)
+		return run, nil
+	}
+	
 	run := &AutomationRun{
 		ID:              platform.UtilGenerateUUID(),
 		AutomationID:    automationID,
@@ -206,6 +272,11 @@ func (s *automationService) TriggerRun(ctx context.Context, automationID string)
 	if err != nil {
 		slog.Error("Failed to create run", "error", err, "automationID", automationID)
 		return nil, fmt.Errorf("failed to create run: %w", err)
+	}
+
+	// Set status in Redis
+	if err := s.runCache.SetRunStatus(ctx, run.ID, "pending"); err != nil {
+		slog.Warn("Failed to set pending status in cache", "run_id", run.ID, "error", err)
 	}
 
 	// TODO: Trigger actual automation execution in background

@@ -57,6 +57,12 @@ var (
 	ENV_R2_SECRET_ACCESS_KEY  = mustHaveEnv("R2_SECRET_ACCESS_KEY")
 	ENV_R2_BUCKET_NAME        = mustHaveEnv("R2_BUCKET_NAME")
 	ENV_R2_PUBLIC_URL         = mustHaveEnv("R2_PUBLIC_URL")
+	
+	// Redis Configuration
+	ENV_REDIS_URL = mustHaveEnv("REDIS_URL")
+	
+	// Automation Configuration
+	ENV_MAX_CONCURRENT_RUNS = mustHaveEnvInt("MAX_CONCURRENT_RUNS")
 )
 
 func init() {

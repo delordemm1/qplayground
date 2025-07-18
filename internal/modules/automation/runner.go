@@ -90,6 +90,10 @@ func NewRunner(automationRepo AutomationRepository, storageService storage.Stora
 
 // RunAutomation executes a given automation.
 func (r *Runner) RunAutomation(ctx context.Context, automationID string) error {
+	// Create a ticker for polling cancellation status every 5 seconds
+	statusTicker := time.NewTicker(5 * time.Second)
+	defer statusTicker.Stop()
+	
 	// 1. Fetch Automation details from DB
 	automation, err := r.automationRepo.GetAutomationByID(ctx, automationID)
 	if err != nil {
@@ -250,6 +254,25 @@ func (r *Runner) RunAutomation(ctx context.Context, automationID string) error {
 
 // executeSingleRun executes a single run of the automation
 func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, automationConfig *AutomationConfig, run *AutomationRun, loopIndex int) ([]map[string]interface{}, []string, error) {
+	// Create a ticker for polling cancellation status every 5 seconds
+	statusTicker := time.NewTicker(5 * time.Second)
+	defer statusTicker.Stop()
+	
+	// Start a goroutine to poll for cancellation
+	cancelCh := make(chan struct{})
+	go func() {
+		defer close(cancelCh)
+		for {
+			select {
+			case <-statusTicker.C:
+				// Check if run was cancelled by polling Redis (via storage service if available)
+				// For now, we'll rely on context cancellation
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	
 	// Initialize Playwright for this run
 	pw, err := playwright.Run()
 	if err != nil {
@@ -272,8 +295,8 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 	}
 	defer browser.Close()
 
-	// Create new page
-	page, err := browser.NewPage()
+	// Create new page with context
+	page, err := browser.NewPage(playwright.BrowserNewPageOptions{})
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not create page: %w", err)
 	}
@@ -314,6 +337,13 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 	var outputFiles []string
 
 	for _, step := range steps {
+		// Check for cancellation before each step
+		select {
+		case <-ctx.Done():
+			return logs, outputFiles, fmt.Errorf("automation cancelled")
+		default:
+		}
+		
 		runContext.Logger.Info("Executing step", "step_name", step.Name, "step_order", step.StepOrder, "loop_index", loopIndex)
 
 		// Get actions for this step
@@ -323,6 +353,13 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 		}
 
 		for _, action := range stepActions {
+			// Check for cancellation before each action
+			select {
+			case <-ctx.Done():
+				return logs, outputFiles, fmt.Errorf("automation cancelled")
+			default:
+			}
+			
 			startTime := time.Now()
 
 			// Parse action config
