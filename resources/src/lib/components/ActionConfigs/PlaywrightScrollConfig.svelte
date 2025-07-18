@@ -8,9 +8,19 @@
 
   let { config = $bindable() }: { config: PlaywrightScrollConfig } = $props();
 
+  // Ensure config is always an object
+  config = config ?? {};
+
+  function applyDefaults(targetConfig: PlaywrightScrollConfig) {
+    if (targetConfig.delta_x === undefined) targetConfig.delta_x = 0;
+    if (targetConfig.delta_y === undefined) targetConfig.delta_y = 1000;
+  }
+
+  // Apply defaults immediately for initial render
+  applyDefaults(config);
+
   $effect(() => {
-    if (config.delta_x === undefined) config.delta_x = 0;
-    if (config.delta_y === undefined) config.delta_y = 1000;
+    applyDefaults(config);
   });
 </script>
 

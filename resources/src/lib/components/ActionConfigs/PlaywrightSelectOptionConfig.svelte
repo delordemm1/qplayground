@@ -11,10 +11,19 @@
   };
 
   let { config = $bindable() }: { config: PlaywrightSelectOptionConfig } = $props();
+  // Ensure config is always an object
+  config = config ?? {};
+
+  function applyDefaults(targetConfig: PlaywrightSelectOptionConfig) {
+    if (!targetConfig.selector) targetConfig.selector = "";
+    if (!targetConfig.selection_type) targetConfig.selection_type = "value";
+  }
+
+  // Apply defaults immediately for initial render
+  applyDefaults(config);
 
   $effect(() => {
-    if (!config.selector) config.selector = "";
-    if (!config.selection_type) config.selection_type = "value";
+    applyDefaults(config);
   });
 
   // Helper to manage multiple values as a comma-separated string

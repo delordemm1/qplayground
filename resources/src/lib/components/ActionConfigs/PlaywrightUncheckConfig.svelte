@@ -8,8 +8,18 @@
 
   let { config = $bindable() }: { config: PlaywrightUncheckConfig } = $props();
 
+  // Ensure config is always an object
+  config = config ?? {};
+
+  function applyDefaults(targetConfig: PlaywrightUncheckConfig) {
+    if (!targetConfig.selector) targetConfig.selector = "";
+  }
+
+  // Apply defaults immediately for initial render
+  applyDefaults(config);
+
   $effect(() => {
-    if (!config.selector) config.selector = "";
+    applyDefaults(config);
   });
 </script>
 

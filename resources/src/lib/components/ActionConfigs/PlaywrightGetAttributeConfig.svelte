@@ -8,9 +8,19 @@
 
   let { config = $bindable() }: { config: PlaywrightGetAttributeConfig } = $props();
 
+  // Ensure config is always an object
+  config = config ?? {};
+
+  function applyDefaults(targetConfig: PlaywrightGetAttributeConfig) {
+    if (!targetConfig.selector) targetConfig.selector = "";
+    if (!targetConfig.attribute) targetConfig.attribute = "";
+  }
+
+  // Apply defaults immediately for initial render
+  applyDefaults(config);
+
   $effect(() => {
-    if (!config.selector) config.selector = "";
-    if (!config.attribute) config.attribute = "";
+    applyDefaults(config);
   });
 </script>
 

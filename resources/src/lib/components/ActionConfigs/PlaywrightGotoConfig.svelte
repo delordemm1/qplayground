@@ -9,9 +9,18 @@
 
   let { config = $bindable() }: { config: PlaywrightGotoConfig } = $props();
 
-  // Initialize config if it's empty or missing properties
+  // Ensure config is always an object
+  config = config ?? {};
+
+  function applyDefaults(targetConfig: PlaywrightGotoConfig) {
+    if (!targetConfig.url) targetConfig.url = "";
+  }
+
+  // Apply defaults immediately for initial render
+  applyDefaults(config);
+
   $effect(() => {
-    if (!config.url) config.url = "";
+    applyDefaults(config);
   });
 </script>
 

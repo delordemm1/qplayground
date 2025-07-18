@@ -8,8 +8,18 @@
 
   let { config = $bindable() }: { config: PlaywrightHoverConfig } = $props();
 
+  // Ensure config is always an object
+  config = config ?? {};
+
+  function applyDefaults(targetConfig: PlaywrightHoverConfig) {
+    if (!targetConfig.selector) targetConfig.selector = "";
+  }
+
+  // Apply defaults immediately for initial render
+  applyDefaults(config);
+
   $effect(() => {
-    if (!config.selector) config.selector = "";
+    applyDefaults(config);
   });
 </script>
 

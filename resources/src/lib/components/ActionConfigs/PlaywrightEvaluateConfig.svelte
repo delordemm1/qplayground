@@ -7,8 +7,18 @@
 
   let { config = $bindable() }: { config: PlaywrightEvaluateConfig } = $props();
 
+  // Ensure config is always an object
+  config = config ?? {};
+
+  function applyDefaults(targetConfig: PlaywrightEvaluateConfig) {
+    if (!targetConfig.expression) targetConfig.expression = "";
+  }
+
+  // Apply defaults immediately for initial render
+  applyDefaults(config);
+
   $effect(() => {
-    if (!config.expression) config.expression = "";
+    applyDefaults(config);
   });
 </script>
 

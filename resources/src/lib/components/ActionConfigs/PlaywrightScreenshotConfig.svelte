@@ -17,7 +17,10 @@
 
   let { config = $bindable() }: { config: PlaywrightScreenshotConfig } = $props();
 
-  // initial setup.
+  // Ensure config is always an object
+  config = config ?? {};
+
+  // Apply defaults immediately for initial render
   applyDefaults(config);
 
   $effect(() => {

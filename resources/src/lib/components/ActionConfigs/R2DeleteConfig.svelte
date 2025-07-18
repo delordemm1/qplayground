@@ -7,8 +7,18 @@
 
   let { config = $bindable() }: { config: R2DeleteConfig } = $props();
 
+  // Ensure config is always an object
+  config = config ?? {};
+
+  function applyDefaults(targetConfig: R2DeleteConfig) {
+    if (!targetConfig.key) targetConfig.key = "";
+  }
+
+  // Apply defaults immediately for initial render
+  applyDefaults(config);
+
   $effect(() => {
-    if (!config.key) config.key = "";
+    applyDefaults(config);
   });
 </script>
 

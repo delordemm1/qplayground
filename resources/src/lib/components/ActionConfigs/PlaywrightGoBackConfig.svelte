@@ -6,6 +6,20 @@
   };
 
   let { config = $bindable() }: { config: PlaywrightGoBackConfig } = $props();
+
+  // Ensure config is always an object
+  config = config ?? {};
+
+  function applyDefaults(targetConfig: PlaywrightGoBackConfig) {
+    // No required defaults for go back config, all fields are optional
+  }
+
+  // Apply defaults immediately for initial render
+  applyDefaults(config);
+
+  $effect(() => {
+    applyDefaults(config);
+  });
 </script>
 
 <div class="space-y-4">

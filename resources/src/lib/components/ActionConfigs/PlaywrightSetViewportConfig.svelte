@@ -8,9 +8,19 @@
 
   let { config = $bindable() }: { config: PlaywrightSetViewportConfig } = $props();
 
+  // Ensure config is always an object
+  config = config ?? {};
+
+  function applyDefaults(targetConfig: PlaywrightSetViewportConfig) {
+    if (!targetConfig.width) targetConfig.width = 1920;
+    if (!targetConfig.height) targetConfig.height = 1080;
+  }
+
+  // Apply defaults immediately for initial render
+  applyDefaults(config);
+
   $effect(() => {
-    if (!config.width) config.width = 1920;
-    if (!config.height) config.height = 1080;
+    applyDefaults(config);
   });
 </script>
 

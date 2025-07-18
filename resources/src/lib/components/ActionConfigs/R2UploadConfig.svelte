@@ -9,9 +9,19 @@
 
   let { config = $bindable() }: { config: R2UploadConfig } = $props();
 
+  // Ensure config is always an object
+  config = config ?? {};
+
+  function applyDefaults(targetConfig: R2UploadConfig) {
+    if (!targetConfig.key) targetConfig.key = "";
+    if (!targetConfig.content) targetConfig.content = "";
+  }
+
+  // Apply defaults immediately for initial render
+  applyDefaults(config);
+
   $effect(() => {
-    if (!config.key) config.key = "";
-    if (!config.content) config.content = "";
+    applyDefaults(config);
   });
 </script>
 

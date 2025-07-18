@@ -15,6 +15,11 @@
     if (!targetConfig.selector) targetConfig.selector = "";
   };
   let { config = $bindable() }: { config: PlaywrightClickConfig } = $props();
+
+  // Ensure config is always an object
+  config = config ?? {};
+
+  // Apply defaults immediately for initial render
   applyDefaults(config);
 
   $effect(() => {

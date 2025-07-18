@@ -6,6 +6,20 @@
   };
 
   let { config = $bindable() }: { config: PlaywrightReloadConfig } = $props();
+
+  // Ensure config is always an object
+  config = config ?? {};
+
+  function applyDefaults(targetConfig: PlaywrightReloadConfig) {
+    // No required defaults for reload config, all fields are optional
+  }
+
+  // Apply defaults immediately for initial render
+  applyDefaults(config);
+
+  $effect(() => {
+    applyDefaults(config);
+  });
 </script>
 
 <div class="space-y-4">

@@ -9,9 +9,19 @@
 
   let { config = $bindable() }: { config: PlaywrightPressConfig } = $props();
 
+  // Ensure config is always an object
+  config = config ?? {};
+
+  function applyDefaults(targetConfig: PlaywrightPressConfig) {
+    if (!targetConfig.selector) targetConfig.selector = "";
+    if (!targetConfig.key) targetConfig.key = "";
+  }
+
+  // Apply defaults immediately for initial render
+  applyDefaults(config);
+
   $effect(() => {
-    if (!config.selector) config.selector = "";
-    if (!config.key) config.key = "";
+    applyDefaults(config);
   });
 </script>
 
