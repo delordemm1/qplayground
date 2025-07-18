@@ -516,3 +516,174 @@ func (r *automationRepository) UpdateRun(ctx context.Context, run *AutomationRun
 	run.UpdatedAt = updatedAt.Time
 	return nil
 }
+
+// Order management methods
+func (r *automationRepository) GetStepByID(ctx context.Context, id string) (*AutomationStep, error) {
+	query, args, err := r.sq.Select("id", "automation_id", "name", "step_order", "created_at", "updated_at").
+		From("automation_steps").
+		Where(sq.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var step AutomationStep
+	var createdAt, updatedAt pgtype.Timestamp
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("step not found")
+		}
+		return nil, fmt.Errorf("failed to get step: %w", err)
+	}
+
+	step.CreatedAt = createdAt.Time
+	step.UpdatedAt = updatedAt.Time
+	return &step, nil
+}
+
+func (r *automationRepository) GetActionByID(ctx context.Context, id string) (*AutomationAction, error) {
+	query, args, err := r.sq.Select("id", "step_id", "action_type", "action_config_json", "action_order", "created_at", "updated_at").
+		From("automation_actions").
+		Where(sq.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var action AutomationAction
+	var createdAt, updatedAt pgtype.Timestamp
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&action.ID, &action.StepID, &action.ActionType, &action.ActionConfigJSON, &action.ActionOrder, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("action not found")
+		}
+		return nil, fmt.Errorf("failed to get action: %w", err)
+	}
+
+	action.CreatedAt = createdAt.Time
+	action.UpdatedAt = updatedAt.Time
+	return &action, nil
+}
+
+func (r *automationRepository) GetMaxStepOrder(ctx context.Context, automationID string) (int, error) {
+	query, args, err := r.sq.Select("COALESCE(MAX(step_order), 0)").
+		From("automation_steps").
+		Where(sq.Eq{"automation_id": automationID}).
+		ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var maxOrder int
+	err = r.db.QueryRow(ctx, query, args...).Scan(&maxOrder)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get max step order: %w", err)
+	}
+
+	return maxOrder, nil
+}
+
+func (r *automationRepository) GetMaxActionOrder(ctx context.Context, stepID string) (int, error) {
+	query, args, err := r.sq.Select("COALESCE(MAX(action_order), 0)").
+		From("automation_actions").
+		Where(sq.Eq{"step_id": stepID}).
+		ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var maxOrder int
+	err = r.db.QueryRow(ctx, query, args...).Scan(&maxOrder)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get max action order: %w", err)
+	}
+
+	return maxOrder, nil
+}
+
+func (r *automationRepository) ShiftStepOrders(ctx context.Context, automationID string, startOrder, endOrder int, increment bool) error {
+	var query string
+	var args []interface{}
+	var err error
+
+	if increment {
+		// Shift orders up (increase by 1)
+		query, args, err = r.sq.Update("automation_steps").
+			Set("step_order", sq.Expr("step_order + 1")).
+			Set("updated_at", time.Now()).
+			Where(sq.And{
+				sq.Eq{"automation_id": automationID},
+				sq.GtOrEq{"step_order": startOrder},
+				sq.LtOrEq{"step_order": endOrder},
+			}).
+			ToSql()
+	} else {
+		// Shift orders down (decrease by 1)
+		query, args, err = r.sq.Update("automation_steps").
+			Set("step_order", sq.Expr("step_order - 1")).
+			Set("updated_at", time.Now()).
+			Where(sq.And{
+				sq.Eq{"automation_id": automationID},
+				sq.GtOrEq{"step_order": startOrder},
+				sq.LtOrEq{"step_order": endOrder},
+			}).
+			ToSql()
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	_, err = r.db.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to shift step orders: %w", err)
+	}
+
+	return nil
+}
+
+func (r *automationRepository) ShiftActionOrders(ctx context.Context, stepID string, startOrder, endOrder int, increment bool) error {
+	var query string
+	var args []interface{}
+	var err error
+
+	if increment {
+		// Shift orders up (increase by 1)
+		query, args, err = r.sq.Update("automation_actions").
+			Set("action_order", sq.Expr("action_order + 1")).
+			Set("updated_at", time.Now()).
+			Where(sq.And{
+				sq.Eq{"step_id": stepID},
+				sq.GtOrEq{"action_order": startOrder},
+				sq.LtOrEq{"action_order": endOrder},
+			}).
+			ToSql()
+	} else {
+		// Shift orders down (decrease by 1)
+		query, args, err = r.sq.Update("automation_actions").
+			Set("action_order", sq.Expr("action_order - 1")).
+			Set("updated_at", time.Now()).
+			Where(sq.And{
+				sq.Eq{"step_id": stepID},
+				sq.GtOrEq{"action_order": startOrder},
+				sq.LtOrEq{"action_order": endOrder},
+			}).
+			ToSql()
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	_, err = r.db.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to shift action orders: %w", err)
+	}
+
+	return nil
+}

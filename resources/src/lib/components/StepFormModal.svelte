@@ -11,11 +11,12 @@
   type Props = {
     open: boolean;
     step?: Step | null; // Optional step for editing
+    maxOrder?: number; // Maximum current order for default calculation
     onSave: (step: { name: string; step_order: number }) => Promise<void>;
     onClose: () => void;
   };
 
-  let { open = $bindable(), step = null, onSave, onClose }: Props = $props();
+  let { open = $bindable(), step = null, maxOrder = 0, onSave, onClose }: Props = $props();
 
   let name = $state("");
   let stepOrder = $state(0);
@@ -25,7 +26,7 @@
   $effect(() => {
     if (open) {
       name = step?.Name || "";
-      stepOrder = step?.StepOrder || 0;
+      stepOrder = step?.StepOrder || (maxOrder + 1);
       errors = {}; // Clear errors when modal opens
     }
   });

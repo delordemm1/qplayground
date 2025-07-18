@@ -43,6 +43,7 @@
   type Props = {
     open: boolean;
     action?: Action | null;
+    maxOrder?: number; // Maximum current order for default calculation
     onSave: (action: {
       action_type: string;
       action_config_json: string;
@@ -51,7 +52,7 @@
     onClose: () => void;
   };
 
-  let { open = $bindable(), action = null, onSave, onClose }: Props = $props();
+  let { open = $bindable(), action = null, maxOrder = 0, onSave, onClose }: Props = $props();
 
   let actionType = $state("");
   let actionOrder = $state(0);
@@ -122,7 +123,7 @@
   $effect(() => {
     if (open) {
       actionType = action?.ActionType || "";
-      actionOrder = action?.ActionOrder || 0;
+      actionOrder = action?.ActionOrder || (maxOrder + 1);
       errors = {};
 
       // Parse existing JSON config into structured object

@@ -40,12 +40,13 @@
   type Props = {
     project: Project;
     automation: Automation;
-    steps: { step: Step; actions: Action[] }[]; // Backend sends steps with nested actions
+    steps: { step: Step; actions: Action[]; maxActionOrder: number }[]; // Backend sends steps with nested actions and max order
+    maxStepOrder: number; // Maximum step order for this automation
     user: any;
     params: Record<string, string>;
   };
 
-  let { project, automation, steps, params }: Props = $props();
+  let { project, automation, steps, maxStepOrder, params }: Props = $props();
   const { projectId, automationId } = params;
 
   let showEditAutomationModal = $state(false);
@@ -64,6 +65,7 @@
   let selectedAction = $state<Action | null>(null);
   let isDeletingAction = $state(false);
   let currentStepForAction = $state<Step | null>(null); // To know which step an action belongs to
+  let currentMaxActionOrder = $state(0); // To track max action order for the current step
 
   // --- Automation Handlers ---
   function openEditAutomationModal() {
@@ -251,12 +253,18 @@
   // --- Action Handlers ---
   function openCreateActionModal(step: Step) {
     currentStepForAction = step;
+    // Find the max action order for this step
+    const stepData = steps.find(s => s.step.ID === step.ID);
+    currentMaxActionOrder = stepData?.maxActionOrder || 0;
     selectedAction = null; // Clear for creation
     showCreateActionModal = true;
   }
 
   function openEditActionModal(step: Step, action: Action) {
     currentStepForAction = step;
+    // Find the max action order for this step
+    const stepData = steps.find(s => s.step.ID === step.ID);
+    currentMaxActionOrder = stepData?.maxActionOrder || 0;
     selectedAction = action;
     showEditActionModal = true;
   }
@@ -345,6 +353,84 @@
     } finally {
       isDeletingAction = false;
       showDeleteActionConfirm = false;
+    }
+  }
+
+  // --- Move Handlers ---
+  async function handleMoveStep(step: Step, direction: 'up' | 'down') {
+    const newOrder = direction === 'up' ? step.StepOrder - 1 : step.StepOrder + 1;
+    
+    // Validate bounds
+    if (newOrder < 1 || newOrder > maxStepOrder) {
+      return; // Invalid move
+    }
+
+    try {
+      const response = await fetch(
+        `/projects/${projectId}/automations/${automationId}/steps/${step.ID}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: step.Name,
+            step_order: newOrder,
+          }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (response.ok) {
+        showSuccessToast("Step order updated");
+        // Refresh page to get updated order
+        window.location.reload();
+      } else {
+        showErrorToast(result.error || "Failed to update step order");
+      }
+    } catch (err: any) {
+      showErrorToast("Network error. Please try again.");
+    }
+  }
+
+  async function handleMoveAction(step: Step, action: Action, direction: 'up' | 'down') {
+    const stepData = steps.find(s => s.step.ID === step.ID);
+    const maxActionOrderForStep = stepData?.maxActionOrder || 0;
+    const newOrder = direction === 'up' ? action.ActionOrder - 1 : action.ActionOrder + 1;
+    
+    // Validate bounds
+    if (newOrder < 1 || newOrder > maxActionOrderForStep) {
+      return; // Invalid move
+    }
+
+    try {
+      const response = await fetch(
+        `/projects/${projectId}/automations/${automationId}/steps/${step.ID}/actions/${action.ID}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action_type: action.ActionType,
+            action_config_json: action.ActionConfigJSON,
+            action_order: newOrder,
+          }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (response.ok) {
+        showSuccessToast("Action order updated");
+        // Refresh page to get updated order
+        window.location.reload();
+      } else {
+        showErrorToast(result.error || "Failed to update action order");
+      }
+    } catch (err: any) {
+      showErrorToast("Network error. Please try again.");
     }
   }
 </script>
@@ -505,13 +591,29 @@
       </div>
     {:else}
       <ul role="list" class="divide-y divide-gray-200">
-        {#each steps as { step, actions } (step.ID)}
+        {#each steps as { step, actions, maxActionOrder } (step.ID)}
           <li class="py-4">
             <div class="flex justify-between items-center mb-2">
               <h4 class="text-lg font-medium text-gray-900">
                 {step.StepOrder}. {step.Name}
               </h4>
               <div class="flex space-x-3">
+                <button
+                  onclick={() => handleMoveStep(step, 'up')}
+                  disabled={step.StepOrder <= 1}
+                  class="text-sm font-medium text-gray-600 hover:text-gray-900 disabled:text-gray-400 disabled:cursor-not-allowed"
+                  title="Move step up"
+                >
+                  ↑
+                </button>
+                <button
+                  onclick={() => handleMoveStep(step, 'down')}
+                  disabled={step.StepOrder >= maxStepOrder}
+                  class="text-sm font-medium text-gray-600 hover:text-gray-900 disabled:text-gray-400 disabled:cursor-not-allowed"
+                  title="Move step down"
+                >
+                  ↓
+                </button>
                 <button
                   onclick={() => openCreateActionModal(step)}
                   class="text-sm font-medium text-primary-600 hover:text-primary-800"
@@ -553,6 +655,22 @@
                         )}</pre>
                     </div>
                     <div class="flex space-x-3">
+                      <button
+                        onclick={() => handleMoveAction(step, action, 'up')}
+                        disabled={action.ActionOrder <= 1}
+                        class="text-sm font-medium text-gray-600 hover:text-gray-900 disabled:text-gray-400 disabled:cursor-not-allowed"
+                        title="Move action up"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        onclick={() => handleMoveAction(step, action, 'down')}
+                        disabled={action.ActionOrder >= maxActionOrder}
+                        class="text-sm font-medium text-gray-600 hover:text-gray-900 disabled:text-gray-400 disabled:cursor-not-allowed"
+                        title="Move action down"
+                      >
+                        ↓
+                      </button>
                       <button
                         onclick={() => openEditActionModal(step, action)}
                         class="text-sm font-medium text-gray-600 hover:text-gray-900"
@@ -615,6 +733,7 @@
 
 <StepFormModal
   bind:open={showCreateStepModal}
+  maxOrder={maxStepOrder}
   onSave={handleSaveStep}
   onClose={() => (showCreateStepModal = false)}
 />
@@ -622,6 +741,7 @@
 <StepFormModal
   bind:open={showEditStepModal}
   step={selectedStep}
+  maxOrder={maxStepOrder}
   onSave={handleSaveStep}
   onClose={() => (showEditStepModal = false)}
 />
@@ -637,6 +757,7 @@
 
 <ActionFormModal
   bind:open={showCreateActionModal}
+  maxOrder={currentMaxActionOrder}
   onSave={handleSaveAction}
   onClose={() => (showCreateActionModal = false)}
 />
@@ -644,6 +765,7 @@
 <ActionFormModal
   bind:open={showEditActionModal}
   action={selectedAction}
+  maxOrder={currentMaxActionOrder}
   onSave={handleSaveAction}
   onClose={() => (showEditActionModal = false)}
 />

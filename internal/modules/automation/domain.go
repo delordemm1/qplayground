@@ -120,6 +120,14 @@ type AutomationRepository interface {
 	GetRunByID(ctx context.Context, id string) (*AutomationRun, error)
 	GetRunsByAutomationID(ctx context.Context, automationID string) ([]*AutomationRun, error)
 	UpdateRun(ctx context.Context, run *AutomationRun) error
+
+	// Order management
+	GetStepByID(ctx context.Context, id string) (*AutomationStep, error)
+	GetActionByID(ctx context.Context, id string) (*AutomationAction, error)
+	GetMaxStepOrder(ctx context.Context, automationID string) (int, error)
+	GetMaxActionOrder(ctx context.Context, stepID string) (int, error)
+	ShiftStepOrders(ctx context.Context, automationID string, startOrder, endOrder int, increment bool) error
+	ShiftActionOrders(ctx context.Context, stepID string, startOrder, endOrder int, increment bool) error
 }
 
 // AutomationService defines the interface for automation business logic
@@ -147,4 +155,8 @@ type AutomationService interface {
 	TriggerRun(ctx context.Context, automationID string) (*AutomationRun, error)
 	GetRunsByAutomation(ctx context.Context, automationID string) ([]*AutomationRun, error)
 	GetRunByID(ctx context.Context, id string) (*AutomationRun, error)
+
+	// Order management helpers
+	GetMaxStepOrder(ctx context.Context, automationID string) (int, error)
+	GetMaxActionOrder(ctx context.Context, stepID string) (int, error)
 }

@@ -183,6 +183,15 @@ func (s *automationService) DeleteAction(ctx context.Context, id string) error {
 	return nil
 }
 
+// Helper methods for order management
+func (s *automationService) GetMaxStepOrder(ctx context.Context, automationID string) (int, error) {
+	return s.automationRepo.GetMaxStepOrder(ctx, automationID)
+}
+
+func (s *automationService) GetMaxActionOrder(ctx context.Context, stepID string) (int, error) {
+	return s.automationRepo.GetMaxActionOrder(ctx, stepID)
+}
+
 // Run management
 func (s *automationService) TriggerRun(ctx context.Context, automationID string) (*AutomationRun, error) {
 	run := &AutomationRun{

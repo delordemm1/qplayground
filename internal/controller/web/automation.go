@@ -223,18 +223,35 @@ func (h *AutomationHandler) GetAutomation(w http.ResponseWriter, r *http.Request
 			platform.UtilHandleServerErr(w, err)
 			return
 		}
+		
+		// Get max action order for this step
+		maxActionOrder, err := h.automationService.GetMaxActionOrder(r.Context(), step.ID)
+		if err != nil {
+			platform.UtilHandleServerErr(w, err)
+			return
+		}
+		
 		stepsWithActions[i] = map[string]interface{}{
-			"step":    step,
-			"actions": actions,
+			"step":           step,
+			"actions":        actions,
+			"maxActionOrder": maxActionOrder,
 		}
 	}
 
+	// Get max step order for the automation
+	maxStepOrder, err := h.automationService.GetMaxStepOrder(r.Context(), automationID)
+	if err != nil {
+		platform.UtilHandleServerErr(w, err)
+		return
+	}
+
 	err = h.inertia.Render(w, r, "projects/[projectId]/automations/[automationId]", inertia.Props{
-		"params":     map[string]string{"automationId": automationID, "projectId": projectID},
-		"automation": automation,
-		"project":    project,
-		"steps":      stepsWithActions,
-		"user":       user,
+		"params":       map[string]string{"automationId": automationID, "projectId": projectID},
+		"automation":   automation,
+		"project":      project,
+		"steps":        stepsWithActions,
+		"maxStepOrder": maxStepOrder,
+		"user":         user,
 	})
 	if err != nil {
 		platform.UtilHandleServerErr(w, err)
