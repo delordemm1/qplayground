@@ -77,14 +77,16 @@ type Runner struct {
 	automationRepo      AutomationRepository
 	storageService      storage.StorageService
 	notificationService notification.NotificationService
+	sseManager          *SSEManager
 }
 
 // NewRunner creates a new Runner instance.
-func NewRunner(automationRepo AutomationRepository, storageService storage.StorageService, notificationService notification.NotificationService) *Runner {
+func NewRunner(automationRepo AutomationRepository, storageService storage.StorageService, notificationService notification.NotificationService, sseManager *SSEManager) *Runner {
 	return &Runner{
 		automationRepo:      automationRepo,
 		storageService:      storageService,
 		notificationService: notificationService,
+		sseManager:          sseManager,
 	}
 }
 
@@ -180,6 +182,11 @@ func (r *Runner) RunAutomation(ctx context.Context, automationID string) error {
 		"run_count", runCount,
 		"run_mode", runMode)
 
+	// Send initial status update via SSE
+	if r.sseManager != nil {
+		r.sseManager.SendRunStatusUpdate(run.ID, "running")
+	}
+
 	// 4. Execute runs based on configuration
 	var allLogs []map[string]interface{}
 	var allOutputFiles []string
@@ -245,6 +252,15 @@ func (r *Runner) RunAutomation(ctx context.Context, automationID string) error {
 		"run_id", run.ID,
 		"total_runs", runCount,
 		"total_output_files", len(allOutputFiles))
+
+	// Send completion update via SSE
+	if r.sseManager != nil {
+		totalDuration := int64(0)
+		if run.StartTime != nil && run.EndTime != nil {
+			totalDuration = run.EndTime.Sub(*run.StartTime).Milliseconds()
+		}
+		r.sseManager.SendRunComplete(run.ID, "completed", totalDuration, allOutputFiles)
+	}
 
 	// Send completion notifications
 	go r.sendNotifications(context.Background(), automation, run, &automationConfig, allLogs, allOutputFiles)
@@ -336,7 +352,8 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 	var logs []map[string]interface{}
 	var outputFiles []string
 
-	for _, step := range steps {
+	totalSteps := len(steps)
+	for stepIndex, step := range steps {
 		// Check for cancellation before each step
 		select {
 		case <-ctx.Done():
@@ -345,6 +362,11 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 		}
 		
 		runContext.Logger.Info("Executing step", "step_name", step.Name, "step_order", step.StepOrder, "loop_index", loopIndex)
+
+		// Send step progress update via SSE
+		if r.sseManager != nil {
+			r.sseManager.SendRunStep(run.ID, step.Name, stepIndex+1, totalSteps)
+		}
 
 		// Get actions for this step
 		stepActions, err := r.automationRepo.GetActionsByStepID(ctx, step.ID)
@@ -386,6 +408,15 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 			actionErr := pluginAction.Execute(ctx, resolvedActionConfig, runContext)
 			duration := time.Since(startTime)
 
+			// Send real-time log update via SSE
+			if r.sseManager != nil {
+				if actionErr != nil {
+					r.sseManager.SendRunError(run.ID, step.Name, action.ActionType, actionErr.Error())
+				} else {
+					r.sseManager.SendRunLog(run.ID, step.Name, action.ActionType, "Action completed successfully", duration.Milliseconds())
+				}
+			}
+
 			// Create log entry
 			logEntry := map[string]interface{}{
 				"timestamp":   time.Now().Format(time.RFC3339),
@@ -420,6 +451,11 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 						publicURL := r.storageService.GetPublicURL(r2Key)
 						outputFiles = append(outputFiles, publicURL)
 						logEntry["output_file"] = publicURL
+						
+						// Send output file update via SSE
+						if r.sseManager != nil {
+							r.sseManager.SendRunOutputFile(run.ID, publicURL)
+						}
 					}
 				}
 			}
