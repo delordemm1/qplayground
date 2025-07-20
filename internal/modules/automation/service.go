@@ -7,17 +7,20 @@ import (
 	"time"
 
 	"github.com/delordemm1/qplayground/internal/platform"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type automationService struct {
 	automationRepo AutomationRepository
 	runCache       RunCache
+	pool           *pgxpool.Pool
 }
 
-func NewAutomationService(automationRepo AutomationRepository, runCache RunCache) AutomationService {
+func NewAutomationService(automationRepo AutomationRepository, runCache RunCache, pool *pgxpool.Pool) AutomationService {
 	return &automationService{
 		automationRepo: automationRepo,
 		runCache:       runCache,
+		pool:           pool,
 	}
 }
 
@@ -211,7 +214,7 @@ func (s *automationService) UpdateAction(ctx context.Context, action *Automation
 	} else {
 		// Swap the orders
 		otherAction.ActionOrder = originalAction.ActionOrder
-		
+
 		// Update both actions
 		err = txRepo.UpdateAction(ctx, action)
 		if err != nil {
@@ -225,7 +228,7 @@ func (s *automationService) UpdateAction(ctx context.Context, action *Automation
 			return fmt.Errorf("failed to update other action: %w", err)
 		}
 
-		slog.Info("Actions order swapped", 
+		slog.Info("Actions order swapped",
 			"actionID", action.ID, "newOrder", action.ActionOrder,
 			"otherActionID", otherAction.ID, "otherNewOrder", otherAction.ActionOrder)
 	}

@@ -155,7 +155,7 @@
       console.log(result);
 
       if (response.ok) {
-        showSuccessToast("Automation run triggered successfully!");
+        // showSuccessToast("Automation run triggered successfully!");
         // Optionally redirect to runs page or update runs list
         router.visit(`/projects/${projectId}/automations/${automationId}/runs/${result.run.ID}`);
       } else {
@@ -300,11 +300,11 @@
       const result = await response.json();
 
       if (response.ok) {
-        showSuccessToast(
-          selectedAction
-            ? "Action updated successfully"
-            : "Action created successfully"
-        );
+        // showSuccessToast(
+        //   selectedAction
+        //     ? "Action updated successfully"
+        //     : "Action created successfully"
+        // );
         // Refresh page to get updated steps and actions
         window.location.reload();
       } else {

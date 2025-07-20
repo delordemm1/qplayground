@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Modal, Button } from "flowbite-svelte";
-  import { ChevronLeftOutline, ChevronRightOutline, DownloadOutline, XmarkOutline } from "flowbite-svelte-icons";
+  import { ChevronLeftOutline, ChevronRightOutline, DownloadOutline,  } from "flowbite-svelte-icons";
 
   type Props = {
     open: boolean;
@@ -91,9 +91,6 @@
         <Button size="sm" color="primary" onclick={downloadCurrentImage}>
           <DownloadOutline class="w-4 h-4 mr-2" />
           Download
-        </Button>
-        <Button size="sm" color="alternative" onclick={onClose}>
-          <XmarkOutline class="w-4 h-4" />
         </Button>
       </div>
     </div>

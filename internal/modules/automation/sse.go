@@ -3,7 +3,6 @@ package automation
 import (
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/alexandrevicenzi/go-sse"
@@ -69,10 +68,10 @@ func (s *SSEManager) SendRunProgress(projectID, automationID, runID string, mess
 	channel := fmt.Sprintf("/projects/%s/automations/%s/runs/%s/events", projectID, automationID, runID)
 	s.server.SendMessage(channel, sse.SimpleMessage(string(data)))
 
-	slog.Debug("Sent SSE progress update",
-		"run_id", runID,
-		"type", message.Type,
-		"status", message.Status)
+	// slog.Debug("Sent SSE progress update",
+	// 	"run_id", runID,
+	// 	"type", message.Type,
+	// 	"status", message.Status)
 
 	return nil
 }

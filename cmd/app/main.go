@@ -11,7 +11,6 @@ import (
 	"github.com/delordemm1/qplayground/internal/core/config"
 	"github.com/delordemm1/qplayground/internal/modules/auth"
 	"github.com/delordemm1/qplayground/internal/modules/automation"
-	"github.com/delordemm1/qplayground/internal/modules/media"
 	"github.com/delordemm1/qplayground/internal/modules/notification"
 	"github.com/delordemm1/qplayground/internal/modules/organization"
 	"github.com/delordemm1/qplayground/internal/modules/project"
@@ -60,8 +59,6 @@ func main() {
 	inertiaConfig := config.DefaultInertiaConfig()
 	i := config.InitInertia(inertiaConfig, sessionManager)
 
-	// Initialize services
-	// initializeServices()
 	// NOTIFICATION Dependencies
 	notificationService := notification.NewMailService()
 
@@ -73,9 +70,9 @@ func main() {
 	storageService := storage.NewStorageService(r2Storage)
 
 	// MEDIA Dependencies
-	imageProcessor := media.NewBimgProcessor()
-	mediaService := media.NewMediaService(imageProcessor)
-	_ = mediaService
+	// imageProcessor := media.NewBimgProcessor()
+	// mediaService := media.NewMediaService(imageProcessor)
+	// _ = mediaService
 
 	// ORGANIZATION Dependencies
 	organizationRepo := organization.NewOrganizationRepository(pool)

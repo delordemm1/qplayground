@@ -297,7 +297,7 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 
 	// Launch browser
 	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-		Headless: playwright.Bool(true), // Run headless for automation
+		Headless: playwright.Bool(false), // Run headless for automation
 		Args: []string{
 			"--no-sandbox",
 			"--disable-setuid-sandbox",
@@ -311,7 +311,9 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 	defer browser.Close()
 
 	// Create new page with context
-	page, err := browser.NewPage(playwright.BrowserNewPageOptions{})
+	page, err := browser.NewPage(playwright.BrowserNewPageOptions{
+		JavaScriptEnabled: playwright.Bool(true),
+	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not create page: %w", err)
 	}
@@ -348,7 +350,7 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 		return nil, nil, fmt.Errorf("failed to get automation steps: %w", err)
 	}
 
-	var logs []map[string]interface{}
+	var logs []map[string]any
 	var outputFiles []string
 
 	totalSteps := len(steps)
@@ -417,7 +419,7 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 			}
 
 			// Create log entry
-			logEntry := map[string]interface{}{
+			logEntry := map[string]any{
 				"timestamp":   time.Now().Format(time.RFC3339),
 				"step_id":     step.ID,
 				"step_name":   step.Name,
@@ -432,6 +434,7 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 				logEntry["status"] = "failed"
 				logEntry["error"] = actionErr.Error()
 				logs = append(logs, logEntry)
+				fmt.Printf("Action failed: %s\n", actionErr)
 
 				runContext.Logger.Error("Action failed",
 					"action_type", action.ActionType,
