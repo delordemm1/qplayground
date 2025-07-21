@@ -189,6 +189,7 @@ func (r *Runner) executeSingleRun(ctx context.Context, exportedConfig *ExportedA
 
 	// Execute steps
 	for stepIndex, step := range exportedConfig.Steps {
+		_ = stepIndex
 		// Check for cancellation before each step
 		select {
 		case <-ctx.Done():
@@ -389,6 +390,10 @@ func (r *Runner) generateFakerValue(method string) string {
 		return strconv.Itoa(gofakeit.Number(1, 1000))
 	case "date":
 		return gofakeit.Date().Format("2006-01-02")
+	case "lastName":
+		return gofakeit.LastName()
+	case "firstName":
+		return gofakeit.FirstName()
 	default:
 		r.logger.Warn("Unknown faker method", "method", method)
 		return fmt.Sprintf("{{faker.%s}}", method)

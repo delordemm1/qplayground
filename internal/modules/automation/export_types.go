@@ -1,7 +1,5 @@
 package automation
 
-import "time"
-
 // ExportedAutomationConfig represents the complete automation configuration for export/import
 type ExportedAutomationConfig struct {
 	Automation ExportedAutomation       `json:"automation"`
@@ -60,8 +58,8 @@ type ExportedNotificationChannelConfig struct {
 
 // ExportedAutomationStep represents a step within an automation for export
 type ExportedAutomationStep struct {
-	Name      string                    `json:"name"`
-	StepOrder int                       `json:"step_order"`
+	Name      string                     `json:"name"`
+	StepOrder int                        `json:"step_order"`
 	Actions   []ExportedAutomationAction `json:"actions"`
 }
 

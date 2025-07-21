@@ -130,6 +130,7 @@ type AutomationRepository interface {
 	GetMaxActionOrder(ctx context.Context, stepID string) (int, error)
 	ShiftStepOrders(ctx context.Context, automationID string, startOrder, endOrder int, increment bool) error
 	ShiftActionOrders(ctx context.Context, stepID string, startOrder, endOrder int, increment bool) error
+	ShiftActionOrdersAfterDelete(ctx context.Context, stepID string, deletedOrder int) error
 }
 
 // AutomationService defines the interface for automation business logic
@@ -138,6 +139,7 @@ type AutomationService interface {
 	CreateAutomation(ctx context.Context, projectID, name, description, configJSON string) (*Automation, error)
 	GetAutomationsByProject(ctx context.Context, projectID string) ([]*Automation, error)
 	GetAutomationByID(ctx context.Context, id string) (*Automation, error)
+	GetFullAutomationConfig(ctx context.Context, automationID string) (*ExportedAutomationConfig, error)
 	UpdateAutomation(ctx context.Context, automation *Automation) error
 	DeleteAutomation(ctx context.Context, id string) error
 
@@ -161,7 +163,7 @@ type AutomationService interface {
 	// Order management helpers
 	GetMaxStepOrder(ctx context.Context, automationID string) (int, error)
 	GetMaxActionOrder(ctx context.Context, stepID string) (int, error)
-	
+
 	// Run cache management
 	UpdateRunStatus(ctx context.Context, runID, status string) error
 }

@@ -699,13 +699,13 @@
                 class="divide-y divide-gray-100 border-t border-gray-100 mt-2"
               >
                 {#each actions as action (action.ID)}
-                  <li class="py-3 flex justify-between items-center ml-6">
-                    <div>
+                  <li class="py-3 grid grid-cols-8 gap-3 items-center ml-6">
+                    <div class="w-full col-span-7">
                       <p class="text-sm font-medium text-gray-700">
                         {action.ActionOrder}. {action.ActionType}
                       </p>
                       <pre
-                        class="bg-gray-50 p-2 rounded-md text-xs overflow-auto max-w-md">{JSON.stringify(
+                        class="bg-gray-50 p-2 rounded-md text-xs overflow-auto max-w-">{JSON.stringify(
                           JSON.parse(action.ActionConfigJSON),
                           null,
                           2

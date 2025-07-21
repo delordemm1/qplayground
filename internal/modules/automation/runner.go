@@ -576,6 +576,10 @@ func (r *Runner) generateFakerValue(method string) string {
 	switch method {
 	case "name":
 		return gofakeit.Name()
+	case "lastName":
+		return gofakeit.LastName()
+	case "firstName":
+		return gofakeit.FirstName()
 	case "email":
 		return gofakeit.Email()
 	case "phone":
