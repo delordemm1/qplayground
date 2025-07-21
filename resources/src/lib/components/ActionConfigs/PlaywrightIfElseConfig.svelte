@@ -154,7 +154,7 @@
         </Button>
       </div>
       
-      {#if config.if_actions.length === 0}
+      {#if config.if_actions?.length === 0}
         <p class="text-sm text-gray-500 italic">No actions defined</p>
       {:else}
         <div class="space-y-3">
@@ -213,7 +213,7 @@
       </Button>
     </div>
 
-    {#if config.else_if_conditions.length === 0}
+    {#if config.else_if_conditions?.length === 0}
       <p class="text-sm text-gray-500 italic">No else-if conditions defined</p>
     {:else}
       <div class="space-y-4">
@@ -261,7 +261,7 @@
                 </Button>
               </div>
               
-              {#if elseIfCondition.actions.length === 0}
+              {#if elseIfCondition.actions?.length === 0}
                 <p class="text-sm text-gray-500 italic">No actions defined</p>
               {:else}
                 <div class="space-y-3">
@@ -324,7 +324,7 @@
       </Button>
     </div>
 
-    {#if config.else_actions.length === 0}
+    {#if config.else_actions?.length === 0}
       <p class="text-sm text-gray-500 italic">No else actions defined</p>
     {:else}
       <div class="space-y-3">

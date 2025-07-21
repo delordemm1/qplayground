@@ -32,6 +32,8 @@
   import PlaywrightEvaluateConfig from "./ActionConfigs/PlaywrightEvaluateConfig.svelte";
   import R2UploadConfig from "./ActionConfigs/R2UploadConfig.svelte";
   import R2DeleteConfig from "./ActionConfigs/R2DeleteConfig.svelte";
+  import PlaywrightIfElseConfig from "./ActionConfigs/PlaywrightIfElseConfig.svelte";
+  import PlaywrightLogConfig from "./ActionConfigs/PlaywrightLogConfig.svelte";
 
   type Action = {
     ID: string;
@@ -117,6 +119,8 @@
     "playwright:evaluate": PlaywrightEvaluateConfig,
     "r2:upload": R2UploadConfig,
     "r2:delete": R2DeleteConfig,
+    "playwright:if_else": PlaywrightIfElseConfig,
+    "playwright:log": PlaywrightLogConfig,
   };
 
   // Derived state for the current config component
