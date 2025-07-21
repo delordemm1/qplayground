@@ -74,6 +74,8 @@
     "playwright:uncheck",
     "playwright:select_option",
     "playwright:wait_for_selector",
+    "playwright:if_else",
+    "playwright:log",
     "playwright:wait_for_timeout",
     "playwright:wait_for_load_state",
     "playwright:screenshot",
