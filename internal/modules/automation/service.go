@@ -2,6 +2,7 @@ package automation
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
@@ -245,6 +246,50 @@ func (s *automationService) UpdateAction(ctx context.Context, action *Automation
 }
 
 func (s *automationService) DeleteAction(ctx context.Context, id string) error {
+	// Get the action to be deleted to know its step and order
+	action, err := s.automationRepo.GetActionByID(ctx, id)
+	if err != nil {
+		slog.Error("Failed to get action for deletion", "error", err, "actionID", id)
+		return fmt.Errorf("failed to get action: %w", err)
+	}
+
+	// Start transaction for atomic delete and reorder
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		slog.Error("Failed to begin transaction for action deletion", "error", err)
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Create transactional repository
+	txRepo := NewAutomationRepository(tx)
+
+	// Delete the action
+	err = txRepo.DeleteAction(ctx, id)
+	if err != nil {
+		slog.Error("Failed to delete action", "error", err, "actionID", id)
+		return fmt.Errorf("failed to delete action: %w", err)
+	}
+
+	// Shift remaining actions' orders
+	err = txRepo.ShiftActionOrdersAfterDelete(ctx, action.StepID, action.ActionOrder)
+	if err != nil {
+		slog.Error("Failed to reorder actions after deletion", "error", err, "stepID", action.StepID)
+		return fmt.Errorf("failed to reorder actions: %w", err)
+	}
+
+	// Commit transaction
+	err = tx.Commit(ctx)
+	if err != nil {
+		slog.Error("Failed to commit action deletion transaction", "error", err)
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	slog.Info("Action deleted and orders rebalanced", "actionID", id, "stepID", action.StepID)
+	return nil
+}
+
+func (s *automationService) DeleteActionOld(ctx context.Context, id string) error {
 	err := s.automationRepo.DeleteAction(ctx, id)
 	if err != nil {
 		slog.Error("Failed to delete action", "error", err, "actionID", id)
@@ -297,6 +342,101 @@ func (s *automationService) UpdateRunStatus(ctx context.Context, runID, status s
 	}
 
 	return nil
+}
+
+// GetFullAutomationConfig exports the complete automation configuration
+func (s *automationService) GetFullAutomationConfig(ctx context.Context, automationID string) (*ExportedAutomationConfig, error) {
+	// Get automation
+	automation, err := s.automationRepo.GetAutomationByID(ctx, automationID)
+	if err != nil {
+		slog.Error("Failed to get automation for export", "error", err, "automationID", automationID)
+		return nil, fmt.Errorf("failed to get automation: %w", err)
+	}
+
+	// Parse automation config
+	var automationConfig ExportedAutomationMeta
+	if automation.ConfigJSON != "" {
+		var rawConfig map[string]interface{}
+		if err := json.Unmarshal([]byte(automation.ConfigJSON), &rawConfig); err != nil {
+			slog.Error("Failed to parse automation config JSON", "error", err, "automationID", automationID)
+			return nil, fmt.Errorf("failed to parse automation config: %w", err)
+		}
+
+		// Convert to typed config
+		configBytes, _ := json.Marshal(rawConfig)
+		if err := json.Unmarshal(configBytes, &automationConfig); err != nil {
+			slog.Error("Failed to convert automation config", "error", err, "automationID", automationID)
+			return nil, fmt.Errorf("failed to convert automation config: %w", err)
+		}
+	} else {
+		// Use default configuration
+		automationConfig = ExportedAutomationMeta{
+			Variables: []ExportedVariable{},
+			Multirun: ExportedMultiRunConfig{
+				Enabled: false,
+				Mode:    "sequential",
+				Count:   1,
+				Delay:   1000,
+			},
+			Timeout:       300,
+			Retries:       0,
+			Screenshots:   ExportedScreenshotConfig{Enabled: true, OnError: true, OnSuccess: false, Path: "screenshots/{{timestamp}}-{{loopIndex}}.png"},
+			Notifications: []ExportedNotificationChannelConfig{},
+		}
+	}
+
+	// Get steps
+	steps, err := s.automationRepo.GetStepsByAutomationID(ctx, automationID)
+	if err != nil {
+		slog.Error("Failed to get steps for export", "error", err, "automationID", automationID)
+		return nil, fmt.Errorf("failed to get steps: %w", err)
+	}
+
+	// Build exported steps with actions
+	var exportedSteps []ExportedAutomationStep
+	for _, step := range steps {
+		actions, err := s.automationRepo.GetActionsByStepID(ctx, step.ID)
+		if err != nil {
+			slog.Error("Failed to get actions for export", "error", err, "stepID", step.ID)
+			return nil, fmt.Errorf("failed to get actions for step %s: %w", step.ID, err)
+		}
+
+		var exportedActions []ExportedAutomationAction
+		for _, action := range actions {
+			// Parse action config JSON into map
+			var actionConfig map[string]interface{}
+			if action.ActionConfigJSON != "" {
+				if err := json.Unmarshal([]byte(action.ActionConfigJSON), &actionConfig); err != nil {
+					slog.Error("Failed to parse action config JSON", "error", err, "actionID", action.ID)
+					return nil, fmt.Errorf("failed to parse action config for action %s: %w", action.ID, err)
+				}
+			}
+
+			exportedActions = append(exportedActions, ExportedAutomationAction{
+				ActionType:   action.ActionType,
+				ActionConfig: actionConfig,
+				ActionOrder:  action.ActionOrder,
+			})
+		}
+
+		exportedSteps = append(exportedSteps, ExportedAutomationStep{
+			Name:      step.Name,
+			StepOrder: step.StepOrder,
+			Actions:   exportedActions,
+		})
+	}
+
+	exportedConfig := &ExportedAutomationConfig{
+		Automation: ExportedAutomation{
+			Name:        automation.Name,
+			Description: automation.Description,
+			Config:      automationConfig,
+		},
+		Steps: exportedSteps,
+	}
+
+	slog.Info("Automation config exported successfully", "automationID", automationID, "stepsCount", len(exportedSteps))
+	return exportedConfig, nil
 }
 
 // Run management

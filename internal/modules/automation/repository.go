@@ -517,6 +517,27 @@ func (r *automationRepository) UpdateRun(ctx context.Context, run *AutomationRun
 	return nil
 }
 
+func (r *automationRepository) ShiftActionOrdersAfterDelete(ctx context.Context, stepID string, deletedOrder int) error {
+	query, args, err := r.sq.Update("automation_actions").
+		Set("action_order", sq.Expr("action_order - 1")).
+		Set("updated_at", time.Now()).
+		Where(sq.And{
+			sq.Eq{"step_id": stepID},
+			sq.Gt{"action_order": deletedOrder},
+		}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	_, err = r.db.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to shift action orders after delete: %w", err)
+	}
+
+	return nil
+}
+
 // Order management methods
 func (r *automationRepository) GetStepByID(ctx context.Context, id string) (*AutomationStep, error) {
 	query, args, err := r.sq.Select("id", "automation_id", "name", "step_order", "created_at", "updated_at").

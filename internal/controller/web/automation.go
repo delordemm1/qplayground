@@ -38,6 +38,9 @@ func NewAutomationRouter(automationHandler *AutomationHandler) chi.Router {
 	r.Get("/{id}/runs/{runId}", automationHandler.GetRun)
 	r.Post("/{id}/runs/{runId}/cancel", automationHandler.CancelRun)
 
+	// Export automation config
+	r.Get("/{id}/export", automationHandler.ExportAutomationConfig)
+
 	// SSE endpoint for run progress
 	r.Get("/{id}/runs/{runId}/events", automationHandler.GetRunEvents)
 
@@ -1016,4 +1019,74 @@ func (h *AutomationHandler) GetRunEvents(w http.ResponseWriter, r *http.Request)
 	h.sseManager.GetServer().ServeHTTP(w, r.WithContext(
 		context.WithValue(r.Context(), "channel", channel),
 	))
+}
+
+func (h *AutomationHandler) ExportAutomationConfig(w http.ResponseWriter, r *http.Request) {
+	user := getUserFromContext(r.Context())
+	if user == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
+		return
+	}
+
+	projectID := chi.URLParam(r, "projectId")
+	automationID := chi.URLParam(r, "id")
+
+	// Verify project belongs to user's organization
+	project, err := h.projectService.GetProjectByID(r.Context(), projectID)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Project not found"})
+		return
+	}
+
+	if user.CurrentOrgID == nil || project.OrganizationID != *user.CurrentOrgID {
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Access denied"})
+		return
+	}
+
+	automation, err := h.automationService.GetAutomationByID(r.Context(), automationID)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Automation not found"})
+		return
+	}
+
+	// Verify automation belongs to the project
+	if automation.ProjectID != projectID {
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Access denied"})
+		return
+	}
+
+	// Get full automation config
+	exportedConfig, err := h.automationService.GetFullAutomationConfig(r.Context(), automationID)
+	if err != nil {
+		platform.SetFlashError(r.Context(), h.sessionManager, "Failed to export automation config")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to export automation config"})
+		return
+	}
+
+	// Marshal to JSON
+	jsonData, err := json.MarshalIndent(exportedConfig, "", "  ")
+	if err != nil {
+		platform.SetFlashError(r.Context(), h.sessionManager, "Failed to serialize automation config")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to serialize automation config"})
+		return
+	}
+
+	// Set headers for file download
+	filename := fmt.Sprintf("automation_config_%s.json", automationID)
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonData)))
+
+	// Write JSON data
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsonData)
+
+	platform.SetFlashSuccess(r.Context(), h.sessionManager, "Automation config exported successfully")
 }

@@ -166,6 +166,23 @@
     }
   }
 
+  async function handleExportAutomation() {
+    try {
+      // Create a link to trigger the download
+      const exportUrl = `/projects/${projectId}/automations/${automationId}/export`;
+      const link = document.createElement('a');
+      link.href = exportUrl;
+      link.download = `automation_config_${automationId}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      showSuccessToast("Automation config exported successfully");
+    } catch (err: any) {
+      showErrorToast("Failed to export automation config");
+    }
+  }
+
   // --- Step Handlers ---
   function openCreateStepModal() {
     selectedStep = null; // Clear for creation
@@ -509,6 +526,25 @@
           />
         </svg>
         Run Automation
+      </button>
+      <button
+        onclick={handleExportAutomation}
+        class="ml-3 inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+      >
+        <svg
+          class="-ml-1 mr-2 h-5 w-5 text-gray-500"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+          />
+        </svg>
+        Export Config
       </button>
       <button
         onclick={openEditAutomationModal}

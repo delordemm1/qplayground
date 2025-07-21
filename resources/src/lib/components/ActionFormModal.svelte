@@ -57,6 +57,7 @@
   let actionType = $state("");
   let actionOrder = $state(0);
   let isLoading = $state(false);
+  let isDuplicating = $state(false);
   let errors = $state<Record<string, string>>({});
 
   // This will hold the structured configuration data
@@ -278,6 +279,29 @@
     onClose();
     open = false;
   }
+
+  function handleDuplicateAction() {
+    if (!action) return;
+    
+    isDuplicating = true;
+    // Reset to creation mode with copied data
+    actionType = action.ActionType;
+    actionOrder = (maxOrder || 0) + 1;
+    
+    // Parse and copy the action config
+    try {
+      currentActionConfig = action.ActionConfigJSON 
+        ? JSON.parse(action.ActionConfigJSON) 
+        : {};
+    } catch (e) {
+      console.error("Failed to parse action config for duplication:", e);
+      currentActionConfig = {};
+    }
+    
+    // Clear the action prop to signal creation mode
+    action = null;
+    isDuplicating = false;
+  }
 </script>
 
 <Modal bind:open outsideclose={false} class="" size="lg">
@@ -285,6 +309,23 @@
     <Heading tag="h3" class="text-xl font-semibold mb-4">
       {action ? "Edit Action" : "Create New Action"}
     </Heading>
+    
+    {#if action && !isDuplicating}
+      <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+        <div class="flex items-center justify-between">
+          <span class="text-sm text-blue-800">
+            Want to create a similar action? You can duplicate this action and modify it.
+          </span>
+          <button
+            type="button"
+            onclick={handleDuplicateAction}
+            class="text-sm font-medium text-blue-600 hover:text-blue-800"
+          >
+            Duplicate Action
+          </button>
+        </div>
+      </div>
+    {/if}
 
     <form onsubmit={handleSubmit} class="space-y-4">
       <div>
