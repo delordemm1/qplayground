@@ -270,6 +270,50 @@
       case "r2:delete":
         if (!config.key) errors.push("Object key is required");
         break;
+      case "playwright:if_else":
+        if (!config.selector) errors.push("Selector is required");
+        if (!config.condition_type) errors.push("Condition type is required");
+        // Validate nested actions have action_type
+        if (config.if_actions) {
+          for (const action of config.if_actions) {
+            if (!action.action_type) {
+              errors.push("All IF actions must have an action type");
+              break;
+            }
+          }
+        }
+        if (config.else_if_conditions) {
+          for (const condition of config.else_if_conditions) {
+            if (!condition.selector) {
+              errors.push("All ELSE IF conditions must have a selector");
+              break;
+            }
+            if (!condition.condition_type) {
+              errors.push("All ELSE IF conditions must have a condition type");
+              break;
+            }
+            if (condition.actions) {
+              for (const action of condition.actions) {
+                if (!action.action_type) {
+                  errors.push("All ELSE IF actions must have an action type");
+                  break;
+                }
+              }
+            }
+          }
+        }
+        if (config.else_actions) {
+          for (const action of config.else_actions) {
+            if (!action.action_type) {
+              errors.push("All ELSE actions must have an action type");
+              break;
+            }
+          }
+        }
+        break;
+      case "playwright:log":
+        if (!config.message) errors.push("Log message is required");
+        break;
     }
 
     return errors;
