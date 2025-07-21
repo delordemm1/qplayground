@@ -192,7 +192,7 @@
                   onchange={(e) => {
                     action.action_config = stringToActionConfig(e.target.value);
                   }}
-                  placeholder='{"message": "Hello World"}'
+                  placeholder={`{"message": "Hello World"}`}
                   class="font-mono text-sm"
                 />
               </div>
@@ -299,7 +299,7 @@
                           onchange={(e) => {
                             action.action_config = stringToActionConfig(e.target.value);
                           }}
-                          placeholder='{"selector": "button", "message": "Clicked button"}'
+                          placeholder={`{"selector": "button", "message": "Clicked button"}`}
                           class="font-mono text-sm"
                         />
                       </div>
@@ -362,7 +362,7 @@
                 onchange={(e) => {
                   action.action_config = stringToActionConfig(e.target.value);
                 }}
-                placeholder='{"message": "All conditions failed"}'
+                placeholder={'{"message": "All conditions failed"}'}
                 class="font-mono text-sm"
               />
             </div>
