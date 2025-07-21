@@ -31,6 +31,8 @@ func init() {
 	automation.RegisterAction("playwright:reload", func() automation.PluginAction { return &ReloadAction{} })
 	automation.RegisterAction("playwright:go_back", func() automation.PluginAction { return &GoBackAction{} })
 	automation.RegisterAction("playwright:go_forward", func() automation.PluginAction { return &GoForwardAction{} })
+	automation.RegisterAction("playwright:if_else", func() automation.PluginAction { return &IfElseAction{} })
+	automation.RegisterAction("playwright:log", func() automation.PluginAction { return &LogAction{} })
 }
 
 // BaseAction provides common validation for selector-based actions.
@@ -544,4 +546,172 @@ func (a *GoForwardAction) Execute(ctx context.Context, actionConfig map[string]i
 
 	_, err := runContext.PlaywrightPage.GoForward(options)
 	return err
+}
+
+// IfElseAction implements conditional logic with multiple else-if blocks
+type IfElseAction struct{}
+
+func (a *IfElseAction) Execute(ctx context.Context, actionConfig map[string]interface{}, runContext *automation.RunContext) error {
+	selector, ok := actionConfig["selector"].(string)
+	if !ok || selector == "" {
+		return fmt.Errorf("playwright:if_else action requires a 'selector' string in config")
+	}
+
+	conditionType, ok := actionConfig["condition_type"].(string)
+	if !ok || conditionType == "" {
+		return fmt.Errorf("playwright:if_else action requires a 'condition_type' string in config")
+	}
+
+	runContext.Logger.Info("Executing playwright:if_else", "selector", selector, "condition_type", conditionType)
+
+	// Evaluate main condition
+	conditionMet, err := a.evaluateCondition(runContext, selector, conditionType)
+	if err != nil {
+		return fmt.Errorf("failed to evaluate main condition: %w", err)
+	}
+
+	if conditionMet {
+		// Execute if_actions
+		if ifActions, ok := actionConfig["if_actions"].([]interface{}); ok {
+			runContext.Logger.Info("Main condition is true, executing if_actions", "count", len(ifActions))
+			return a.executeNestedActions(ctx, ifActions, runContext)
+		}
+		return nil
+	}
+
+	// Check else_if_conditions
+	if elseIfConditions, ok := actionConfig["else_if_conditions"].([]interface{}); ok {
+		for i, elseIfCondition := range elseIfConditions {
+			elseIfMap, ok := elseIfCondition.(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			elseIfSelector, ok := elseIfMap["selector"].(string)
+			if !ok || elseIfSelector == "" {
+				continue
+			}
+
+			elseIfConditionType, ok := elseIfMap["condition_type"].(string)
+			if !ok || elseIfConditionType == "" {
+				continue
+			}
+
+			runContext.Logger.Info("Evaluating else-if condition", "index", i, "selector", elseIfSelector, "condition_type", elseIfConditionType)
+
+			elseIfConditionMet, err := a.evaluateCondition(runContext, elseIfSelector, elseIfConditionType)
+			if err != nil {
+				runContext.Logger.Warn("Failed to evaluate else-if condition", "index", i, "error", err)
+				continue
+			}
+
+			if elseIfConditionMet {
+				// Execute this else-if's actions
+				if elseIfActions, ok := elseIfMap["actions"].([]interface{}); ok {
+					runContext.Logger.Info("Else-if condition is true, executing actions", "index", i, "count", len(elseIfActions))
+					return a.executeNestedActions(ctx, elseIfActions, runContext)
+				}
+				return nil
+			}
+		}
+	}
+
+	// Execute else_actions if all conditions failed
+	if elseActions, ok := actionConfig["else_actions"].([]interface{}); ok {
+		runContext.Logger.Info("All conditions failed, executing else_actions", "count", len(elseActions))
+		return a.executeNestedActions(ctx, elseActions, runContext)
+	}
+
+	runContext.Logger.Info("No conditions met and no else actions defined")
+	return nil
+}
+
+func (a *IfElseAction) evaluateCondition(runContext *automation.RunContext, selector, conditionType string) (bool, error) {
+	locator := runContext.PlaywrightPage.Locator(selector)
+
+	switch conditionType {
+	case "is_enabled":
+		return locator.IsEnabled()
+	case "is_disabled":
+		return locator.IsDisabled()
+	case "is_visible":
+		return locator.IsVisible()
+	case "is_hidden":
+		return locator.IsHidden()
+	case "is_checked":
+		return locator.IsChecked()
+	case "is_editable":
+		return locator.IsEditable()
+	default:
+		return false, fmt.Errorf("unsupported condition type: %s", conditionType)
+	}
+}
+
+func (a *IfElseAction) executeNestedActions(ctx context.Context, actions []interface{}, runContext *automation.RunContext) error {
+	for i, actionInterface := range actions {
+		actionMap, ok := actionInterface.(map[string]interface{})
+		if !ok {
+			runContext.Logger.Warn("Invalid nested action format", "index", i)
+			continue
+		}
+
+		actionType, ok := actionMap["action_type"].(string)
+		if !ok || actionType == "" {
+			runContext.Logger.Warn("Missing action_type in nested action", "index", i)
+			continue
+		}
+
+		actionConfig, ok := actionMap["action_config"].(map[string]interface{})
+		if !ok {
+			actionConfig = make(map[string]interface{})
+		}
+
+		runContext.Logger.Info("Executing nested action", "index", i, "action_type", actionType)
+
+		// Get the plugin action
+		pluginAction, err := automation.GetAction(actionType)
+		if err != nil {
+			runContext.Logger.Error("Failed to get nested action", "action_type", actionType, "error", err)
+			return fmt.Errorf("failed to get nested action '%s': %w", actionType, err)
+		}
+
+		// Execute the nested action
+		err = pluginAction.Execute(ctx, actionConfig, runContext)
+		if err != nil {
+			runContext.Logger.Error("Nested action failed", "action_type", actionType, "error", err)
+			return fmt.Errorf("nested action '%s' failed: %w", actionType, err)
+		}
+
+		runContext.Logger.Info("Nested action completed", "action_type", actionType)
+	}
+
+	return nil
+}
+
+// LogAction implements logging messages
+type LogAction struct{}
+
+func (a *LogAction) Execute(ctx context.Context, actionConfig map[string]interface{}, runContext *automation.RunContext) error {
+	message, ok := actionConfig["message"].(string)
+	if !ok || message == "" {
+		return fmt.Errorf("playwright:log action requires a 'message' string in config")
+	}
+
+	level, _ := actionConfig["level"].(string)
+	if level == "" {
+		level = "info"
+	}
+
+	switch level {
+	case "debug":
+		runContext.Logger.Debug("User Log", "message", message)
+	case "warn":
+		runContext.Logger.Warn("User Log", "message", message)
+	case "error":
+		runContext.Logger.Error("User Log", "message", message)
+	default:
+		runContext.Logger.Info("User Log", "message", message)
+	}
+
+	return nil
 }
