@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/delordemm1/qplayground/internal/modules/automation"
 	"github.com/playwright-community/playwright-go"
@@ -33,6 +34,7 @@ func init() {
 	automation.RegisterAction("playwright:go_forward", func() automation.PluginAction { return &GoForwardAction{} })
 	automation.RegisterAction("playwright:if_else", func() automation.PluginAction { return &IfElseAction{} })
 	automation.RegisterAction("playwright:log", func() automation.PluginAction { return &LogAction{} })
+	automation.RegisterAction("playwright:loop_until", func() automation.PluginAction { return &LoopUntilAction{} })
 }
 
 // BaseAction provides common validation for selector-based actions.
@@ -714,4 +716,173 @@ func (a *LogAction) Execute(ctx context.Context, actionConfig map[string]interfa
 	}
 
 	return nil
+}
+
+// LoopUntilAction implements looping until a condition is met or force stop
+type LoopUntilAction struct{}
+
+func (a *LoopUntilAction) Execute(ctx context.Context, actionConfig map[string]interface{}, runContext *automation.RunContext) error {
+	runContext.Logger.Info("Executing playwright:loop_until")
+
+	// Extract configuration
+	selector, _ := actionConfig["selector"].(string)
+	conditionType, _ := actionConfig["condition_type"].(string)
+	maxLoops, _ := actionConfig["max_loops"].(float64)
+	timeoutMs, _ := actionConfig["timeout_ms"].(float64)
+	failOnForceStop, _ := actionConfig["fail_on_force_stop"].(bool)
+	loopActionsInterface, _ := actionConfig["loop_actions"].([]interface{})
+
+	// Validate that at least one force stop condition is provided
+	if maxLoops <= 0 && timeoutMs <= 0 {
+		return fmt.Errorf("playwright:loop_until requires either max_loops or timeout_ms to prevent infinite loops")
+	}
+
+	// Validate selector condition if provided
+	if selector != "" && conditionType == "" {
+		return fmt.Errorf("playwright:loop_until requires condition_type when selector is provided")
+	}
+
+	// Convert loop actions to proper format
+	var loopActions []map[string]interface{}
+	for _, actionInterface := range loopActionsInterface {
+		if actionMap, ok := actionInterface.(map[string]interface{}); ok {
+			loopActions = append(loopActions, actionMap)
+		}
+	}
+
+	if len(loopActions) == 0 {
+		return fmt.Errorf("playwright:loop_until requires at least one loop action")
+	}
+
+	runContext.Logger.Info("Starting loop",
+		"selector", selector,
+		"condition_type", conditionType,
+		"max_loops", maxLoops,
+		"timeout_ms", timeoutMs,
+		"loop_actions_count", len(loopActions))
+
+	// Initialize loop variables
+	loopCount := 0
+	startTime := time.Now()
+	var timeoutDuration time.Duration
+	if timeoutMs > 0 {
+		timeoutDuration = time.Duration(timeoutMs) * time.Millisecond
+	}
+
+	for {
+		// Check for context cancellation
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("loop cancelled")
+		default:
+		}
+
+		loopCount++
+		runContext.Logger.Info("Loop iteration", "count", loopCount)
+
+		// Check selector condition if provided
+		if selector != "" && conditionType != "" {
+			conditionMet, err := a.evaluateCondition(runContext, selector, conditionType)
+			if err != nil {
+				runContext.Logger.Warn("Failed to evaluate loop condition", "error", err)
+			} else if conditionMet {
+				runContext.Logger.Info("Loop condition met, exiting loop", "selector", selector, "condition_type", conditionType, "loops_completed", loopCount)
+				break
+			}
+		}
+
+		// Check force stop conditions
+		forceStop := false
+		forceStopReason := ""
+
+		if maxLoops > 0 && float64(loopCount) >= maxLoops {
+			forceStop = true
+			forceStopReason = fmt.Sprintf("reached maximum loops (%d)", int(maxLoops))
+		}
+
+		if timeoutMs > 0 && time.Since(startTime) >= timeoutDuration {
+			forceStop = true
+			if forceStopReason != "" {
+				forceStopReason += " and "
+			}
+			forceStopReason += fmt.Sprintf("reached timeout (%dms)", int(timeoutMs))
+		}
+
+		if forceStop {
+			message := fmt.Sprintf("Loop force stopped: %s", forceStopReason)
+			if failOnForceStop {
+				runContext.Logger.Error("Loop force stopped", "reason", forceStopReason, "loops_completed", loopCount)
+				return fmt.Errorf(message)
+			} else {
+				runContext.Logger.Warn("Loop force stopped", "reason", forceStopReason, "loops_completed", loopCount)
+				break
+			}
+		}
+
+		// Execute loop actions
+		for actionIndex, actionData := range loopActions {
+			// Check for cancellation before each action
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("loop cancelled during action execution")
+			default:
+			}
+
+			actionType, ok := actionData["action_type"].(string)
+			if !ok || actionType == "" {
+				runContext.Logger.Warn("Skipping loop action with missing action_type", "action_index", actionIndex)
+				continue
+			}
+
+			actionConfig, ok := actionData["action_config"].(map[string]interface{})
+			if !ok {
+				actionConfig = make(map[string]interface{})
+			}
+
+			runContext.Logger.Info("Executing loop action", "loop_count", loopCount, "action_index", actionIndex, "action_type", actionType)
+
+			// Get the plugin action
+			pluginAction, err := automation.GetAction(actionType)
+			if err != nil {
+				runContext.Logger.Error("Failed to get loop action", "action_type", actionType, "error", err)
+				return fmt.Errorf("failed to get loop action '%s': %w", actionType, err)
+			}
+
+			// Execute the loop action
+			err = pluginAction.Execute(ctx, actionConfig, runContext)
+			if err != nil {
+				runContext.Logger.Error("Loop action failed", "action_type", actionType, "loop_count", loopCount, "error", err)
+				return fmt.Errorf("loop action '%s' failed in iteration %d: %w", actionType, loopCount, err)
+			}
+
+			runContext.Logger.Info("Loop action completed", "action_type", actionType, "loop_count", loopCount)
+		}
+
+		// Small delay to prevent busy-waiting and allow page updates
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	runContext.Logger.Info("Loop completed successfully", "total_loops", loopCount)
+	return nil
+}
+
+func (a *LoopUntilAction) evaluateCondition(runContext *automation.RunContext, selector, conditionType string) (bool, error) {
+	locator := runContext.PlaywrightPage.Locator(selector)
+
+	switch conditionType {
+	case "is_enabled":
+		return locator.IsEnabled()
+	case "is_disabled":
+		return locator.IsDisabled()
+	case "is_visible":
+		return locator.IsVisible()
+	case "is_hidden":
+		return locator.IsHidden()
+	case "is_checked":
+		return locator.IsChecked()
+	case "is_editable":
+		return locator.IsEditable()
+	default:
+		return false, fmt.Errorf("unsupported condition type: %s", conditionType)
+	}
 }
