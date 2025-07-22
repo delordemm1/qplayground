@@ -190,7 +190,7 @@
                   rows={3}
                   value={actionConfigToString(action.action_config)}
                   onchange={(e) => {
-                    action.action_config = stringToActionConfig(e.target.value);
+                    action.action_config = stringToActionConfig(e.currentTarget.value);
                   }}
                   placeholder={`{"message": "Hello World"}`}
                   class="font-mono text-sm"
@@ -297,7 +297,7 @@
                           rows={3}
                           value={actionConfigToString(action.action_config)}
                           onchange={(e) => {
-                            action.action_config = stringToActionConfig(e.target.value);
+                            action.action_config = stringToActionConfig(e.currentTarget.value);
                           }}
                           placeholder={`{"selector": "button", "message": "Clicked button"}`}
                           class="font-mono text-sm"
@@ -360,7 +360,7 @@
                 rows={3}
                 value={actionConfigToString(action.action_config)}
                 onchange={(e) => {
-                  action.action_config = stringToActionConfig(e.target.value);
+                  action.action_config = stringToActionConfig(e.currentTarget.value);
                 }}
                 placeholder={'{"message": "All conditions failed"}'}
                 class="font-mono text-sm"
