@@ -1,6 +1,8 @@
 <script lang="ts">
-  import { Label, Input, Select, Button, Textarea } from "flowbite-svelte";
+  import { Label, Input, Select, Button } from "flowbite-svelte";
   import { PlusOutline, TrashBinOutline } from "flowbite-svelte-icons";
+  import { nestedActionTypes } from "$lib/utils/actionConfigMap";
+  import NestedActionConfigurator from "../NestedActionConfigurator.svelte";
 
   type NestedAction = {
     action_type: string;
@@ -50,15 +52,6 @@
     { value: "is_editable", name: "Is Editable" },
   ];
 
-  const commonActionTypes = [
-    "playwright:log",
-    "playwright:click",
-    "playwright:fill",
-    "playwright:type",
-    "playwright:wait_for_timeout",
-    "playwright:screenshot",
-  ];
-
   // Helper functions for managing nested actions
   function addIfAction() {
     config.if_actions = [...config.if_actions, { action_type: "", action_config: {} }];
@@ -97,24 +90,6 @@
 
   function removeElseAction(index: number) {
     config.else_actions = config.else_actions.filter((_, i) => i !== index);
-  }
-
-  // Helper to serialize action config to JSON string for textarea
-  function actionConfigToString(actionConfig: Record<string, any>): string {
-    try {
-      return JSON.stringify(actionConfig, null, 2);
-    } catch {
-      return "{}";
-    }
-  }
-
-  // Helper to parse JSON string back to action config
-  function stringToActionConfig(jsonString: string): Record<string, any> {
-    try {
-      return JSON.parse(jsonString) || {};
-    } catch {
-      return {};
-    }
   }
 </script>
 
@@ -157,45 +132,38 @@
       {#if config.if_actions?.length === 0}
         <p class="text-sm text-gray-500 italic">No actions defined</p>
       {:else}
-        <div class="space-y-3">
+        <div class="space-y-4">
           {#each config.if_actions as action, index (index)}
-            <div class="border p-3 rounded-md bg-white">
-              <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-                <div>
-                  <Label for="if-action-type-{index}" class="mb-1 text-xs">Action Type</Label>
-                  <Select
-                    id="if-action-type-{index}"
-                    bind:value={action.action_type}
-                    items={[
-                      { value: "", name: "Select action type" },
-                      ...commonActionTypes.map(type => ({ value: type, name: type }))
-                    ]}
-                  />
-                </div>
-                <div class="md:col-span-2 flex items-end">
-                  <Button
-                    size="sm"
-                    color="red"
-                    onclick={() => removeIfAction(index)}
-                    class="w-full"
-                  >
-                    <TrashBinOutline class="w-4 h-4" />
-                  </Button>
-                </div>
+            <div class="border p-4 rounded-md bg-white">
+              <div class="flex items-center justify-between mb-3">
+                <h5 class="text-sm font-semibold">IF Action #{index + 1}</h5>
+                <Button
+                  size="sm"
+                  color="red"
+                  onclick={() => removeIfAction(index)}
+                >
+                  <TrashBinOutline class="w-4 h-4" />
+                </Button>
               </div>
-              <div>
-                <Label for="if-action-config-{index}" class="mb-1 text-xs">Action Configuration (JSON)</Label>
-                <Textarea
-                  id="if-action-config-{index}"
-                  rows={3}
-                  value={actionConfigToString(action.action_config)}
-                  onchange={(e) => {
-                    action.action_config = stringToActionConfig(e.currentTarget.value);
-                  }}
-                  placeholder={`{"message": "Hello World"}`}
-                  class="font-mono text-sm"
+              
+              <div class="mb-4">
+                <Label for="if-action-type-{index}" class="mb-2">Action Type *</Label>
+                <Select
+                  id="if-action-type-{index}"
+                  bind:value={action.action_type}
+                  items={[
+                    { value: "", name: "Select action type" },
+                    ...nestedActionTypes.map(type => ({ value: type, name: type }))
+                  ]}
                 />
               </div>
+
+              {#if action.action_type}
+                <NestedActionConfigurator 
+                  actionType={action.action_type} 
+                  bind:config={action.action_config} 
+                />
+              {/if}
             </div>
           {/each}
         </div>
@@ -267,42 +235,35 @@
                 <div class="space-y-3">
                   {#each elseIfCondition.actions as action, actionIndex (actionIndex)}
                     <div class="border p-3 rounded-md bg-gray-100">
-                      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-                        <div>
-                          <Label for="elseif-action-type-{conditionIndex}-{actionIndex}" class="mb-1 text-xs">Action Type</Label>
-                          <Select
-                            id="elseif-action-type-{conditionIndex}-{actionIndex}"
-                            bind:value={action.action_type}
-                            items={[
-                              { value: "", name: "Select action type" },
-                              ...commonActionTypes.map(type => ({ value: type, name: type }))
-                            ]}
-                          />
-                        </div>
-                        <div class="md:col-span-2 flex items-end">
-                          <Button
-                            size="sm"
-                            color="red"
-                            onclick={() => removeElseIfAction(conditionIndex, actionIndex)}
-                            class="w-full"
-                          >
-                            <TrashBinOutline class="w-4 h-4" />
-                          </Button>
-                        </div>
+                      <div class="flex items-center justify-between mb-3">
+                        <h6 class="text-xs font-semibold">Action #{actionIndex + 1}</h6>
+                        <Button
+                          size="sm"
+                          color="red"
+                          onclick={() => removeElseIfAction(conditionIndex, actionIndex)}
+                        >
+                          <TrashBinOutline class="w-4 h-4" />
+                        </Button>
                       </div>
-                      <div>
-                        <Label for="elseif-action-config-{conditionIndex}-{actionIndex}" class="mb-1 text-xs">Action Configuration (JSON)</Label>
-                        <Textarea
-                          id="elseif-action-config-{conditionIndex}-{actionIndex}"
-                          rows={3}
-                          value={actionConfigToString(action.action_config)}
-                          onchange={(e) => {
-                            action.action_config = stringToActionConfig(e.currentTarget.value);
-                          }}
-                          placeholder={`{"selector": "button", "message": "Clicked button"}`}
-                          class="font-mono text-sm"
+                      
+                      <div class="mb-3">
+                        <Label for="elseif-action-type-{conditionIndex}-{actionIndex}" class="mb-1 text-xs">Action Type *</Label>
+                        <Select
+                          id="elseif-action-type-{conditionIndex}-{actionIndex}"
+                          bind:value={action.action_type}
+                          items={[
+                            { value: "", name: "Select action type" },
+                            ...nestedActionTypes.map(type => ({ value: type, name: type }))
+                          ]}
                         />
                       </div>
+
+                      {#if action.action_type}
+                        <NestedActionConfigurator 
+                          actionType={action.action_type} 
+                          bind:config={action.action_config} 
+                        />
+                      {/if}
                     </div>
                   {/each}
                 </div>
@@ -327,45 +288,38 @@
     {#if config.else_actions?.length === 0}
       <p class="text-sm text-gray-500 italic">No else actions defined</p>
     {:else}
-      <div class="space-y-3">
+      <div class="space-y-4">
         {#each config.else_actions as action, index (index)}
-          <div class="border p-3 rounded-md bg-white">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-              <div>
-                <Label for="else-action-type-{index}" class="mb-1 text-xs">Action Type</Label>
-                <Select
-                  id="else-action-type-{index}"
-                  bind:value={action.action_type}
-                  items={[
-                    { value: "", name: "Select action type" },
-                    ...commonActionTypes.map(type => ({ value: type, name: type }))
-                  ]}
-                />
-              </div>
-              <div class="md:col-span-2 flex items-end">
-                <Button
-                  size="sm"
-                  color="red"
-                  onclick={() => removeElseAction(index)}
-                  class="w-full"
-                >
-                  <TrashBinOutline class="w-4 h-4" />
-                </Button>
-              </div>
+          <div class="border p-4 rounded-md bg-white">
+            <div class="flex items-center justify-between mb-3">
+              <h5 class="text-sm font-semibold">ELSE Action #{index + 1}</h5>
+              <Button
+                size="sm"
+                color="red"
+                onclick={() => removeElseAction(index)}
+              >
+                <TrashBinOutline class="w-4 h-4" />
+              </Button>
             </div>
-            <div>
-              <Label for="else-action-config-{index}" class="mb-1 text-xs">Action Configuration (JSON)</Label>
-              <Textarea
-                id="else-action-config-{index}"
-                rows={3}
-                value={actionConfigToString(action.action_config)}
-                onchange={(e) => {
-                  action.action_config = stringToActionConfig(e.currentTarget.value);
-                }}
-                placeholder={'{"message": "All conditions failed"}'}
-                class="font-mono text-sm"
+            
+            <div class="mb-4">
+              <Label for="else-action-type-{index}" class="mb-2">Action Type *</Label>
+              <Select
+                id="else-action-type-{index}"
+                bind:value={action.action_type}
+                items={[
+                  { value: "", name: "Select action type" },
+                  ...nestedActionTypes.map(type => ({ value: type, name: type }))
+                ]}
               />
             </div>
+
+            {#if action.action_type}
+              <NestedActionConfigurator 
+                actionType={action.action_type} 
+                bind:config={action.action_config} 
+              />
+            {/if}
           </div>
         {/each}
       </div>
