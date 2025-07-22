@@ -652,5 +652,3 @@
     background-color: #fafafa;
   }
 </style>
-</svelte:head>
-</script>
