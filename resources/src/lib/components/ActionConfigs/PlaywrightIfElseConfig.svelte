@@ -21,6 +21,7 @@
     if_actions: NestedAction[];
     else_if_conditions: ElseIfCondition[];
     else_actions: NestedAction[];
+    final_actions: NestedAction[];
   };
 
   let { config = $bindable() }: { config: PlaywrightIfElseConfig } = $props();
@@ -34,6 +35,7 @@
     if (!targetConfig.if_actions) targetConfig.if_actions = [];
     if (!targetConfig.else_if_conditions) targetConfig.else_if_conditions = [];
     if (!targetConfig.else_actions) targetConfig.else_actions = [];
+    if (!targetConfig.final_actions) targetConfig.final_actions = [];
   }
 
   // Apply defaults immediately for initial render
@@ -90,6 +92,14 @@
 
   function removeElseAction(index: number) {
     config.else_actions = config.else_actions.filter((_, i) => i !== index);
+  }
+
+  function addFinalAction() {
+    config.final_actions = [...config.final_actions, { action_type: "", action_config: {} }];
+  }
+
+  function removeFinalAction(index: number) {
+    config.final_actions = config.final_actions.filter((_, i) => i !== index);
   }
 </script>
 
@@ -169,6 +179,60 @@
         </div>
       {/if}
     </div>
+  </div>
+
+  <!-- FINAL Actions -->
+  <div class="border p-4 rounded-md bg-green-50 border-green-200">
+    <div class="flex items-center justify-between mb-3">
+      <h4 class="text-md font-semibold text-green-800">FINAL Actions</h4>
+      <Button size="sm" onclick={addFinalAction}>
+        <PlusOutline class="w-4 h-4 mr-2" />
+        Add Action
+      </Button>
+    </div>
+    <p class="text-sm text-green-700 mb-4">
+      These actions will always execute after the IF/ELSE IF/ELSE logic completes, regardless of which path was taken.
+    </p>
+
+    {#if config.final_actions?.length === 0}
+      <p class="text-sm text-gray-500 italic">No final actions defined</p>
+    {:else}
+      <div class="space-y-4">
+        {#each config.final_actions as action, index (index)}
+          <div class="border p-4 rounded-md bg-white">
+            <div class="flex items-center justify-between mb-3">
+              <h5 class="text-sm font-semibold">FINAL Action #{index + 1}</h5>
+              <Button
+                size="sm"
+                color="red"
+                onclick={() => removeFinalAction(index)}
+              >
+                <TrashBinOutline class="w-4 h-4" />
+              </Button>
+            </div>
+            
+            <div class="mb-4">
+              <Label for="final-action-type-{index}" class="mb-2">Action Type *</Label>
+              <Select
+                id="final-action-type-{index}"
+                bind:value={action.action_type}
+                items={[
+                  { value: "", name: "Select action type" },
+                  ...nestedActionTypes.map(type => ({ value: type, name: type }))
+                ]}
+              />
+            </div>
+
+            {#if action.action_type}
+              <NestedActionConfigurator 
+                actionType={action.action_type} 
+                bind:config={action.action_config} 
+              />
+            {/if}
+          </div>
+        {/each}
+      </div>
+    {/if}
   </div>
 
   <!-- ELSE IF Conditions -->

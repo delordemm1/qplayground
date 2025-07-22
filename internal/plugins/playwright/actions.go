@@ -690,6 +690,17 @@ func (a *IfElseAction) executeNestedActions(ctx context.Context, actions []inter
 	return nil
 }
 
+// executeFinalActions executes the final actions that should run regardless of condition outcomes
+func (a *IfElseAction) executeFinalActions(ctx context.Context, actionConfig map[string]interface{}, runContext *automation.RunContext) error {
+	finalActions, ok := actionConfig["final_actions"].([]interface{})
+	if !ok || len(finalActions) == 0 {
+		runContext.Logger.Info("No final actions to execute")
+		return nil
+	}
+
+	runContext.Logger.Info("Executing final actions", "count", len(finalActions))
+	return a.executeNestedActions(ctx, finalActions, runContext)
+}
 // LogAction implements logging messages
 type LogAction struct{}
 

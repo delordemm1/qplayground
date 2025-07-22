@@ -189,6 +189,14 @@ export function validateActionConfig(
           }
         }
       }
+      if (config.final_actions) {
+        for (const action of config.final_actions) {
+          if (!action.action_type) {
+            errors.push("All FINAL actions must have an action type");
+            break;
+          }
+        }
+      }
       break;
     case "playwright:log":
       if (!config.message) errors.push("Log message is required");
