@@ -11,7 +11,11 @@
   import { showSuccessToast, showErrorToast } from "$lib/utils/toast";
 
   // Import shared action configuration utilities
-  import { actionTypes, actionConfigComponents, validateActionConfig } from "$lib/utils/actionConfigMap";
+  import {
+    actionTypes,
+    actionConfigComponents,
+    validateActionConfig,
+  } from "$lib/utils/actionConfigMap";
 
   type Action = {
     ID: string;
@@ -32,7 +36,13 @@
     onClose: () => void;
   };
 
-  let { open = $bindable(), action = null, maxOrder = 0, onSave, onClose }: Props = $props();
+  let {
+    open = $bindable(),
+    action = null,
+    maxOrder = 0,
+    onSave,
+    onClose,
+  }: Props = $props();
 
   let actionType = $state("");
   let actionOrder = $state(0);
@@ -50,7 +60,7 @@
   $effect(() => {
     if (open) {
       actionType = action?.ActionType || "";
-      actionOrder = action?.ActionOrder || (maxOrder + 1);
+      actionOrder = action?.ActionOrder || maxOrder + 1;
       errors = {};
 
       // Parse existing JSON config into structured object
@@ -97,7 +107,10 @@
     }
 
     // Validate required fields based on action type
-    const validationErrors = validateActionConfig(actionType, currentActionConfig);
+    const validationErrors = validateActionConfig(
+      actionType,
+      currentActionConfig
+    );
     if (validationErrors.length > 0) {
       errors.action_config_json = validationErrors.join(", ");
       return;
@@ -139,22 +152,22 @@
 
   function handleDuplicateAction() {
     if (!action) return;
-    
+
     isDuplicating = true;
     // Reset to creation mode with copied data
     actionType = action.ActionType;
     actionOrder = (maxOrder || 0) + 1;
-    
+
     // Parse and copy the action config
     try {
-      currentActionConfig = action.ActionConfigJSON 
-        ? JSON.parse(action.ActionConfigJSON) 
+      currentActionConfig = action.ActionConfigJSON
+        ? JSON.parse(action.ActionConfigJSON)
         : {};
     } catch (e) {
       console.error("Failed to parse action config for duplication:", e);
       currentActionConfig = {};
     }
-    
+
     // Clear the action prop to signal creation mode
     action = null;
     isDuplicating = false;
@@ -166,12 +179,13 @@
     <Heading tag="h3" class="text-xl font-semibold mb-4">
       {action ? "Edit Action" : "Create New Action"}
     </Heading>
-    
+
     {#if action && !isDuplicating}
       <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
         <div class="flex items-center justify-between">
           <span class="text-sm text-blue-800">
-            Want to create a similar action? You can duplicate this action and modify it.
+            Want to create a similar action? You can duplicate this action and
+            modify it.
           </span>
           <button
             type="button"
@@ -226,7 +240,10 @@
             bind:config={currentActionConfig}
             {actionType}
           /> -->
-          <CurrentConfigComponent bind:config={currentActionConfig} {actionType} />
+          <CurrentConfigComponent
+            bind:config={currentActionConfig}
+            {actionType}
+          />
         </div>
       {:else}
         <p class="text-sm text-gray-500">
@@ -244,7 +261,7 @@
         </Button>
         <Button type="submit" color="primary" disabled={isLoading}>
           {#if isLoading}
-            <svg
+            <!-- <svg
               class="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
               xmlns="http://www.w3.org/2000/svg"
               fill="none"
@@ -252,28 +269,35 @@
             >
               <circle
                 class="opacity-25"
-                cx="12"
-          {#if actionType}
-            {#if CurrentConfigComponent}
-              <div class="border p-4 rounded-md bg-gray-50">
-                <h4 class="text-md font-semibold mb-3">Action Configuration</h4>
-                <CurrentConfigComponent bind:config={currentActionConfig} {actionType} />
-              </div>
-            {:else}
-              <div class="border p-4 rounded-md bg-gray-100">
-                <p class="text-sm text-gray-500 italic">
-                  No configuration available for action type: {actionType}
-                </p>
-              </div>
-            {/if}
+                cx="12" -->
+          {:else}
+            Add Action
+          {/if}
+        </Button>
+
+        <!-- {#if actionType}
+          {#if CurrentConfigComponent}
+            <div class="border p-4 rounded-md bg-gray-50">
+              <h4 class="text-md font-semibold mb-3">Action Configuration</h4>
+              <CurrentConfigComponent
+                bind:config={currentActionConfig}
+                {actionType}
+              />
+            </div>
           {:else}
             <div class="border p-4 rounded-md bg-gray-100">
-              <p class="text-sm text-gray-500">
-                Select an action type to configure its parameters.
+              <p class="text-sm text-gray-500 italic">
+                No configuration available for action type: {actionType}
               </p>
             </div>
           {/if}
-        </Button>
+        {:else}
+          <div class="border p-4 rounded-md bg-gray-100">
+            <p class="text-sm text-gray-500">
+              Select an action type to configure its parameters.
+            </p>
+          </div>
+        {/if} -->
       </div>
     </form>
   </div>
