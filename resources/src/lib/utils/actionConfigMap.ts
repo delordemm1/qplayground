@@ -22,6 +22,7 @@ import R2UploadConfig from "../components/ActionConfigs/R2UploadConfig.svelte";
 import R2DeleteConfig from "../components/ActionConfigs/R2DeleteConfig.svelte";
 import PlaywrightIfElseConfig from "../components/ActionConfigs/PlaywrightIfElseConfig.svelte";
 import PlaywrightLogConfig from "../components/ActionConfigs/PlaywrightLogConfig.svelte";
+import PlaywrightLoopUntilConfig from "../components/ActionConfigs/PlaywrightLoopUntilConfig.svelte";
 
 // List of supported action types
 export const actionTypes = [
@@ -48,12 +49,13 @@ export const actionTypes = [
   "playwright:reload",
   "playwright:go_back",
   "playwright:go_forward",
+  "playwright:loop_until",
   "r2:upload",
   "r2:delete",
 ];
 
 // List of action types that can be used in nested contexts (excluding if_else to prevent infinite nesting)
-export const nestedActionTypes = actionTypes.filter(type => type !== "playwright:if_else");
+export const nestedActionTypes = actionTypes.filter(type => type !== "playwright:loop_until");
 
 // Map action types to their respective config components
 export const actionConfigComponents: Record<string, any> = {
@@ -82,6 +84,7 @@ export const actionConfigComponents: Record<string, any> = {
   "r2:delete": R2DeleteConfig,
   "playwright:if_else": PlaywrightIfElseConfig,
   "playwright:log": PlaywrightLogConfig,
+  "playwright:loop_until": PlaywrightLoopUntilConfig,
 };
 
 // Validation function for action configurations
@@ -189,6 +192,31 @@ export function validateActionConfig(
       break;
     case "playwright:log":
       if (!config.message) errors.push("Log message is required");
+      break;
+    case "playwright:loop_until":
+      // At least one force stop mechanism is required
+      if (!config.max_loops && !config.timeout_ms) {
+        errors.push("Either max loops or timeout must be specified to prevent infinite loops");
+      }
+      if (config.max_loops && config.max_loops <= 0) {
+        errors.push("Max loops must be a positive number");
+      }
+      if (config.timeout_ms && config.timeout_ms <= 0) {
+        errors.push("Timeout must be a positive number");
+      }
+      // If selector is provided, condition_type is required
+      if (config.selector && !config.condition_type) {
+        errors.push("Condition type is required when selector is provided");
+      }
+      // Validate nested actions have action_type
+      if (config.loop_actions) {
+        for (const action of config.loop_actions) {
+          if (!action.action_type) {
+            errors.push("All loop actions must have an action type");
+            break;
+          }
+        }
+      }
       break;
   }
 
