@@ -43,11 +43,11 @@ type ScreenshotConfig struct {
 
 // NotificationConfig represents notification configuration
 type NotificationChannelConfig struct {
-	ID         string                 `json:"id"`
-	Type       string                 `json:"type"` // "slack", "email", "webhook"
-	OnComplete bool                   `json:"onComplete"`
-	OnError    bool                   `json:"onError"`
-	Config     map[string]interface{} `json:"config"`
+	ID         string         `json:"id"`
+	Type       string         `json:"type"` // "slack", "email", "webhook"
+	OnComplete bool           `json:"onComplete"`
+	OnError    bool           `json:"onError"`
+	Config     map[string]any `json:"config"`
 }
 
 // AutomationConfig represents the parsed automation configuration
@@ -187,7 +187,7 @@ func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *Autom
 	}
 
 	// 4. Execute runs based on configuration
-	var allLogs []map[string]interface{}
+	var allLogs []map[string]any
 	var allOutputFiles []string
 	var executionError error
 
@@ -268,7 +268,7 @@ func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *Autom
 }
 
 // executeSingleRun executes a single run of the automation
-func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, automationConfig *AutomationConfig, run *AutomationRun, loopIndex int) ([]map[string]interface{}, []string, error) {
+func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, automationConfig *AutomationConfig, run *AutomationRun, loopIndex int) ([]map[string]any, []string, error) {
 	// Create a ticker for polling cancellation status every 5 seconds
 	statusTicker := time.NewTicker(5 * time.Second)
 	defer statusTicker.Stop()
@@ -297,7 +297,7 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 
 	// Launch browser
 	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-		Headless: playwright.Bool(false), // Run headless for automation
+		Headless: playwright.Bool(true), // Run headless for automation
 		Args: []string{
 			"--no-sandbox",
 			"--disable-setuid-sandbox",
@@ -386,7 +386,7 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 			startTime := time.Now()
 
 			// Parse action config
-			actionConfigMap := make(map[string]interface{})
+			actionConfigMap := make(map[string]any)
 			if action.ActionConfigJSON != "" {
 				if jsonErr := json.Unmarshal([]byte(action.ActionConfigJSON), &actionConfigMap); jsonErr != nil {
 					return nil, nil, fmt.Errorf("failed to parse action config JSON for action %s: %w", action.ActionType, jsonErr)
@@ -474,8 +474,8 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 }
 
 // resolveVariablesInConfig resolves variables in action configuration
-func (r *Runner) resolveVariablesInConfig(config map[string]interface{}, varContext *VariableContext, automationConfig *AutomationConfig) (map[string]interface{}, error) {
-	resolved := make(map[string]interface{})
+func (r *Runner) resolveVariablesInConfig(config map[string]any, varContext *VariableContext, automationConfig *AutomationConfig) (map[string]any, error) {
+	resolved := make(map[string]any)
 
 	for key, value := range config {
 		switch v := value.(type) {
@@ -485,7 +485,7 @@ func (r *Runner) resolveVariablesInConfig(config map[string]interface{}, varCont
 				return nil, fmt.Errorf("failed to resolve variables in field '%s': %w", key, err)
 			}
 			resolved[key] = resolvedValue
-		case map[string]interface{}:
+		case map[string]any:
 			// Recursively resolve nested objects
 			nestedResolved, err := r.resolveVariablesInConfig(v, varContext, automationConfig)
 			if err != nil {
@@ -605,7 +605,7 @@ func (r *Runner) generateFakerValue(method string) string {
 }
 
 // sendNotifications sends notifications based on the automation configuration
-func (r *Runner) sendNotifications(ctx context.Context, automation *Automation, run *AutomationRun, automationConfig *AutomationConfig, logs []map[string]interface{}, outputFiles []string) {
+func (r *Runner) sendNotifications(ctx context.Context, automation *Automation, run *AutomationRun, automationConfig *AutomationConfig, logs []map[string]any, outputFiles []string) {
 	if len(automationConfig.Notifications) == 0 {
 		return // No notifications configured
 	}

@@ -553,7 +553,7 @@ func (a *GoForwardAction) Execute(ctx context.Context, actionConfig map[string]i
 // IfElseAction implements conditional logic with multiple else-if blocks
 type IfElseAction struct{}
 
-func (a *IfElseAction) Execute(ctx context.Context, actionConfig map[string]interface{}, runContext *automation.RunContext) error {
+func (a *IfElseAction) Execute(ctx context.Context, actionConfig map[string]any, runContext *automation.RunContext) error {
 	selector, ok := actionConfig["selector"].(string)
 	if !ok || selector == "" {
 		return fmt.Errorf("playwright:if_else action requires a 'selector' string in config")
@@ -623,6 +623,12 @@ func (a *IfElseAction) Execute(ctx context.Context, actionConfig map[string]inte
 		runContext.Logger.Info("All conditions failed, executing else_actions", "count", len(elseActions))
 		return a.executeNestedActions(ctx, elseActions, runContext)
 	}
+
+	// Execute final_actions
+	// if finalActions, ok := actionConfig["final_actions"].([]interface{}); ok {
+	// 	runContext.Logger.Info("No conditions met and no else actions defined, executing final_actions", "count", len(finalActions))
+	// 	return a.executeNestedActions(ctx, finalActions, runContext)
+	// }
 
 	runContext.Logger.Info("No conditions met and no else actions defined")
 	return nil
@@ -701,6 +707,7 @@ func (a *IfElseAction) executeFinalActions(ctx context.Context, actionConfig map
 	runContext.Logger.Info("Executing final actions", "count", len(finalActions))
 	return a.executeNestedActions(ctx, finalActions, runContext)
 }
+
 // LogAction implements logging messages
 type LogAction struct{}
 
@@ -732,7 +739,7 @@ func (a *LogAction) Execute(ctx context.Context, actionConfig map[string]interfa
 // LoopUntilAction implements looping until a condition is met or force stop
 type LoopUntilAction struct{}
 
-func (a *LoopUntilAction) Execute(ctx context.Context, actionConfig map[string]interface{}, runContext *automation.RunContext) error {
+func (a *LoopUntilAction) Execute(ctx context.Context, actionConfig map[string]any, runContext *automation.RunContext) error {
 	runContext.Logger.Info("Executing playwright:loop_until")
 
 	// Extract configuration
@@ -741,7 +748,7 @@ func (a *LoopUntilAction) Execute(ctx context.Context, actionConfig map[string]i
 	maxLoops, _ := actionConfig["max_loops"].(float64)
 	timeoutMs, _ := actionConfig["timeout_ms"].(float64)
 	failOnForceStop, _ := actionConfig["fail_on_force_stop"].(bool)
-	loopActionsInterface, _ := actionConfig["loop_actions"].([]interface{})
+	loopActionsInterface, _ := actionConfig["loop_actions"].([]any)
 
 	// Validate that at least one force stop condition is provided
 	if maxLoops <= 0 && timeoutMs <= 0 {
@@ -754,9 +761,9 @@ func (a *LoopUntilAction) Execute(ctx context.Context, actionConfig map[string]i
 	}
 
 	// Convert loop actions to proper format
-	var loopActions []map[string]interface{}
+	var loopActions []map[string]any
 	for _, actionInterface := range loopActionsInterface {
-		if actionMap, ok := actionInterface.(map[string]interface{}); ok {
+		if actionMap, ok := actionInterface.(map[string]any); ok {
 			loopActions = append(loopActions, actionMap)
 		}
 	}
@@ -845,9 +852,9 @@ func (a *LoopUntilAction) Execute(ctx context.Context, actionConfig map[string]i
 				continue
 			}
 
-			actionConfig, ok := actionData["action_config"].(map[string]interface{})
+			actionConfig, ok := actionData["action_config"].(map[string]any)
 			if !ok {
-				actionConfig = make(map[string]interface{})
+				actionConfig = make(map[string]any)
 			}
 
 			runContext.Logger.Info("Executing loop action", "loop_count", loopCount, "action_index", actionIndex, "action_type", actionType)

@@ -31,7 +31,8 @@
 
   function applyDefaults(targetConfig: PlaywrightIfElseConfig) {
     if (!targetConfig.selector) targetConfig.selector = "";
-    if (!targetConfig.condition_type) targetConfig.condition_type = "is_enabled";
+    if (!targetConfig.condition_type)
+      targetConfig.condition_type = "is_enabled";
     if (!targetConfig.if_actions) targetConfig.if_actions = [];
     if (!targetConfig.else_if_conditions) targetConfig.else_if_conditions = [];
     if (!targetConfig.else_actions) targetConfig.else_actions = [];
@@ -56,7 +57,10 @@
 
   // Helper functions for managing nested actions
   function addIfAction() {
-    config.if_actions = [...config.if_actions, { action_type: "", action_config: {} }];
+    config.if_actions = [
+      ...config.if_actions,
+      { action_type: "", action_config: {} },
+    ];
   }
 
   function removeIfAction(index: number) {
@@ -66,28 +70,35 @@
   function addElseIfCondition() {
     config.else_if_conditions = [
       ...config.else_if_conditions,
-      { selector: "", condition_type: "is_enabled", actions: [] }
+      { selector: "", condition_type: "is_enabled", actions: [] },
     ];
   }
 
   function removeElseIfCondition(index: number) {
-    config.else_if_conditions = config.else_if_conditions.filter((_, i) => i !== index);
+    config.else_if_conditions = config.else_if_conditions.filter(
+      (_, i) => i !== index
+    );
   }
 
   function addElseIfAction(conditionIndex: number) {
     config.else_if_conditions[conditionIndex].actions = [
       ...config.else_if_conditions[conditionIndex].actions,
-      { action_type: "", action_config: {} }
+      { action_type: "", action_config: {} },
     ];
   }
 
   function removeElseIfAction(conditionIndex: number, actionIndex: number) {
-    config.else_if_conditions[conditionIndex].actions = 
-      config.else_if_conditions[conditionIndex].actions.filter((_, i) => i !== actionIndex);
+    config.else_if_conditions[conditionIndex].actions =
+      config.else_if_conditions[conditionIndex].actions.filter(
+        (_, i) => i !== actionIndex
+      );
   }
 
   function addElseAction() {
-    config.else_actions = [...config.else_actions, { action_type: "", action_config: {} }];
+    config.else_actions = [
+      ...config.else_actions,
+      { action_type: "", action_config: {} },
+    ];
   }
 
   function removeElseAction(index: number) {
@@ -95,7 +106,10 @@
   }
 
   function addFinalAction() {
-    config.final_actions = [...config.final_actions, { action_type: "", action_config: {} }];
+    config.final_actions = [
+      ...config.final_actions,
+      { action_type: "", action_config: {} },
+    ];
   }
 
   function removeFinalAction(index: number) {
@@ -107,7 +121,7 @@
   <!-- Main Condition -->
   <div class="border p-4 rounded-md bg-gray-50">
     <h4 class="text-md font-semibold mb-3">Main Condition (IF)</h4>
-    
+
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
       <div>
         <Label for="if-selector" class="mb-2">Selector *</Label>
@@ -132,13 +146,15 @@
     <!-- IF Actions -->
     <div>
       <div class="flex items-center justify-between mb-3">
-        <Label class="text-sm font-medium">Actions to execute if condition is TRUE</Label>
+        <Label class="text-sm font-medium"
+          >Actions to execute if condition is TRUE</Label
+        >
         <Button size="sm" onclick={addIfAction}>
           <PlusOutline class="w-4 h-4 mr-2" />
           Add Action
         </Button>
       </div>
-      
+
       {#if config.if_actions?.length === 0}
         <p class="text-sm text-gray-500 italic">No actions defined</p>
       {:else}
@@ -155,23 +171,28 @@
                   <TrashBinOutline class="w-4 h-4" />
                 </Button>
               </div>
-              
+
               <div class="mb-4">
-                <Label for="if-action-type-{index}" class="mb-2">Action Type *</Label>
+                <Label for="if-action-type-{index}" class="mb-2"
+                  >Action Type *</Label
+                >
                 <Select
                   id="if-action-type-{index}"
                   bind:value={action.action_type}
                   items={[
                     { value: "", name: "Select action type" },
-                    ...nestedActionTypes.map(type => ({ value: type, name: type }))
+                    ...nestedActionTypes.map((type) => ({
+                      value: type,
+                      name: type,
+                    })),
                   ]}
                 />
               </div>
 
               {#if action.action_type}
-                <NestedActionConfigurator 
-                  actionType={action.action_type} 
-                  bind:config={action.action_config} 
+                <NestedActionConfigurator
+                  actionType={action.action_type}
+                  bind:config={action.action_config}
                 />
               {/if}
             </div>
@@ -179,60 +200,6 @@
         </div>
       {/if}
     </div>
-  </div>
-
-  <!-- FINAL Actions -->
-  <div class="border p-4 rounded-md bg-green-50 border-green-200">
-    <div class="flex items-center justify-between mb-3">
-      <h4 class="text-md font-semibold text-green-800">FINAL Actions</h4>
-      <Button size="sm" onclick={addFinalAction}>
-        <PlusOutline class="w-4 h-4 mr-2" />
-        Add Action
-      </Button>
-    </div>
-    <p class="text-sm text-green-700 mb-4">
-      These actions will always execute after the IF/ELSE IF/ELSE logic completes, regardless of which path was taken.
-    </p>
-
-    {#if config.final_actions?.length === 0}
-      <p class="text-sm text-gray-500 italic">No final actions defined</p>
-    {:else}
-      <div class="space-y-4">
-        {#each config.final_actions as action, index (index)}
-          <div class="border p-4 rounded-md bg-white">
-            <div class="flex items-center justify-between mb-3">
-              <h5 class="text-sm font-semibold">FINAL Action #{index + 1}</h5>
-              <Button
-                size="sm"
-                color="red"
-                onclick={() => removeFinalAction(index)}
-              >
-                <TrashBinOutline class="w-4 h-4" />
-              </Button>
-            </div>
-            
-            <div class="mb-4">
-              <Label for="final-action-type-{index}" class="mb-2">Action Type *</Label>
-              <Select
-                id="final-action-type-{index}"
-                bind:value={action.action_type}
-                items={[
-                  { value: "", name: "Select action type" },
-                  ...nestedActionTypes.map(type => ({ value: type, name: type }))
-                ]}
-              />
-            </div>
-
-            {#if action.action_type}
-              <NestedActionConfigurator 
-                actionType={action.action_type} 
-                bind:config={action.action_config} 
-              />
-            {/if}
-          </div>
-        {/each}
-      </div>
-    {/if}
   </div>
 
   <!-- ELSE IF Conditions -->
@@ -252,7 +219,9 @@
         {#each config.else_if_conditions as elseIfCondition, conditionIndex (conditionIndex)}
           <div class="border p-4 rounded-md bg-white">
             <div class="flex items-center justify-between mb-3">
-              <h5 class="text-sm font-semibold">Else If #{conditionIndex + 1}</h5>
+              <h5 class="text-sm font-semibold">
+                Else If #{conditionIndex + 1}
+              </h5>
               <Button
                 size="sm"
                 color="red"
@@ -261,10 +230,12 @@
                 <TrashBinOutline class="w-4 h-4" />
               </Button>
             </div>
-            
+
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               <div>
-                <Label for="elseif-selector-{conditionIndex}" class="mb-2">Selector *</Label>
+                <Label for="elseif-selector-{conditionIndex}" class="mb-2"
+                  >Selector *</Label
+                >
                 <Input
                   id="elseif-selector-{conditionIndex}"
                   type="text"
@@ -274,7 +245,9 @@
                 />
               </div>
               <div>
-                <Label for="elseif-condition-type-{conditionIndex}" class="mb-2">Condition *</Label>
+                <Label for="elseif-condition-type-{conditionIndex}" class="mb-2"
+                  >Condition *</Label
+                >
                 <Select
                   id="elseif-condition-type-{conditionIndex}"
                   bind:value={elseIfCondition.condition_type}
@@ -286,13 +259,18 @@
             <!-- Else If Actions -->
             <div>
               <div class="flex items-center justify-between mb-3">
-                <Label class="text-sm font-medium">Actions to execute if this condition is TRUE</Label>
-                <Button size="sm" onclick={() => addElseIfAction(conditionIndex)}>
+                <Label class="text-sm font-medium"
+                  >Actions to execute if this condition is TRUE</Label
+                >
+                <Button
+                  size="sm"
+                  onclick={() => addElseIfAction(conditionIndex)}
+                >
                   <PlusOutline class="w-4 h-4 mr-2" />
                   Add Action
                 </Button>
               </div>
-              
+
               {#if elseIfCondition.actions?.length === 0}
                 <p class="text-sm text-gray-500 italic">No actions defined</p>
               {:else}
@@ -300,32 +278,41 @@
                   {#each elseIfCondition.actions as action, actionIndex (actionIndex)}
                     <div class="border p-3 rounded-md bg-gray-100">
                       <div class="flex items-center justify-between mb-3">
-                        <h6 class="text-xs font-semibold">Action #{actionIndex + 1}</h6>
+                        <h6 class="text-xs font-semibold">
+                          Action #{actionIndex + 1}
+                        </h6>
                         <Button
                           size="sm"
                           color="red"
-                          onclick={() => removeElseIfAction(conditionIndex, actionIndex)}
+                          onclick={() =>
+                            removeElseIfAction(conditionIndex, actionIndex)}
                         >
                           <TrashBinOutline class="w-4 h-4" />
                         </Button>
                       </div>
-                      
+
                       <div class="mb-3">
-                        <Label for="elseif-action-type-{conditionIndex}-{actionIndex}" class="mb-1 text-xs">Action Type *</Label>
+                        <Label
+                          for="elseif-action-type-{conditionIndex}-{actionIndex}"
+                          class="mb-1 text-xs">Action Type *</Label
+                        >
                         <Select
                           id="elseif-action-type-{conditionIndex}-{actionIndex}"
                           bind:value={action.action_type}
                           items={[
                             { value: "", name: "Select action type" },
-                            ...nestedActionTypes.map(type => ({ value: type, name: type }))
+                            ...nestedActionTypes.map((type) => ({
+                              value: type,
+                              name: type,
+                            })),
                           ]}
                         />
                       </div>
 
                       {#if action.action_type}
-                        <NestedActionConfigurator 
-                          actionType={action.action_type} 
-                          bind:config={action.action_config} 
+                        <NestedActionConfigurator
+                          actionType={action.action_type}
+                          bind:config={action.action_config}
                         />
                       {/if}
                     </div>
@@ -365,23 +352,88 @@
                 <TrashBinOutline class="w-4 h-4" />
               </Button>
             </div>
-            
+
             <div class="mb-4">
-              <Label for="else-action-type-{index}" class="mb-2">Action Type *</Label>
+              <Label for="else-action-type-{index}" class="mb-2"
+                >Action Type *</Label
+              >
               <Select
                 id="else-action-type-{index}"
                 bind:value={action.action_type}
                 items={[
                   { value: "", name: "Select action type" },
-                  ...nestedActionTypes.map(type => ({ value: type, name: type }))
+                  ...nestedActionTypes.map((type) => ({
+                    value: type,
+                    name: type,
+                  })),
                 ]}
               />
             </div>
 
             {#if action.action_type}
-              <NestedActionConfigurator 
-                actionType={action.action_type} 
-                bind:config={action.action_config} 
+              <NestedActionConfigurator
+                actionType={action.action_type}
+                bind:config={action.action_config}
+              />
+            {/if}
+          </div>
+        {/each}
+      </div>
+    {/if}
+  </div>
+
+  <!-- FINAL Actions -->
+  <div class="border p-4 rounded-md bg-green-50 border-green-200">
+    <div class="flex items-center justify-between mb-3">
+      <h4 class="text-md font-semibold text-green-800">FINAL Actions</h4>
+      <Button size="sm" onclick={addFinalAction}>
+        <PlusOutline class="w-4 h-4 mr-2" />
+        Add Action
+      </Button>
+    </div>
+    <p class="text-sm text-green-700 mb-4">
+      These actions will always execute after the IF/ELSE IF/ELSE logic
+      completes, regardless of which path was taken.
+    </p>
+
+    {#if config.final_actions?.length === 0}
+      <p class="text-sm text-gray-500 italic">No final actions defined</p>
+    {:else}
+      <div class="space-y-4">
+        {#each config.final_actions as action, index (index)}
+          <div class="border p-4 rounded-md bg-white">
+            <div class="flex items-center justify-between mb-3">
+              <h5 class="text-sm font-semibold">FINAL Action #{index + 1}</h5>
+              <Button
+                size="sm"
+                color="red"
+                onclick={() => removeFinalAction(index)}
+              >
+                <TrashBinOutline class="w-4 h-4" />
+              </Button>
+            </div>
+
+            <div class="mb-4">
+              <Label for="final-action-type-{index}" class="mb-2"
+                >Action Type *</Label
+              >
+              <Select
+                id="final-action-type-{index}"
+                bind:value={action.action_type}
+                items={[
+                  { value: "", name: "Select action type" },
+                  ...nestedActionTypes.map((type) => ({
+                    value: type,
+                    name: type,
+                  })),
+                ]}
+              />
+            </div>
+
+            {#if action.action_type}
+              <NestedActionConfigurator
+                actionType={action.action_type}
+                bind:config={action.action_config}
               />
             {/if}
           </div>
