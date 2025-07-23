@@ -504,6 +504,8 @@ func (a *ScreenshotAction) Execute(ctx context.Context, actionConfig map[string]
 			case runContext.EventCh <- automation.RunEvent{
 				Type:       automation.RunEventTypeOutputFile,
 				Timestamp:  time.Now(),
+				StepID:     runContext.StepID,
+				ActionID:   runContext.ActionID,
 				StepName:   runContext.StepName,
 				ActionType: "playwright:screenshot",
 				OutputFile: publicURL,
