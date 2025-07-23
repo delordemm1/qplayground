@@ -197,10 +197,8 @@ func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *Autom
 		var mu sync.Mutex
 
 		for i := 0; i < runCount; i++ {
-			wg.Add(1)
-			go func(loopIndex int) {
-				defer wg.Done()
-
+			wg.Go(func() {
+				loopIndex := i
 				logs, outputFiles, err := r.executeSingleRun(ctx, automation, &automationConfig, run, loopIndex)
 
 				mu.Lock()
@@ -210,7 +208,7 @@ func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *Autom
 					executionError = err // Capture first error
 				}
 				mu.Unlock()
-			}(i)
+			})
 		}
 		wg.Wait()
 	} else {
