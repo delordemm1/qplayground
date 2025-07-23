@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/delordemm1/qplayground/internal/modules/automation"
 )
@@ -14,10 +15,49 @@ func init() {
 	automation.RegisterAction("r2:list", func() automation.PluginAction { return &ListAction{} })
 }
 
+// Helper function to send success event for R2 actions
+func sendR2SuccessEvent(runContext *automation.RunContext, actionType, message string, duration time.Duration) {
+	if runContext.EventCh != nil {
+		select {
+		case runContext.EventCh <- automation.RunEvent{
+			Type:       automation.RunEventTypeLog,
+			Timestamp:  time.Now(),
+			StepName:   runContext.StepName,
+			ActionType: actionType,
+			Message:    message,
+			Duration:   duration.Milliseconds(),
+			LoopIndex:  runContext.LoopIndex,
+		}:
+		default:
+			// Channel is full, skip this event to avoid blocking
+		}
+	}
+}
+
+// Helper function to send error event for R2 actions
+func sendR2ErrorEvent(runContext *automation.RunContext, actionType, errorMsg string, duration time.Duration) {
+	if runContext.EventCh != nil {
+		select {
+		case runContext.EventCh <- automation.RunEvent{
+			Type:       automation.RunEventTypeError,
+			Timestamp:  time.Now(),
+			StepName:   runContext.StepName,
+			ActionType: actionType,
+			Error:      errorMsg,
+			Duration:   duration.Milliseconds(),
+			LoopIndex:  runContext.LoopIndex,
+		}:
+		default:
+			// Channel is full, skip this event to avoid blocking
+		}
+	}
+}
+
 // UploadAction implements uploading files to R2
 type UploadAction struct{}
 
 func (a *UploadAction) Execute(ctx context.Context, actionConfig map[string]interface{}, runContext *automation.RunContext) error {
+	startTime := time.Now()
 	key, ok := actionConfig["key"].(string)
 	if !ok || key == "" {
 		return fmt.Errorf("r2:upload action requires a 'key' string in config")
@@ -58,11 +98,33 @@ func (a *UploadAction) Execute(ctx context.Context, actionConfig map[string]inte
 	
 	// Upload to R2
 	publicURL, err := runContext.StorageService.UploadFile(ctx, key, reader, contentType)
+	duration := time.Since(startTime)
+	
 	if err != nil {
+		sendR2ErrorEvent(runContext, "r2:upload", fmt.Sprintf("failed to upload file to R2: %v", err), duration)
 		return fmt.Errorf("failed to upload file to R2: %w", err)
 	}
 	
 	runContext.Logger.Info("File uploaded to R2", "key", key, "url", publicURL)
+	
+	// Send output file event
+	if runContext.EventCh != nil {
+		select {
+		case runContext.EventCh <- automation.RunEvent{
+			Type:       automation.RunEventTypeOutputFile,
+			Timestamp:  time.Now(),
+			StepName:   runContext.StepName,
+			ActionType: "r2:upload",
+			OutputFile: publicURL,
+			Duration:   duration.Milliseconds(),
+			LoopIndex:  runContext.LoopIndex,
+		}:
+		default:
+			// Channel is full, skip this event to avoid blocking
+		}
+	}
+	
+	sendR2SuccessEvent(runContext, "r2:upload", fmt.Sprintf("Successfully uploaded file to R2: %s", key), duration)
 	return nil
 }
 
@@ -70,6 +132,7 @@ func (a *UploadAction) Execute(ctx context.Context, actionConfig map[string]inte
 type DeleteAction struct{}
 
 func (a *DeleteAction) Execute(ctx context.Context, actionConfig map[string]interface{}, runContext *automation.RunContext) error {
+	startTime := time.Now()
 	key, ok := actionConfig["key"].(string)
 	if !ok || key == "" {
 		return fmt.Errorf("r2:delete action requires a 'key' string in config")
@@ -78,11 +141,15 @@ func (a *DeleteAction) Execute(ctx context.Context, actionConfig map[string]inte
 	runContext.Logger.Info("Executing r2:delete", "key", key)
 	
 	err := runContext.StorageService.DeleteFile(ctx, key)
+	duration := time.Since(startTime)
+	
 	if err != nil {
+		sendR2ErrorEvent(runContext, "r2:delete", fmt.Sprintf("failed to delete file from R2: %v", err), duration)
 		return fmt.Errorf("failed to delete file from R2: %w", err)
 	}
 	
 	runContext.Logger.Info("File deleted from R2", "key", key)
+	sendR2SuccessEvent(runContext, "r2:delete", fmt.Sprintf("Successfully deleted file from R2: %s", key), duration)
 	return nil
 }
 
@@ -90,6 +157,7 @@ func (a *DeleteAction) Execute(ctx context.Context, actionConfig map[string]inte
 type ListAction struct{}
 
 func (a *ListAction) Execute(ctx context.Context, actionConfig map[string]interface{}, runContext *automation.RunContext) error {
+	startTime := time.Now()
 	prefix, _ := actionConfig["prefix"].(string) // Optional prefix filter
 	
 	runContext.Logger.Info("Executing r2:list", "prefix", prefix)
@@ -98,5 +166,7 @@ func (a *ListAction) Execute(ctx context.Context, actionConfig map[string]interf
 	// For now, we'll just log that the action was called
 	runContext.Logger.Info("R2 list operation completed", "prefix", prefix)
 	
+	duration := time.Since(startTime)
+	sendR2SuccessEvent(runContext, "r2:list", fmt.Sprintf("Successfully listed R2 files with prefix: %s", prefix), duration)
 	return nil
 }

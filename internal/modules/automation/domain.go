@@ -11,6 +11,30 @@ import (
 	"github.com/playwright-community/playwright-go"
 )
 
+// RunEventType represents the type of event emitted during automation execution
+type RunEventType string
+
+const (
+	RunEventTypeLog        RunEventType = "log"
+	RunEventTypeError      RunEventType = "error"
+	RunEventTypeOutputFile RunEventType = "output_file"
+	RunEventTypeStep       RunEventType = "step"
+)
+
+// RunEvent represents an event emitted during automation execution
+type RunEvent struct {
+	Type         RunEventType           `json:"type"`
+	Timestamp    time.Time              `json:"timestamp"`
+	StepName     string                 `json:"step_name,omitempty"`
+	ActionType   string                 `json:"action_type,omitempty"`
+	Message      string                 `json:"message,omitempty"`
+	Error        string                 `json:"error,omitempty"`
+	OutputFile   string                 `json:"output_file,omitempty"`
+	Duration     int64                  `json:"duration_ms,omitempty"`
+	LoopIndex    int                    `json:"loop_index,omitempty"`
+	Data         map[string]interface{} `json:"data,omitempty"`
+}
+
 // RunContext holds shared resources and state for a single automation run.
 // This will be passed to each plugin action.
 type RunContext struct {
@@ -18,6 +42,9 @@ type RunContext struct {
 	PlaywrightPage    playwright.Page
 	StorageService    storage.StorageService
 	Logger            *slog.Logger
+	EventCh           chan RunEvent
+	StepName          string // Current step name for context
+	LoopIndex         int    // Current loop index for multi-run context
 }
 
 // PluginAction defines the interface for any executable action provided by a plugin.
