@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/delordemm1/qplayground/internal/modules/automation"
@@ -45,6 +46,8 @@ func sendSuccessEvent(runContext *automation.RunContext, actionType, message str
 			Type:       automation.RunEventTypeLog,
 			Timestamp:  time.Now(),
 			StepName:   runContext.StepName,
+			StepID:     runContext.StepID,
+			ActionID:   runContext.ActionID,
 			ActionType: actionType,
 			Message:    message,
 			Duration:   duration.Milliseconds(),
@@ -64,6 +67,8 @@ func sendErrorEvent(runContext *automation.RunContext, actionType, errorMsg stri
 			Type:       automation.RunEventTypeError,
 			Timestamp:  time.Now(),
 			StepName:   runContext.StepName,
+			StepID:     runContext.StepID,
+			ActionID:   runContext.ActionID,
 			ActionType: actionType,
 			Error:      errorMsg,
 			Duration:   duration.Milliseconds(),
@@ -109,12 +114,12 @@ func (a *GotoAction) Execute(ctx context.Context, actionConfig map[string]interf
 
 	_, err := runContext.PlaywrightPage.Goto(url, options)
 	duration := time.Since(startTime)
-	
+
 	if err != nil {
 		sendErrorEvent(runContext, "playwright:goto", err.Error(), duration)
 		return err
 	}
-	
+
 	sendSuccessEvent(runContext, "playwright:goto", fmt.Sprintf("Successfully navigated to %s", url), duration)
 	return err
 }
@@ -147,12 +152,12 @@ func (a *ClickAction) Execute(ctx context.Context, actionConfig map[string]inter
 
 	err = runContext.PlaywrightPage.Locator(selector).Click(options)
 	duration := time.Since(startTime)
-	
+
 	if err != nil {
 		sendErrorEvent(runContext, "playwright:click", err.Error(), duration)
 		return err
 	}
-	
+
 	sendSuccessEvent(runContext, "playwright:click", fmt.Sprintf("Successfully clicked element %s", selector), duration)
 	return nil
 }
@@ -182,12 +187,12 @@ func (a *FillAction) Execute(ctx context.Context, actionConfig map[string]interf
 
 	err = runContext.PlaywrightPage.Locator(selector).Fill(value, options)
 	duration := time.Since(startTime)
-	
+
 	if err != nil {
 		sendErrorEvent(runContext, "playwright:fill", err.Error(), duration)
 		return err
 	}
-	
+
 	sendSuccessEvent(runContext, "playwright:fill", fmt.Sprintf("Successfully filled element %s with value", selector), duration)
 	return nil
 }
@@ -217,12 +222,12 @@ func (a *TypeAction) Execute(ctx context.Context, actionConfig map[string]interf
 
 	err = runContext.PlaywrightPage.Locator(selector).Type(text, options)
 	duration := time.Since(startTime)
-	
+
 	if err != nil {
 		sendErrorEvent(runContext, "playwright:type", err.Error(), duration)
 		return err
 	}
-	
+
 	sendSuccessEvent(runContext, "playwright:type", fmt.Sprintf("Successfully typed text into element %s", selector), duration)
 	return nil
 }
@@ -252,12 +257,12 @@ func (a *PressAction) Execute(ctx context.Context, actionConfig map[string]inter
 
 	err = runContext.PlaywrightPage.Locator(selector).Press(key, options)
 	duration := time.Since(startTime)
-	
+
 	if err != nil {
 		sendErrorEvent(runContext, "playwright:press", err.Error(), duration)
 		return err
 	}
-	
+
 	sendSuccessEvent(runContext, "playwright:press", fmt.Sprintf("Successfully pressed key %s on element %s", key, selector), duration)
 	return nil
 }
@@ -283,12 +288,12 @@ func (a *CheckAction) Execute(ctx context.Context, actionConfig map[string]inter
 
 	err = runContext.PlaywrightPage.Locator(selector).Check(options)
 	duration := time.Since(startTime)
-	
+
 	if err != nil {
 		sendErrorEvent(runContext, "playwright:check", err.Error(), duration)
 		return err
 	}
-	
+
 	sendSuccessEvent(runContext, "playwright:check", fmt.Sprintf("Successfully checked element %s", selector), duration)
 	return nil
 }
@@ -314,12 +319,12 @@ func (a *UncheckAction) Execute(ctx context.Context, actionConfig map[string]int
 
 	err = runContext.PlaywrightPage.Locator(selector).Uncheck(options)
 	duration := time.Since(startTime)
-	
+
 	if err != nil {
 		sendErrorEvent(runContext, "playwright:uncheck", err.Error(), duration)
 		return err
 	}
-	
+
 	sendSuccessEvent(runContext, "playwright:uncheck", fmt.Sprintf("Successfully unchecked element %s", selector), duration)
 	return nil
 }
@@ -361,12 +366,12 @@ func (a *SelectOptionAction) Execute(ctx context.Context, actionConfig map[strin
 
 	_, err = runContext.PlaywrightPage.Locator(selector).SelectOption(selectOptions)
 	duration := time.Since(startTime)
-	
+
 	if err != nil {
 		sendErrorEvent(runContext, "playwright:select_option", err.Error(), duration)
 		return err
 	}
-	
+
 	sendSuccessEvent(runContext, "playwright:select_option", fmt.Sprintf("Successfully selected option for element %s", selector), duration)
 	return nil
 }
@@ -396,12 +401,12 @@ func (a *WaitForSelectorAction) Execute(ctx context.Context, actionConfig map[st
 
 	_, err = runContext.PlaywrightPage.WaitForSelector(selector, options)
 	duration := time.Since(startTime)
-	
+
 	if err != nil {
 		sendErrorEvent(runContext, "playwright:wait_for_selector", err.Error(), duration)
 		return err
 	}
-	
+
 	sendSuccessEvent(runContext, "playwright:wait_for_selector", fmt.Sprintf("Successfully waited for selector %s", selector), duration)
 	return nil
 }
@@ -420,7 +425,7 @@ func (a *WaitForTimeoutAction) Execute(ctx context.Context, actionConfig map[str
 
 	runContext.PlaywrightPage.WaitForTimeout(timeout)
 	duration := time.Since(startTime)
-	
+
 	sendSuccessEvent(runContext, "playwright:wait_for_timeout", fmt.Sprintf("Successfully waited for %v ms", timeout), duration)
 	return nil
 }
@@ -453,7 +458,7 @@ func (a *ScreenshotAction) Execute(ctx context.Context, actionConfig map[string]
 	// Take screenshot
 	screenshotBytes, err := runContext.PlaywrightPage.Screenshot(options)
 	duration := time.Since(startTime)
-	
+
 	if err != nil {
 		sendErrorEvent(runContext, "playwright:screenshot", fmt.Sprintf("failed to take screenshot: %v", err), duration)
 		return fmt.Errorf("failed to take screenshot: %w", err)
@@ -489,10 +494,10 @@ func (a *ScreenshotAction) Execute(ctx context.Context, actionConfig map[string]
 		}
 
 		runContext.Logger.Info("Screenshot uploaded to R2", "key", r2Key, "size", len(screenshotBytes))
-		
+
 		// Get the public URL for the uploaded screenshot
 		publicURL := runContext.StorageService.GetPublicURL(r2Key)
-		
+
 		// Send output file event
 		if runContext.EventCh != nil {
 			select {
@@ -509,7 +514,7 @@ func (a *ScreenshotAction) Execute(ctx context.Context, actionConfig map[string]
 				// Channel is full, skip this event to avoid blocking
 			}
 		}
-		
+
 		sendSuccessEvent(runContext, "playwright:screenshot", fmt.Sprintf("Successfully took screenshot and uploaded to R2: %s", r2Key), duration)
 	} else {
 		sendSuccessEvent(runContext, "playwright:screenshot", "Successfully took screenshot", duration)
@@ -532,12 +537,12 @@ func (a *EvaluateAction) Execute(ctx context.Context, actionConfig map[string]in
 
 	_, err := runContext.PlaywrightPage.Evaluate(expression)
 	duration := time.Since(startTime)
-	
+
 	if err != nil {
 		sendErrorEvent(runContext, "playwright:evaluate", err.Error(), duration)
 		return err
 	}
-	
+
 	sendSuccessEvent(runContext, "playwright:evaluate", "Successfully executed JavaScript expression", duration)
 	return nil
 }
@@ -563,12 +568,12 @@ func (a *HoverAction) Execute(ctx context.Context, actionConfig map[string]inter
 
 	err = runContext.PlaywrightPage.Locator(selector).Hover(options)
 	duration := time.Since(startTime)
-	
+
 	if err != nil {
 		sendErrorEvent(runContext, "playwright:hover", err.Error(), duration)
 		return err
 	}
-	
+
 	sendSuccessEvent(runContext, "playwright:hover", fmt.Sprintf("Successfully hovered over element %s", selector), duration)
 	return nil
 }
@@ -594,12 +599,12 @@ func (a *ScrollAction) Execute(ctx context.Context, actionConfig map[string]inte
 	script := fmt.Sprintf("window.scrollBy(%f, %f)", deltaX, deltaY)
 	_, err := runContext.PlaywrightPage.Evaluate(script)
 	duration := time.Since(startTime)
-	
+
 	if err != nil {
 		sendErrorEvent(runContext, "playwright:scroll", err.Error(), duration)
 		return err
 	}
-	
+
 	sendSuccessEvent(runContext, "playwright:scroll", fmt.Sprintf("Successfully scrolled by (%v, %v)", deltaX, deltaY), duration)
 	return nil
 }
@@ -620,7 +625,7 @@ func (a *GetTextAction) Execute(ctx context.Context, actionConfig map[string]int
 
 	text, err := runContext.PlaywrightPage.Locator(selector).TextContent()
 	duration := time.Since(startTime)
-	
+
 	if err != nil {
 		sendErrorEvent(runContext, "playwright:get_text", err.Error(), duration)
 		return err
@@ -652,7 +657,7 @@ func (a *GetAttributeAction) Execute(ctx context.Context, actionConfig map[strin
 
 	value, err := runContext.PlaywrightPage.Locator(selector).GetAttribute(attribute)
 	duration := time.Since(startTime)
-	
+
 	if err != nil {
 		sendErrorEvent(runContext, "playwright:get_attribute", err.Error(), duration)
 		return err
@@ -685,12 +690,12 @@ func (a *WaitForLoadStateAction) Execute(ctx context.Context, actionConfig map[s
 		State: &stateField,
 	}, options)
 	duration := time.Since(startTime)
-	
+
 	if err != nil {
 		sendErrorEvent(runContext, "playwright:wait_for_load_state", err.Error(), duration)
 		return err
 	}
-	
+
 	sendSuccessEvent(runContext, "playwright:wait_for_load_state", fmt.Sprintf("Successfully waited for load state: %s", state), duration)
 	return nil
 }
@@ -711,12 +716,12 @@ func (a *SetViewportAction) Execute(ctx context.Context, actionConfig map[string
 
 	err := runContext.PlaywrightPage.SetViewportSize(int(width), int(height))
 	duration := time.Since(startTime)
-	
+
 	if err != nil {
 		sendErrorEvent(runContext, "playwright:set_viewport", err.Error(), duration)
 		return err
 	}
-	
+
 	sendSuccessEvent(runContext, "playwright:set_viewport", fmt.Sprintf("Successfully set viewport to %dx%d", int(width), int(height)), duration)
 	return nil
 }
@@ -735,12 +740,12 @@ func (a *ReloadAction) Execute(ctx context.Context, actionConfig map[string]inte
 
 	_, err := runContext.PlaywrightPage.Reload(options)
 	duration := time.Since(startTime)
-	
+
 	if err != nil {
 		sendErrorEvent(runContext, "playwright:reload", err.Error(), duration)
 		return err
 	}
-	
+
 	sendSuccessEvent(runContext, "playwright:reload", "Successfully reloaded page", duration)
 	return nil
 }
@@ -759,12 +764,12 @@ func (a *GoBackAction) Execute(ctx context.Context, actionConfig map[string]inte
 
 	_, err := runContext.PlaywrightPage.GoBack(options)
 	duration := time.Since(startTime)
-	
+
 	if err != nil {
 		sendErrorEvent(runContext, "playwright:go_back", err.Error(), duration)
 		return err
 	}
-	
+
 	sendSuccessEvent(runContext, "playwright:go_back", "Successfully navigated back", duration)
 	return nil
 }
@@ -783,12 +788,12 @@ func (a *GoForwardAction) Execute(ctx context.Context, actionConfig map[string]i
 
 	_, err := runContext.PlaywrightPage.GoForward(options)
 	duration := time.Since(startTime)
-	
+
 	if err != nil {
 		sendErrorEvent(runContext, "playwright:go_forward", err.Error(), duration)
 		return err
 	}
-	
+
 	sendSuccessEvent(runContext, "playwright:go_forward", "Successfully navigated forward", duration)
 	return nil
 }
@@ -819,7 +824,7 @@ func (a *IfElseAction) Execute(ctx context.Context, actionConfig map[string]any,
 				executionError = finalErr
 			}
 		}
-		
+
 		duration := time.Since(startTime)
 		if executionError != nil {
 			sendErrorEvent(runContext, "playwright:if_else", executionError.Error(), duration)
@@ -1000,7 +1005,7 @@ func (a *LogAction) Execute(ctx context.Context, actionConfig map[string]interfa
 	}
 
 	duration := time.Since(startTime)
-	
+
 	// Send event through the event channel
 	if runContext.EventCh != nil {
 		select {
@@ -1106,6 +1111,8 @@ func (a *LoopUntilAction) Execute(ctx context.Context, actionConfig map[string]a
 		loopCount++
 		runContext.Logger.Info("Loop iteration", "count", loopCount)
 
+		// Set the local loop index in the variable context
+		runContext.VariableContext.LocalLoopIndex = loopCount
 		// Check selector condition if provided
 		if selector != "" && conditionType != "" {
 			conditionMet, err := a.evaluateCondition(runContext, selector, conditionType)

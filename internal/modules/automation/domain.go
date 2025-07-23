@@ -23,16 +23,18 @@ const (
 
 // RunEvent represents an event emitted during automation execution
 type RunEvent struct {
-	Type         RunEventType           `json:"type"`
-	Timestamp    time.Time              `json:"timestamp"`
-	StepName     string                 `json:"step_name,omitempty"`
-	ActionType   string                 `json:"action_type,omitempty"`
-	Message      string                 `json:"message,omitempty"`
-	Error        string                 `json:"error,omitempty"`
-	OutputFile   string                 `json:"output_file,omitempty"`
-	Duration     int64                  `json:"duration_ms,omitempty"`
-	LoopIndex    int                    `json:"loop_index,omitempty"`
-	Data         map[string]interface{} `json:"data,omitempty"`
+	Type       RunEventType           `json:"type"`
+	Timestamp  time.Time              `json:"timestamp"`
+	StepID     string                 `json:"step_id,omitempty"`
+	StepName   string                 `json:"step_name,omitempty"`
+	ActionID   string                 `json:"action_id,omitempty"`
+	ActionType string                 `json:"action_type,omitempty"`
+	Message    string                 `json:"message,omitempty"`
+	Error      string                 `json:"error,omitempty"`
+	OutputFile string                 `json:"output_file,omitempty"`
+	Duration   int64                  `json:"duration_ms,omitempty"`
+	LoopIndex  int                    `json:"loop_index,omitempty"`
+	Data       map[string]interface{} `json:"data,omitempty"`
 }
 
 // RunContext holds shared resources and state for a single automation run.
@@ -43,10 +45,12 @@ type RunContext struct {
 	StorageService    storage.StorageService
 	Logger            *slog.Logger
 	EventCh           chan RunEvent
-	StepName          string // Current step name for context
-	LoopIndex         int    // Current loop index for multi-run context
-	Runner            *Runner // Reference to runner for variable resolution
-	VariableContext   *VariableContext // Variable context for resolution
+	StepName          string            // Current step name for context
+	StepID            string            // Current step ID for context
+	ActionID          string            // Current action ID for context
+	LoopIndex         int               // Current loop index for multi-run context
+	Runner            *Runner           // Reference to runner for variable resolution
+	VariableContext   *VariableContext  // Variable context for resolution
 	AutomationConfig  *AutomationConfig // Automation config for variable resolution
 }
 
@@ -80,13 +84,14 @@ func GetAction(actionType string) (PluginAction, error) {
 
 // VariableContext holds context variables for resolution
 type VariableContext struct {
-	LoopIndex    int
-	Timestamp    string
-	RunID        string
-	UserID       string
-	ProjectID    string
-	AutomationID string
-	StaticVars   map[string]string
+	LoopIndex      int
+	LocalLoopIndex int
+	Timestamp      string
+	RunID          string
+	UserID         string
+	ProjectID      string
+	AutomationID   string
+	StaticVars     map[string]string
 }
 
 // Variable represents a configuration variable

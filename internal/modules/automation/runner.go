@@ -8,19 +8,14 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"regexp"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/brianvoe/gofakeit/v7"
 	"github.com/brianvoe/gofakeit/v7"
 	"github.com/delordemm1/qplayground/internal/modules/notification"
 	"github.com/delordemm1/qplayground/internal/modules/storage"
 	"github.com/playwright-community/playwright-go"
 )
-
 
 // Runner orchestrates the execution of automations.
 type Runner struct {
@@ -89,9 +84,9 @@ func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *Autom
 	run.StartTime = &now
 
 	// err = r.automationRepo.CreateRun(ctx, run)
-	if err != nil {
-		return fmt.Errorf("failed to create automation run record: %w", err)
-	}
+	// if err != nil {
+	// 	return fmt.Errorf("failed to create automation run record: %w", err)
+	// }
 
 	// Ensure run status is updated on exit
 	defer func() {
@@ -145,8 +140,7 @@ func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *Autom
 		var wg sync.WaitGroup
 
 		for i := 0; i < runCount; i++ {
-			wg.Add(1)
-			go func(loopIndex int) {
+			wg.Go(func() {
 				defer wg.Done()
 				loopIndex := i
 				err := r.executeSingleRun(ctx, automation, &automationConfig, run, loopIndex, projectID)
@@ -157,7 +151,7 @@ func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *Autom
 					slog.Error("Parallel run failed", "loop_index", loopIndex, "error", err)
 					executionError = err // Capture first error
 				}
-			}(i)
+			})
 		}
 		wg.Wait()
 	} else {
@@ -195,13 +189,13 @@ func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *Autom
 		if run.StartTime != nil && run.EndTime != nil {
 			totalDuration = run.EndTime.Sub(*run.StartTime).Milliseconds()
 		}
-		
+
 		// Parse current output files from run
 		var outputFiles []string
 		if run.OutputFilesJSON != "" {
 			json.Unmarshal([]byte(run.OutputFilesJSON), &outputFiles)
 		}
-		
+
 		r.sseManager.SendRunComplete(projectID, run.AutomationID, run.ID, "completed", totalDuration, outputFiles)
 	}
 
@@ -241,7 +235,7 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 
 	// Launch browser
 	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-		Headless: playwright.Bool(true), // Run headless for automation
+		Headless: playwright.Bool(false), // Run headless for automation
 		Args: []string{
 			"--no-sandbox",
 			"--disable-setuid-sandbox",
@@ -282,7 +276,7 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 
 	// Create event channel for real-time updates
 	eventCh := make(chan RunEvent, 100) // Buffered channel to prevent blocking
-	
+
 	// Create RunContext
 	runContext := &RunContext{
 		PlaywrightBrowser: browser,
@@ -300,7 +294,7 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 	var logs []map[string]any
 	var outputFiles []string
 	eventProcessorDone := make(chan struct{})
-	
+
 	go r.processEvents(ctx, eventCh, &logs, &outputFiles, run, projectID, eventProcessorDone)
 
 	// Fetch and execute steps
@@ -324,6 +318,7 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 
 		// Update step context
 		runContext.StepName = step.Name
+		runContext.StepID = step.ID
 
 		runContext.Logger.Info("Executing step", "step_name", step.Name, "step_order", step.StepOrder, "loop_index", loopIndex)
 
@@ -376,6 +371,7 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 				return fmt.Errorf("unregistered plugin action type '%s': %w", action.ActionType, getActionErr)
 			}
 
+			runContext.ActionID = action.ID
 			// Execute action
 			actionErr := pluginAction.Execute(ctx, resolvedActionConfig, runContext)
 
@@ -406,12 +402,12 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 // processEvents handles events from the event channel and updates the database periodically
 func (r *Runner) processEvents(ctx context.Context, eventCh <-chan RunEvent, logs *[]map[string]any, outputFiles *[]string, run *AutomationRun, projectID string, done chan<- struct{}) {
 	defer close(done)
-	
+
 	ticker := time.NewTicker(5 * time.Second) // Save to DB every 5 seconds
 	defer ticker.Stop()
-	
+
 	var mu sync.Mutex // Protect logs and outputFiles slices
-	
+
 	for {
 		select {
 		case event, ok := <-eventCh:
@@ -422,7 +418,7 @@ func (r *Runner) processEvents(ctx context.Context, eventCh <-chan RunEvent, log
 				mu.Unlock()
 				return
 			}
-			
+
 			mu.Lock()
 			// Process the event
 			switch event.Type {
@@ -430,6 +426,8 @@ func (r *Runner) processEvents(ctx context.Context, eventCh <-chan RunEvent, log
 				logEntry := map[string]any{
 					"timestamp":   event.Timestamp.Format(time.RFC3339),
 					"step_name":   event.StepName,
+					"step_id":     event.StepID,
+					"action_id":   event.ActionID,
 					"action_type": event.ActionType,
 					"message":     event.Message,
 					"loop_index":  event.LoopIndex,
@@ -437,16 +435,18 @@ func (r *Runner) processEvents(ctx context.Context, eventCh <-chan RunEvent, log
 					"status":      "success",
 				}
 				*logs = append(*logs, logEntry)
-				
+
 				// Send SSE update
 				if r.sseManager != nil {
 					r.sseManager.SendRunLog(projectID, run.AutomationID, run.ID, event.StepName, event.ActionType, event.Message, event.Duration)
 				}
-				
+
 			case RunEventTypeError:
 				logEntry := map[string]any{
 					"timestamp":   event.Timestamp.Format(time.RFC3339),
 					"step_name":   event.StepName,
+					"step_id":     event.StepID,
+					"action_id":   event.ActionID,
 					"action_type": event.ActionType,
 					"error":       event.Error,
 					"loop_index":  event.LoopIndex,
@@ -454,19 +454,21 @@ func (r *Runner) processEvents(ctx context.Context, eventCh <-chan RunEvent, log
 					"status":      "failed",
 				}
 				*logs = append(*logs, logEntry)
-				
+
 				// Send SSE update
 				if r.sseManager != nil {
 					r.sseManager.SendRunError(projectID, run.AutomationID, run.ID, event.StepName, event.ActionType, event.Error)
 				}
-				
+
 			case RunEventTypeOutputFile:
 				*outputFiles = append(*outputFiles, event.OutputFile)
-				
+
 				// Also add to logs for completeness
 				logEntry := map[string]any{
 					"timestamp":   event.Timestamp.Format(time.RFC3339),
 					"step_name":   event.StepName,
+					"step_id":     event.StepID,
+					"action_id":   event.ActionID,
 					"action_type": event.ActionType,
 					"output_file": event.OutputFile,
 					"loop_index":  event.LoopIndex,
@@ -474,20 +476,20 @@ func (r *Runner) processEvents(ctx context.Context, eventCh <-chan RunEvent, log
 					"status":      "success",
 				}
 				*logs = append(*logs, logEntry)
-				
+
 				// Send SSE update
 				if r.sseManager != nil {
 					r.sseManager.SendRunOutputFile(projectID, run.AutomationID, run.ID, event.OutputFile)
 				}
 			}
 			mu.Unlock()
-			
+
 		case <-ticker.C:
 			// Periodic save to database
 			mu.Lock()
 			r.saveRunProgress(ctx, run, *logs, *outputFiles)
 			mu.Unlock()
-			
+
 		case <-ctx.Done():
 			// Context cancelled, save final state and exit
 			mu.Lock()
@@ -503,10 +505,10 @@ func (r *Runner) saveRunProgress(ctx context.Context, run *AutomationRun, logs [
 	// Update run with current logs and output files
 	logsBytes, _ := json.Marshal(logs)
 	run.LogsJSON = string(logsBytes)
-	
+
 	outputFilesBytes, _ := json.Marshal(outputFiles)
 	run.OutputFilesJSON = string(outputFilesBytes)
-	
+
 	// Save to database
 	if err := r.automationRepo.UpdateRun(ctx, run); err != nil {
 		slog.Error("Failed to save run progress", "run_id", run.ID, "error", err)
@@ -554,6 +556,8 @@ func (r *Runner) ResolveVariablesInString(input string, varContext *VariableCont
 		switch varName {
 		case "loopIndex":
 			return strconv.Itoa(varContext.LoopIndex)
+		case "localLoopIndex": // Add this case
+			return strconv.Itoa(varContext.LocalLoopIndex)
 		case "timestamp":
 			return varContext.Timestamp
 		case "runId":
@@ -659,7 +663,7 @@ func (r *Runner) sendNotifications(ctx context.Context, automation *Automation, 
 	if run.OutputFilesJSON != "" {
 		json.Unmarshal([]byte(run.OutputFilesJSON), &outputFiles)
 	}
-	
+
 	// Parse logs from run
 	var logs []map[string]any
 	if run.LogsJSON != "" {
