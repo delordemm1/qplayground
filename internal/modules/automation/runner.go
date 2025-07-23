@@ -8,68 +8,19 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"regexp"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/brianvoe/gofakeit/v7"
 	"github.com/brianvoe/gofakeit/v7"
 	"github.com/delordemm1/qplayground/internal/modules/notification"
 	"github.com/delordemm1/qplayground/internal/modules/storage"
 	"github.com/playwright-community/playwright-go"
 )
 
-// Variable represents a configuration variable
-type Variable struct {
-	Key         string `json:"key"`
-	Type        string `json:"type"` // "static", "dynamic", "environment"
-	Value       string `json:"value"`
-	Description string `json:"description,omitempty"`
-}
-
-// MultiRunConfig represents multi-run configuration
-type MultiRunConfig struct {
-	Enabled bool   `json:"enabled"`
-	Mode    string `json:"mode"` // "sequential", "parallel"
-	Count   int    `json:"count"`
-	Delay   int    `json:"delay"` // delay in milliseconds
-}
-
-// ScreenshotConfig represents screenshot configuration
-type ScreenshotConfig struct {
-	Enabled   bool   `json:"enabled"`
-	OnError   bool   `json:"onError"`
-	OnSuccess bool   `json:"onSuccess"`
-	Path      string `json:"path"`
-}
-
-// NotificationConfig represents notification configuration
-type NotificationChannelConfig struct {
-	ID         string         `json:"id"`
-	Type       string         `json:"type"` // "slack", "email", "webhook"
-	OnComplete bool           `json:"onComplete"`
-	OnError    bool           `json:"onError"`
-	Config     map[string]any `json:"config"`
-}
-
-// AutomationConfig represents the parsed automation configuration
-type AutomationConfig struct {
-	Variables     []Variable                  `json:"variables"`
-	Multirun      MultiRunConfig              `json:"multirun"`
-	Timeout       int                         `json:"timeout"` // in seconds
-	Retries       int                         `json:"retries"`
-	Screenshots   ScreenshotConfig            `json:"screenshots"`
-	Notifications []NotificationChannelConfig `json:"notifications"`
-}
-
-// VariableContext holds context variables for resolution
-type VariableContext struct {
-	LoopIndex    int
-	Timestamp    string
-	RunID        string
-	UserID       string
-	ProjectID    string
-	AutomationID string
-	StaticVars   map[string]string
-}
 
 // Runner orchestrates the execution of automations.
 type Runner struct {
@@ -340,6 +291,9 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 		Logger:            slog.Default().With("automation_id", automation.ID, "run_id", run.ID, "loop_index", loopIndex),
 		EventCh:           eventCh,
 		LoopIndex:         loopIndex,
+		Runner:            r,
+		VariableContext:   varContext,
+		AutomationConfig:  automationConfig,
 	}
 
 	// Start event processing goroutine
@@ -407,7 +361,7 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 			}
 
 			// Resolve variables in action config
-			resolvedActionConfig, resolveErr := r.resolveVariablesInConfig(actionConfigMap, varContext, automationConfig)
+			resolvedActionConfig, resolveErr := r.ResolveVariablesInConfig(actionConfigMap, varContext, automationConfig)
 			if resolveErr != nil {
 				close(eventCh)
 				<-eventProcessorDone
@@ -560,20 +514,20 @@ func (r *Runner) saveRunProgress(ctx context.Context, run *AutomationRun, logs [
 }
 
 // resolveVariablesInConfig resolves variables in action configuration
-func (r *Runner) resolveVariablesInConfig(config map[string]any, varContext *VariableContext, automationConfig *AutomationConfig) (map[string]any, error) {
+func (r *Runner) ResolveVariablesInConfig(config map[string]any, varContext *VariableContext, automationConfig *AutomationConfig) (map[string]any, error) {
 	resolved := make(map[string]any)
 
 	for key, value := range config {
 		switch v := value.(type) {
 		case string:
-			resolvedValue, err := r.resolveVariablesInString(v, varContext, automationConfig)
+			resolvedValue, err := r.ResolveVariablesInString(v, varContext, automationConfig)
 			if err != nil {
 				return nil, fmt.Errorf("failed to resolve variables in field '%s': %w", key, err)
 			}
 			resolved[key] = resolvedValue
 		case map[string]any:
 			// Recursively resolve nested objects
-			nestedResolved, err := r.resolveVariablesInConfig(v, varContext, automationConfig)
+			nestedResolved, err := r.ResolveVariablesInConfig(v, varContext, automationConfig)
 			if err != nil {
 				return nil, err
 			}
@@ -588,7 +542,7 @@ func (r *Runner) resolveVariablesInConfig(config map[string]any, varContext *Var
 }
 
 // resolveVariablesInString resolves variables in a string value
-func (r *Runner) resolveVariablesInString(input string, varContext *VariableContext, automationConfig *AutomationConfig) (string, error) {
+func (r *Runner) ResolveVariablesInString(input string, varContext *VariableContext, automationConfig *AutomationConfig) (string, error) {
 	// Pattern to match {{variableName}} or {{faker.method}}
 	re := regexp.MustCompile(`\{\{([^}]+)\}\}`)
 
@@ -638,7 +592,7 @@ func (r *Runner) resolveVariablesInString(input string, varContext *VariableCont
 					return variable.Value
 				case "environment":
 					// Variable.Value contains the environment variable (e.g., "{{timestamp}}")
-					v, err := r.resolveVariablesInString(variable.Value, varContext, automationConfig)
+					v, err := r.ResolveVariablesInString(variable.Value, varContext, automationConfig)
 					if err != nil {
 						return ""
 					}

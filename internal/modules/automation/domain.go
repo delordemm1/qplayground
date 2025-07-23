@@ -45,6 +45,9 @@ type RunContext struct {
 	EventCh           chan RunEvent
 	StepName          string // Current step name for context
 	LoopIndex         int    // Current loop index for multi-run context
+	Runner            *Runner // Reference to runner for variable resolution
+	VariableContext   *VariableContext // Variable context for resolution
+	AutomationConfig  *AutomationConfig // Automation config for variable resolution
 }
 
 // PluginAction defines the interface for any executable action provided by a plugin.
@@ -73,6 +76,60 @@ func GetAction(actionType string) (PluginAction, error) {
 		return nil, fmt.Errorf("unknown action type: %s", actionType)
 	}
 	return factory(), nil
+}
+
+// VariableContext holds context variables for resolution
+type VariableContext struct {
+	LoopIndex    int
+	Timestamp    string
+	RunID        string
+	UserID       string
+	ProjectID    string
+	AutomationID string
+	StaticVars   map[string]string
+}
+
+// Variable represents a configuration variable
+type Variable struct {
+	Key         string `json:"key"`
+	Type        string `json:"type"` // "static", "dynamic", "environment"
+	Value       string `json:"value"`
+	Description string `json:"description,omitempty"`
+}
+
+// MultiRunConfig represents multi-run configuration
+type MultiRunConfig struct {
+	Enabled bool   `json:"enabled"`
+	Mode    string `json:"mode"` // "sequential", "parallel"
+	Count   int    `json:"count"`
+	Delay   int    `json:"delay"` // delay in milliseconds
+}
+
+// ScreenshotConfig represents screenshot configuration
+type ScreenshotConfig struct {
+	Enabled   bool   `json:"enabled"`
+	OnError   bool   `json:"onError"`
+	OnSuccess bool   `json:"onSuccess"`
+	Path      string `json:"path"`
+}
+
+// NotificationChannelConfig represents notification configuration
+type NotificationChannelConfig struct {
+	ID         string         `json:"id"`
+	Type       string         `json:"type"` // "slack", "email", "webhook"
+	OnComplete bool           `json:"onComplete"`
+	OnError    bool           `json:"onError"`
+	Config     map[string]any `json:"config"`
+}
+
+// AutomationConfig represents the parsed automation configuration
+type AutomationConfig struct {
+	Variables     []Variable                  `json:"variables"`
+	Multirun      MultiRunConfig              `json:"multirun"`
+	Timeout       int                         `json:"timeout"` // in seconds
+	Retries       int                         `json:"retries"`
+	Screenshots   ScreenshotConfig            `json:"screenshots"`
+	Notifications []NotificationChannelConfig `json:"notifications"`
 }
 
 // Automation represents an automation workflow

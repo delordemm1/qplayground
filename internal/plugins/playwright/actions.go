@@ -940,6 +940,16 @@ func (a *IfElseAction) executeNestedActions(ctx context.Context, actions []inter
 			actionConfig = make(map[string]interface{})
 		}
 
+		// Resolve variables in nested action config
+		if runContext.Runner != nil {
+			resolvedActionConfig, err := runContext.Runner.ResolveVariablesInConfig(actionConfig, runContext.VariableContext, runContext.AutomationConfig)
+			if err != nil {
+				runContext.Logger.Error("Failed to resolve variables in nested action config", "action_type", actionType, "error", err)
+				return fmt.Errorf("failed to resolve variables in nested action '%s': %w", actionType, err)
+			}
+			actionConfig = resolvedActionConfig
+		}
+
 		runContext.Logger.Info("Executing nested action", "index", i, "action_type", actionType)
 
 		// Get the plugin action
@@ -1155,6 +1165,17 @@ func (a *LoopUntilAction) Execute(ctx context.Context, actionConfig map[string]a
 			actionConfig, ok := actionData["action_config"].(map[string]any)
 			if !ok {
 				actionConfig = make(map[string]any)
+			}
+
+			// Resolve variables in loop action config
+			if runContext.Runner != nil {
+				resolvedActionConfig, err := runContext.Runner.ResolveVariablesInConfig(actionConfig, runContext.VariableContext, runContext.AutomationConfig)
+				if err != nil {
+					runContext.Logger.Error("Failed to resolve variables in loop action config", "action_type", actionType, "error", err)
+					executionError = fmt.Errorf("failed to resolve variables in loop action '%s': %w", actionType, err)
+					return executionError
+				}
+				actionConfig = resolvedActionConfig
 			}
 
 			runContext.Logger.Info("Executing loop action", "loop_count", loopCount, "action_index", actionIndex, "action_type", actionType)
