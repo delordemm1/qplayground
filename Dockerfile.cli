@@ -1,0 +1,63 @@
+# =========================================================================
+# Stage 2: Golang Binary Builder
+#
+# This stage uses a Go image to compile the service into a
+# single, statically-linked executable.
+# =========================================================================
+FROM golang:1.25-rc-alpine AS backend-builder
+
+# Set the working directory for the backend build
+WORKDIR /app
+
+# Copy Go module files to leverage Docker layer caching
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy the entire application source code
+COPY . .
+
+# Build the Go application
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /app/main ./cmd/qplayground/main.go
+
+
+# =========================================================================
+# Stage 3: Final Production Image
+#
+# This stage starts from a minimal Alpine image and copies only the
+# necessary artifacts from the previous stages for a small and secure image.
+# =========================================================================
+FROM alpine:latest
+
+# Create a non-root user and group for enhanced security
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+# Set the working directory inside the final container
+WORKDIR /app
+
+# Copy the compiled Go binary from the backend-builder stage
+COPY --from=backend-builder /app/main .
+
+# Copy the built frontend assets from the frontend-builder stage.
+# Inertia.js/Vite typically puts everything into a 'public/build' directory.
+# We copy the entire 'public' directory which will contain this build folder.
+COPY --from=frontend-builder /app/public ./public
+
+# Copy the separate 'static' directory as requested
+COPY --from=backend-builder /app/static ./static
+
+# Copy the resources directory which contains HTML templates ---
+COPY --from=backend-builder /app/resources ./resources
+
+# Create a .env file
+RUN touch .env
+# Ensure the non-root user owns all the application files
+RUN chown -R appuser:appgroup /app
+
+# Switch to the non-root user
+USER appuser
+
+# Expose the port the Go application will listen on
+EXPOSE 8084
+
+# The command to run when the container starts
+CMD ["./main"]

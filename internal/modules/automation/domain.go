@@ -48,6 +48,7 @@ type RunContext struct {
 	StepName          string            // Current step name for context
 	StepID            string            // Current step ID for context
 	ActionID          string            // Current action ID for context
+	ParentActionID    string            // Parent action ID for context
 	LoopIndex         int               // Current loop index for multi-run context
 	Runner            *Runner           // Reference to runner for variable resolution
 	VariableContext   *VariableContext  // Variable context for resolution
