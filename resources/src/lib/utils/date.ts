@@ -69,3 +69,46 @@ export function formatDuration(durationMs: number): string {
     return `${minutes}m ${seconds}s`;
   }
 }
+
+// Calculate percentiles from an array of numbers
+export function calculatePercentile(values: number[], percentile: number): number {
+  if (values.length === 0) return 0;
+  
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = (percentile / 100) * (sorted.length - 1);
+  
+  if (Number.isInteger(index)) {
+    return sorted[index];
+  } else {
+    const lower = Math.floor(index);
+    const upper = Math.ceil(index);
+    const weight = index - lower;
+    return sorted[lower] * (1 - weight) + sorted[upper] * weight;
+  }
+}
+
+// Calculate statistical metrics from an array of durations
+export function calculateDurationStats(durations: number[]) {
+  if (durations.length === 0) {
+    return {
+      avg: 0,
+      min: 0,
+      max: 0,
+      p50: 0,
+      p95: 0,
+      count: 0
+    };
+  }
+
+  const sorted = [...durations].sort((a, b) => a - b);
+  const sum = durations.reduce((acc, val) => acc + val, 0);
+
+  return {
+    avg: sum / durations.length,
+    min: sorted[0],
+    max: sorted[sorted.length - 1],
+    p50: calculatePercentile(durations, 50),
+    p95: calculatePercentile(durations, 95),
+    count: durations.length
+  };
+}

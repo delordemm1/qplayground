@@ -55,7 +55,7 @@
   
   // Expanded state for steps and actions
   let expandedSteps = $state<Set<string>>(new Set());
-  let expandedActions = $state<Set<string>>(new Set());
+  let expandedFailureActions = $state<Set<string>>(new Set());
   
   // State for step image viewer
   let showStepImageViewerModal = $state(false);
@@ -209,7 +209,7 @@
   });
 
   // Organize data by steps and actions for detailed view
-  const reportData = $derived.by(() => {
+  const enhancedReportData = $derived.by(() => {
     const stepMap = new Map();
     
     // Process logs to build step and action structure
@@ -225,7 +225,8 @@
         stepMap.set(stepId, {
           id: stepId,
           name: log.step_name || 'Unknown Step',
-          actions: new Map(),
+          aggregatedActions: new Map(),
+          rawActions: new Map(), // Keep original actions for drill-down
           totalDuration: 0,
           status: 'success',
           startTime: log.timestamp,
@@ -234,8 +235,9 @@
           stepImageFiles: [],
           concurrentUsers: new Set(),
           loopIndexes: new Set(),
-          totalOutputFiles: 0, // Initialize new property
-          totalFailures: 0,    // Initialize new property
+          totalOutputFiles: 0,
+          totalFailures: 0,
+          totalExecutions: 0,
         });
       }
       
@@ -244,16 +246,19 @@
       step.logs.push(log);
       step.concurrentUsers.add(loopIndex);
       step.loopIndexes.add(loopIndex);
+      step.totalExecutions++;
       
       if (log.status === 'failed') {
         step.status = 'failed';
+        step.totalFailures++;
       }
       
       // Process action if actionId exists
       if (actionId) {
-        const actionKey = `${actionId}-${loopIndex}`;
-        if (!step.actions.has(actionKey)) {
-          step.actions.set(actionKey, {
+        // Store raw action data for drill-down
+        const rawActionKey = `${actionId}-${loopIndex}`;
+        if (!step.rawActions.has(rawActionKey)) {
+          step.rawActions.set(rawActionKey, {
             id: actionId,
             loopIndex: loopIndex,
             type: log.action_type || 'Unknown Action',
@@ -266,7 +271,44 @@
           });
         }
         
-        const action = step.actions.get(actionKey);
+        const rawAction = step.rawActions.get(rawActionKey);
+        rawAction.logs.push(log);
+        
+        // Aggregate actions by type and selector
+        const actionType = log.action_type || 'Unknown Action';
+        const actionConfig = log.action_config ? JSON.parse(log.action_config) : {};
+        const selector = actionConfig.selector || '';
+        const aggregateKey = selector ? `${actionType}:${selector}` : actionType;
+        
+        if (!step.aggregatedActions.has(aggregateKey)) {
+          step.aggregatedActions.set(aggregateKey, {
+            type: actionType,
+            selector: selector,
+            executions: 0,
+            successCount: 0,
+            failureCount: 0,
+            durations: [],
+            stats: { avg: 0, min: 0, max: 0, p50: 0, p95: 0, count: 0 },
+            failedExecutions: []
+          });
+        }
+        
+        const aggregatedAction = step.aggregatedActions.get(aggregateKey);
+        aggregatedAction.executions++;
+        aggregatedAction.durations.push(log.duration_ms || 0);
+        
+        if (log.status === 'failed') {
+          aggregatedAction.failureCount++;
+          aggregatedAction.failedExecutions.push({
+            loopIndex: loopIndex,
+            errorMessage: log.error || 'Unknown error',
+            outputFiles: log.output_file ? [log.output_file] : []
+          });
+        } else {
+          aggregatedAction.successCount++;
+        }
+        
+        const action = step.rawActions.get(rawActionKey);
         action.logs.push(log);
         
         if (log.output_file) {
@@ -277,22 +319,21 @@
             step.stepImageFiles.push(log.output_file);
           }
         }
-        
-        if (log.status === 'failed') {
-          action.status = 'failed';
-          action.error = log.error;
-          step.totalFailures++; // Increment step's total failures
-        }
       }
     });
     
-    // Calculate step durations and convert Sets to arrays
+    // Calculate step durations, convert Sets to arrays, and compute aggregated action stats
     stepMap.forEach(step => {
       if (step.startTime && step.endTime) {
         step.totalDuration = new Date(step.endTime).getTime() - new Date(step.startTime).getTime();
       }
       step.concurrentUsers = Array.from(step.concurrentUsers).sort((a, b) => a - b);
       step.loopIndexes = Array.from(step.loopIndexes).sort((a, b) => a - b);
+      
+      // Calculate statistics for each aggregated action
+      step.aggregatedActions.forEach(action => {
+        action.stats = calculateDurationStats(action.durations);
+      });
     });
     
     return Array.from(stepMap.values()).sort((a, b) => 
@@ -300,16 +341,23 @@
     );
   });
   
-  // Performance metrics for visualization
-  const performanceMetrics = $derived.by(() => {
+  // Enhanced performance metrics with KPIs
+  const enhancedPerformanceMetrics = $derived.by(() => {
     const stepMetrics = new Map();
     const runMetrics = new Map(); // Group by loop index
+    let totalUsers = new Set();
+    let totalErrors = 0;
+    let allDurations: number[] = [];
     
     parsedLogs.forEach(log => {
       const stepName = log.step_name || 'Unknown Step';
       const loopIndex = log.loop_index || 0;
       const duration = log.duration_ms || 0;
       const status = log.status || 'success';
+      
+      totalUsers.add(loopIndex);
+      if (duration > 0) allDurations.push(duration);
+      if (status === 'failed') totalErrors++;
       
       // Step-level metrics
       if (!stepMetrics.has(stepName)) {
@@ -363,13 +411,58 @@
     
     const runData = Array.from(runMetrics.values()).sort((a, b) => a.loopIndex - b.loopIndex);
     
+    // Calculate KPIs
+    const totalUserCount = totalUsers.size;
+    const overallFailureRate = runData.filter(r => r.status === 'failed').length / runData.length * 100;
+    const successRate = 100 - overallFailureRate;
+    const avgResponseTime = allDurations.length > 0 ? allDurations.reduce((sum, d) => sum + d, 0) / allDurations.length : 0;
+    const p95ResponseTime = calculatePercentile(allDurations, 95);
+    
+    // Generate automated insights
+    const insights: string[] = [];
+    
+    // High failure rate detection
+    stepAverages.forEach(step => {
+      if (step.failureRate > 10) {
+        insights.push(`⚠️ High Failure Rate: Step "${step.name}" failed for ${step.failureRate.toFixed(1)}% of users.`);
+      }
+    });
+    
+    // Performance bottleneck detection
+    stepAverages.forEach(step => {
+      if (step.averageDuration > avgResponseTime * 2) {
+        insights.push(`🐌 Performance Bottleneck: Step "${step.name}" is ${((step.averageDuration / avgResponseTime) * 100).toFixed(0)}% slower than average.`);
+      }
+    });
+    
+    // P95 vs Average detection
+    const overallP95 = calculatePercentile(allDurations, 95);
+    if (overallP95 > avgResponseTime * 3) {
+      insights.push(`📊 High Variance: P95 response time (${formatDuration(overallP95)}) is significantly higher than average (${formatDuration(avgResponseTime)}).`);
+    }
+    
+    if (insights.length === 0) {
+      insights.push('✅ No significant issues detected. Performance looks healthy!');
+    }
+    
     return {
+      // KPIs
+      totalUsers: totalUserCount,
+      successRate: successRate,
+      avgResponseTime: avgResponseTime,
+      p95ResponseTime: p95ResponseTime,
+      totalErrors: totalErrors,
+      insights: insights,
+      // Original metrics
       stepAverages,
       runData,
       totalRuns: runMetrics.size,
-      overallFailureRate: runData.filter(r => r.status === 'failed').length / runData.length * 100
+      overallFailureRate: overallFailureRate
     };
   });
+  
+  // Import the enhanced calculation function
+  import { calculateDurationStats, calculatePercentile } from '$lib/utils/date';
   // Filter output files to get only images for the modal
   const imageFiles = $derived.by(() => {
     return parsedOutputFiles.filter(fileUrl => getFileType(fileUrl) === "image");
@@ -461,13 +554,13 @@
     expandedSteps = new Set(expandedSteps);
   }
 
-  function toggleAction(actionId: string) {
-    if (expandedActions.has(actionId)) {
-      expandedActions.delete(actionId);
+  function toggleFailureAction(actionKey: string) {
+    if (expandedFailureActions.has(actionKey)) {
+      expandedFailureActions.delete(actionKey);
     } else {
-      expandedActions.add(actionId);
+      expandedFailureActions.add(actionKey);
     }
-    expandedActions = new Set(expandedActions);
+    expandedFailureActions = new Set(expandedFailureActions);
   }
 
   // Export functions
@@ -494,8 +587,8 @@
       ]);
 
       // Process each step and action
-      reportData.forEach(step => {
-        if (step.actions.size === 0) {
+      enhancedReportData.forEach(step => {
+        if (step.rawActions.size === 0) {
           // Step with no actions
           csvRows.push([
             step.id,
@@ -515,7 +608,7 @@
           ]);
         } else {
           // Step with actions
-          Array.from(step.actions.values()).forEach(action => {
+          Array.from(step.rawActions.values()).forEach(action => {
             csvRows.push([
               step.id,
               step.name,
@@ -575,7 +668,7 @@
           id: project.ID,
           name: project.Name
         },
-        steps: reportData.map(step => ({
+        steps: enhancedReportData.map(step => ({
           id: step.id,
           name: step.name,
           totalDuration: step.totalDuration,
@@ -583,7 +676,8 @@
           startTime: step.startTime,
           endTime: step.endTime,
           concurrentUsers: step.concurrentUsers,
-          actions: Array.from(step.actions.values()).map(action => ({
+          aggregatedActions: Array.from(step.aggregatedActions.values()),
+          rawActions: Array.from(step.rawActions.values()).map(action => ({
             id: action.id,
             parentActionId: action.parentActionId,
             type: action.type,
@@ -596,13 +690,13 @@
           })),
           logs: step.logs
         })),
-        performanceMetrics: performanceMetrics,
+        performanceMetrics: enhancedPerformanceMetrics,
         summary: {
-          totalSteps: reportData.length,
-          totalActions: reportData.reduce((sum, step) => sum + step.actions.size, 0),
+          totalSteps: enhancedReportData.length,
+          totalActions: enhancedReportData.reduce((sum, step) => sum + step.rawActions.size, 0),
           totalDuration: run.StartTime && run.EndTime ? 
             new Date(run.EndTime).getTime() - new Date(run.StartTime).getTime() : 0,
-          totalConcurrentUsers: Math.max(...reportData.map(step => step.concurrentUsers.length), 0),
+          totalConcurrentUsers: Math.max(...enhancedReportData.map(step => step.concurrentUsers.length), 0),
           outputFiles: parsedOutputFiles
         }
       };
@@ -885,26 +979,53 @@
   </div>
 
   <div class="report-container">
-    <!-- Run Summary -->
+    <!-- High-Level Summary & Triage Section -->
+    <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6 mb-6">
+      <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Executive Summary</h3>
+      
+      <!-- Key Performance Indicators -->
+      <dl class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-x-4 gap-y-6 mb-6">
+        <div class="text-center">
+          <dt class="text-sm font-medium text-gray-500">Total Users</dt>
+          <dd class="mt-1 text-3xl font-bold text-blue-600">{enhancedPerformanceMetrics.totalUsers}</dd>
+        </div>
+        <div class="text-center">
+          <dt class="text-sm font-medium text-gray-500">Success Rate</dt>
+          <dd class="mt-1 text-3xl font-bold {enhancedPerformanceMetrics.successRate >= 95 ? 'text-green-600' : enhancedPerformanceMetrics.successRate >= 90 ? 'text-yellow-600' : 'text-red-600'}">
+            {enhancedPerformanceMetrics.successRate.toFixed(1)}%
+          </dd>
+        </div>
+        <div class="text-center">
+          <dt class="text-sm font-medium text-gray-500">Avg Response Time</dt>
+          <dd class="mt-1 text-3xl font-bold text-gray-900">{formatDuration(enhancedPerformanceMetrics.avgResponseTime)}</dd>
+        </div>
+        <div class="text-center">
+          <dt class="text-sm font-medium text-gray-500">P95 Response Time</dt>
+          <dd class="mt-1 text-3xl font-bold text-gray-900">{formatDuration(enhancedPerformanceMetrics.p95ResponseTime)}</dd>
+        </div>
+        <div class="text-center">
+          <dt class="text-sm font-medium text-gray-500">Total Errors</dt>
+          <dd class="mt-1 text-3xl font-bold {enhancedPerformanceMetrics.totalErrors === 0 ? 'text-green-600' : 'text-red-600'}">
+            {enhancedPerformanceMetrics.totalErrors}
+          </dd>
+        </div>
+      </dl>
+      
+      <!-- Automated Insights -->
+      <div class="bg-white border border-gray-200 rounded-lg p-4">
+        <h4 class="text-md font-semibold text-gray-800 mb-3">🔍 Automated Insights</h4>
+        <div class="space-y-2">
+          {#each enhancedPerformanceMetrics.insights as insight}
+            <p class="text-sm text-gray-700">{insight}</p>
+          {/each}
+        </div>
+      </div>
+    </div>
+
+    <!-- Original Run Summary (Simplified) -->
     <div class="bg-white shadow overflow-hidden sm:rounded-lg p-6 mb-6">
-      <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Summary</h3>
+      <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Run Details</h3>
       <dl class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-6">
-        <div>
-          <dt class="text-sm font-medium text-gray-500">Total Steps</dt>
-          <dd class="mt-1 text-2xl font-semibold text-gray-900">{reportData.length}</dd>
-        </div>
-        <div>
-          <dt class="text-sm font-medium text-gray-500">Total Actions</dt>
-          <dd class="mt-1 text-2xl font-semibold text-gray-900">
-            {reportData.reduce((sum, step) => sum + step.actions.size, 0)}
-          </dd>
-        </div>
-        <div>
-          <dt class="text-sm font-medium text-gray-500">Concurrent Users</dt>
-          <dd class="mt-1 text-2xl font-semibold text-gray-900">
-            {Math.max(...reportData.map(step => step.concurrentUsers.length), 0)}
-          </dd>
-        </div>
         <div>
           <dt class="text-sm font-medium text-gray-500">Total Duration</dt>
           <dd class="mt-1 text-2xl font-semibold text-gray-900">
@@ -915,42 +1036,30 @@
             {/if}
           </dd>
         </div>
+        <div>
+          <dt class="text-sm font-medium text-gray-500">Total Steps</dt>
+          <dd class="mt-1 text-2xl font-semibold text-gray-900">{enhancedReportData.length}</dd>
+        </div>
+        <div>
+          <dt class="text-sm font-medium text-gray-500">Total Actions</dt>
+          <dd class="mt-1 text-2xl font-semibold text-gray-900">
+            {enhancedReportData.reduce((sum, step) => sum + step.rawActions.size, 0)}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-sm font-medium text-gray-500">Output Files</dt>
+          <dd class="mt-1 text-2xl font-semibold text-gray-900">{parsedOutputFiles.length}</dd>
+        </div>
       </dl>
     </div>
 
     <!-- Performance Visualization -->
-    {#if performanceMetrics.totalRuns > 1}
+    {#if enhancedPerformanceMetrics.totalRuns > 1}
       <div class="bg-white shadow overflow-hidden sm:rounded-lg p-6 mb-6">
         <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Performance Analysis</h3>
         
-        <!-- Performance Summary -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <div class="bg-blue-50 p-4 rounded-lg">
-            <dt class="text-sm font-medium text-blue-600">Total Runs</dt>
-            <dd class="mt-1 text-2xl font-semibold text-blue-900">{performanceMetrics.totalRuns}</dd>
-          </div>
-          <div class="bg-green-50 p-4 rounded-lg">
-            <dt class="text-sm font-medium text-green-600">Success Rate</dt>
-            <dd class="mt-1 text-2xl font-semibold text-green-900">
-              {(100 - performanceMetrics.overallFailureRate).toFixed(1)}%
-            </dd>
-          </div>
-          <div class="bg-red-50 p-4 rounded-lg">
-            <dt class="text-sm font-medium text-red-600">Failure Rate</dt>
-            <dd class="mt-1 text-2xl font-semibold text-red-900">
-              {performanceMetrics.overallFailureRate.toFixed(1)}%
-            </dd>
-          </div>
-          <div class="bg-purple-50 p-4 rounded-lg">
-            <dt class="text-sm font-medium text-purple-600">Avg Run Duration</dt>
-            <dd class="mt-1 text-2xl font-semibold text-purple-900">
-              {formatDuration(performanceMetrics.runData.reduce((sum, run) => sum + run.totalDuration, 0) / performanceMetrics.runData.length)}
-            </dd>
-          </div>
-        </div>
-        
         <!-- Charts -->
-        <RunPerformanceChart metrics={performanceMetrics} />
+        <RunPerformanceChart reportData={enhancedReportData} performanceMetrics={enhancedPerformanceMetrics} />
       </div>
     {/if}
   <!-- Run Details -->
@@ -1036,11 +1145,11 @@
     <div class="bg-white shadow overflow-hidden sm:rounded-lg p-6 mb-6">
       <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Step-by-Step Report</h3>
       
-      {#if reportData.length === 0}
+      {#if enhancedReportData.length === 0}
         <p class="text-sm text-gray-500">No step data available for this run.</p>
       {:else}
         <div class="space-y-4">
-          {#each reportData as step, stepIndex (step.id)}
+          {#each enhancedReportData as step, stepIndex (step.id)}
             <div class="border border-gray-200 rounded-lg">
               <!-- Step Header -->
               <button
@@ -1058,17 +1167,16 @@
                     </div>
                     <div>
                       <h4 class="text-lg font-medium text-gray-900">
-                        Step {stepIndex + 1}: {step.name}
+                        {step.name} ({step.concurrentUsers.length} users, {formatDuration(step.totalDuration)})
                       </h4>
                       <div class="flex items-center space-x-3 text-sm text-gray-500">
-                        <span>{step.concurrentUsers.length} users</span>
+                        <span>{step.aggregatedActions.size} unique actions</span>
                         {#if step.totalOutputFiles > 0}
                           <span>{step.totalOutputFiles} files</span>
                         {/if}
                         {#if step.totalFailures > 0}
                           <span class="text-red-600">{step.totalFailures} failures</span>
                         {/if}
-                        <span>{formatDuration(step.totalDuration)}</span>
                       </div>
                     </div>
                   </div>
@@ -1097,128 +1205,80 @@
                     </div>
                   {/if}
 
-                  {#if step.actions.size === 0}
+                  {#if step.aggregatedActions.size === 0}
                     <p class="text-sm text-gray-500 italic">No actions recorded for this step.</p>
                   {:else}
-                    <div class="space-y-3">
-                      {#each Array.from(step.actions.values()) as action, actionIndex (action.id + '-' + action.loopIndex)}
-                        <div class="border border-gray-100 rounded-md">
-                          <!-- Action Header -->
-                          <button
-                            onclick={(event) => { event.stopPropagation(); toggleAction(action.id + '-' + action.loopIndex); }}
-                            class="w-full px-4 py-3 text-left hover:bg-gray-25 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:ring-inset"
-                          >
-                            <div class="flex items-center justify-between">
-                              <div class="flex items-center space-x-3">
-                                <div class="flex-shrink-0">
-                                  {#if expandedActions.has(action.id + '-' + action.loopIndex)}
-                                    <ChevronDownOutline class="h-4 w-4 text-gray-400" />
-                                  {:else}
-                                    <ChevronRightOutline class="h-4 w-4 text-gray-400" />
-                                  {/if}
-                                </div>
-                                <div>
-                                  <h5 class="text-sm font-medium text-gray-900">
-                                    {action.type}
-                                    {#if action.parentActionId}
-                                      <span class="text-xs text-gray-500">(nested)</span>
-                                    {/if}
-                                  </h5>
-                                  <div class="flex items-center space-x-2 text-xs text-gray-500">
-                                    <span>User {action.loopIndex}</span>
-                                    {#if action.parentActionId}
-                                      <span>Parent: {action.parentActionId.substring(0, 8)}...</span>
-                                    {/if}
-                                  </div>
-                                  {#if action.error}
-                                    <p class="text-xs text-red-600">{action.error}</p>
-                                  {/if}
-                                </div>
-                              </div>
-                              <div class="flex items-center space-x-3">
-                                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium {getStatusBadgeClass(action.status)}">
-                                  {action.status.toUpperCase()}
-                                </span>
-                                <span class="text-xs text-gray-500">
-                                  {formatDuration(action.duration)}
-                                </span>
+
+
+                    <!-- Aggregated Actions View -->
+                    <div class="space-y-4">
+                      <h5 class="text-sm font-semibold text-gray-800">Action Performance Summary</h5>
+                      
+                      {#each Array.from(step.aggregatedActions.entries()) as [actionKey, action] (actionKey)}
+                        <div class="bg-gray-50 border border-gray-200 rounded-md p-4">
+                          <div class="flex items-center justify-between mb-2">
+                            <div>
+                              <h6 class="text-sm font-medium text-gray-900">
+                                ▶ {action.type}
+                                {#if action.selector}
+                                  <span class="text-xs text-gray-500">({action.selector})</span>
+                                {/if}
+                              </h6>
+                              <div class="flex items-center space-x-4 text-xs text-gray-600 mt-1">
+                                <span>Executions: {((action.successCount / action.executions) * 100).toFixed(0)}% ({action.successCount}/{action.executions}) Success</span>
+                                <span>Duration: Avg: {formatDuration(action.stats.avg)} | P95: {formatDuration(action.stats.p95)} | Min: {formatDuration(action.stats.min)}</span>
                               </div>
                             </div>
-                          </button>
-
-                          <!-- Action Details (Expandable) -->
-                          {#if expandedActions.has(action.id + '-' + action.loopIndex)}
-                            <div class="border-t border-gray-100 px-4 py-3 bg-gray-25">
-                              <!-- Action Logs -->
-                              {#if action.logs.length > 0}
-                                <div class="mb-3">
-                                  <h6 class="text-xs font-medium text-gray-700 mb-2">Logs:</h6>
-                                  <div class="space-y-1">
-                                    {#each action.logs as log}
-                                      <div class="text-xs text-gray-600 bg-gray-100 p-2 rounded">
-                                        <div class="flex justify-between items-start">
-                                          <span>{log.message || 'Action executed'}</span>
-                                          <span class="text-gray-400">{new Date(log.timestamp).toLocaleTimeString()}</span>
-                                        </div>
-                                        {#if log.error}
-                                          <div class="mt-1 text-red-600 font-medium">Error: {log.error}</div>
+                            {#if action.failureCount > 0}
+                              <button
+                                onclick={(event) => { event.stopPropagation(); toggleFailureAction(actionKey); }}
+                                class="text-sm font-medium text-red-600 hover:text-red-800 underline"
+                              >
+                                {action.failureCount} Failure{action.failureCount > 1 ? 's' : ''}
+                              </button>
+                            {/if}
+                          </div>
+                          
+                          <!-- Failure Details (Drill-down on demand) -->
+                          {#if action.failureCount > 0 && expandedFailureActions.has(actionKey)}
+                            <div class="border-t border-gray-300 pt-3 mt-3">
+                              <h6 class="text-xs font-semibold text-red-700 mb-2">Failure Details:</h6>
+                              <div class="space-y-2">
+                                {#each action.failedExecutions as failure}
+                                  <div class="bg-red-50 border border-red-200 rounded p-3">
+                                    <div class="flex items-start justify-between">
+                                      <div>
+                                        <p class="text-sm font-medium text-red-800">User {failure.loopIndex}</p>
+                                        <p class="text-xs text-red-700 mt-1">❌ {failure.errorMessage}</p>
+                                      </div>
+                                      <div class="flex space-x-2">
+                                        {#if failure.outputFiles.length > 0}
+                                          {#each failure.outputFiles as fileUrl}
+                                            {#if getFileType(fileUrl) === "image"}
+                                              <button
+                                                onclick={(event) => { event.stopPropagation(); openImageViewer(fileUrl); }}
+                                                class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded hover:bg-blue-200"
+                                              >
+                                                View Screenshot
+                                              </button>
+                                            {:else}
+                                              <a
+                                                href={fileUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                onclick={(event) => event.stopPropagation()}
+                                                class="text-xs bg-gray-100 text-gray-800 px-2 py-1 rounded hover:bg-gray-200"
+                                              >
+                                                View File
+                                              </a>
+                                            {/if}
+                                          {/each}
                                         {/if}
                                       </div>
-                                    {/each}
+                                    </div>
                                   </div>
-                                </div>
-                              {/if}
-
-                              <!-- Action Output Files -->
-                              {#if action.outputFiles.length > 0}
-                                <div>
-                                  <h6 class="text-xs font-medium text-gray-700 mb-2">Output Files:</h6>
-                                  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                                    {#each action.outputFiles as fileUrl}
-                                      <div class="border border-gray-200 rounded p-2 hover:shadow-sm transition-shadow">
-                                        <div class="flex items-center space-x-2">
-                                          <div class="flex-shrink-0">
-                                            {#if getFileType(fileUrl) === "image"}
-                                              <svg class="h-4 w-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                              </svg>
-                                            {:else}
-                                              <svg class="h-4 w-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                              </svg>
-                                            {/if}
-                                          </div>
-                                          <div class="flex-1 min-w-0">
-                                            <p class="text-xs font-medium text-gray-900 truncate">
-                                              {fileUrl.split("/").pop() || "Unknown File"}
-                                            </p>
-                                          </div>
-                                        </div>
-                                        <div class="mt-2">
-                                          {#if getFileType(fileUrl) === "image"}
-                                            <button
-                                              onclick={(event) => { event.stopPropagation(); openImageViewer(fileUrl); }}
-                                              class="text-xs text-primary-600 hover:text-primary-800 font-medium"
-                                            >
-                                              View Image
-                                            </button>
-                                          {:else}
-                                            <a
-                                              href={fileUrl}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              onclick={(event) => event.stopPropagation()}
-                                              class="text-xs text-primary-600 hover:text-primary-800 font-medium"
-                                            >
-                                              Open File
-                                            </a>
-                                          {/if}
-                                        </div>
-                                      </div>
-                                    {/each}
-                                  </div>
-                                </div>
-                              {/if}
+                                {/each}
+                              </div>
                             </div>
                           {/if}
                         </div>
