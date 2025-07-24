@@ -88,12 +88,13 @@ func (s *automationService) DeleteAutomation(ctx context.Context, id string) err
 }
 
 // Step management
-func (s *automationService) CreateStep(ctx context.Context, automationID, name string, stepOrder int) (*AutomationStep, error) {
+func (s *automationService) CreateStep(ctx context.Context, automationID, name string, stepOrder int, configJSON string) (*AutomationStep, error) {
 	step := &AutomationStep{
 		ID:           platform.UtilGenerateUUID(),
 		AutomationID: automationID,
 		Name:         name,
 		StepOrder:    stepOrder,
+		ConfigJSON:   configJSON,
 	}
 
 	err := s.automationRepo.CreateStep(ctx, step)
@@ -423,9 +424,19 @@ func (s *automationService) GetFullAutomationConfig(ctx context.Context, automat
 			})
 		}
 
+		// Parse step config JSON into map
+		var stepConfig map[string]interface{}
+		if step.ConfigJSON != "" {
+			if err := json.Unmarshal([]byte(step.ConfigJSON), &stepConfig); err != nil {
+				slog.Error("Failed to parse step config JSON", "error", err, "stepID", step.ID)
+				return nil, fmt.Errorf("failed to parse step config for step %s: %w", step.ID, err)
+			}
+		}
+
 		exportedSteps = append(exportedSteps, ExportedAutomationStep{
 			Name:      step.Name,
 			StepOrder: step.StepOrder,
+			Config:    stepConfig,
 			Actions:   exportedActions,
 		})
 	}

@@ -423,6 +423,7 @@ func (h *AutomationHandler) DeleteAutomation(w http.ResponseWriter, r *http.Requ
 type CreateStepRequest struct {
 	Name      string `json:"name" validate:"required,min=1,max=255"`
 	StepOrder int    `json:"step_order" validate:"min=0"`
+	ConfigJSON string `json:"config_json"`
 }
 
 func (h *AutomationHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
@@ -463,7 +464,13 @@ func (h *AutomationHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	step, err := h.automationService.CreateStep(r.Context(), automationID, req.Name, req.StepOrder)
+	// Default config if empty
+	configJSON := req.ConfigJSON
+	if configJSON == "" {
+		configJSON = "{}"
+	}
+
+	step, err := h.automationService.CreateStep(r.Context(), automationID, req.Name, req.StepOrder, configJSON)
 	if err != nil {
 		platform.SetFlashError(r.Context(), h.sessionManager, "Failed to create step")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -522,6 +529,7 @@ func (h *AutomationHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		AutomationID: automationID,
 		Name:         req.Name,
 		StepOrder:    req.StepOrder,
+		ConfigJSON:   req.ConfigJSON,
 	}
 
 	err := h.automationService.UpdateStep(r.Context(), step)

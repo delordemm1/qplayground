@@ -53,7 +53,17 @@
     { value: "is_hidden", name: "Is Hidden" },
     { value: "is_checked", name: "Is Checked" },
     { value: "is_editable", name: "Is Editable" },
+    { value: "loop_index_is_even", name: "Loop Index is Even" },
+    { value: "loop_index_is_odd", name: "Loop Index is Odd" },
+    { value: "loop_index_is_prime", name: "Loop Index is Prime" },
+    { value: "random", name: "Random (50% chance)" },
   ];
+
+  // Check if condition requires a selector
+  const requiresSelector = $derived(
+    !config.condition_type?.startsWith("loop_index_is_") && 
+    config.condition_type !== "random"
+  );
 
   // Helper functions for managing nested actions
   function addIfAction() {
@@ -130,8 +140,14 @@
           type="text"
           bind:value={config.selector}
           placeholder="input#chatbox-reply-input:not([disabled])"
-          required
+          required={requiresSelector}
+          disabled={!requiresSelector}
         />
+        {#if !requiresSelector}
+          <p class="text-xs text-gray-500 mt-1">
+            Selector not required for this condition type
+          </p>
+        {/if}
       </div>
       <div>
         <Label for="if-condition-type" class="mb-2">Condition *</Label>
@@ -142,6 +158,26 @@
         />
       </div>
     </div>
+
+    <!-- Probability Configuration for Random Conditions -->
+    {#if config.condition_type === "random"}
+      <div class="mb-4">
+        <Label for="if-probability" class="mb-2">Probability (0.0 - 1.0)</Label>
+        <input
+          id="if-probability"
+          type="number"
+          bind:value={config.probability}
+          min="0"
+          max="1"
+          step="0.1"
+          placeholder="0.5"
+          class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+        />
+        <p class="text-xs text-gray-500 mt-1">
+          Probability for random condition (0.5 = 50% chance)
+        </p>
+      </div>
+    {/if}
 
     <!-- IF Actions -->
     <div>
@@ -241,8 +277,14 @@
                   type="text"
                   bind:value={elseIfCondition.selector}
                   placeholder="div#chatbox-hints button:first-child"
-                  required
+                  required={!elseIfCondition.condition_type?.startsWith("loop_index_is_") && elseIfCondition.condition_type !== "random"}
+                  disabled={elseIfCondition.condition_type?.startsWith("loop_index_is_") || elseIfCondition.condition_type === "random"}
                 />
+                {#if elseIfCondition.condition_type?.startsWith("loop_index_is_") || elseIfCondition.condition_type === "random"}
+                  <p class="text-xs text-gray-500 mt-1">
+                    Selector not required for this condition type
+                  </p>
+                {/if}
               </div>
               <div>
                 <Label for="elseif-condition-type-{conditionIndex}" class="mb-2"

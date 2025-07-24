@@ -1,18 +1,26 @@
 <script lang="ts">
   import { Modal, Heading, Button, Label, Input } from "flowbite-svelte";
   import { showSuccessToast, showErrorToast } from "$lib/utils/toast";
+  import StepGeneralConfig from "./StepConfigs/StepGeneralConfig.svelte";
 
   type Step = {
     ID: string;
     Name: string;
     StepOrder: number;
+    ConfigJSON?: string;
+  };
+
+  type StepConfig = {
+    skip_condition?: string;
+    run_only_condition?: string;
+    probability?: number;
   };
 
   type Props = {
     open: boolean;
     step?: Step | null; // Optional step for editing
     maxOrder?: number; // Maximum current order for default calculation
-    onSave: (step: { name: string; step_order: number }) => Promise<void>;
+    onSave: (step: { name: string; step_order: number; config_json: string }) => Promise<void>;
     onClose: () => void;
   };
 
@@ -20,6 +28,7 @@
 
   let name = $state("");
   let stepOrder = $state(0);
+  let stepConfig = $state<StepConfig>({});
   let isLoading = $state(false);
   let errors = $state<Record<string, string>>({});
 
@@ -27,6 +36,19 @@
     if (open) {
       name = step?.Name || "";
       stepOrder = step?.StepOrder || (maxOrder + 1);
+      
+      // Parse existing ConfigJSON or use defaults
+      try {
+        if (step?.ConfigJSON) {
+          stepConfig = JSON.parse(step.ConfigJSON);
+        } else {
+          stepConfig = {};
+        }
+      } catch (err) {
+        console.error("Failed to parse step config JSON:", err);
+        stepConfig = {};
+      }
+      
       errors = {}; // Clear errors when modal opens
     }
   });
@@ -44,9 +66,22 @@
       return;
     }
 
+    // Validate step config
+    if (stepConfig.skip_condition && stepConfig.run_only_condition) {
+      errors.config = "Cannot have both skip condition and run-only condition";
+      return;
+    }
+    
+    if ((stepConfig.skip_condition === "random" || stepConfig.run_only_condition === "random") && 
+        (stepConfig.probability === undefined || stepConfig.probability < 0 || stepConfig.probability > 1)) {
+      errors.config = "Probability must be between 0.0 and 1.0 for random conditions";
+      return;
+    }
     isLoading = true;
     try {
-      await onSave({ name, step_order: stepOrder });
+      // Serialize step config to JSON
+      const configJsonString = JSON.stringify(stepConfig);
+      await onSave({ name, step_order: stepOrder, config_json: configJsonString });
       open = false; // Close modal on success
     } catch (err: any) {
       if (err.errors) {
@@ -102,6 +137,15 @@
         {/if}
       </div>
 
+      <div>
+        <Label class="mb-2">Step Configuration</Label>
+        <div class={errors.config ? "border border-red-500 rounded-md p-3" : "border border-gray-200 rounded-md p-3"}>
+          <StepGeneralConfig bind:config={stepConfig} />
+        </div>
+        {#if errors.config}
+          <p class="mt-2 text-sm text-red-600">{errors.config}</p>
+        {/if}
+      </div>
       <div class="flex justify-end space-x-3 pt-4">
         <Button color="alternative" onclick={handleClose} disabled={isLoading}>
           Cancel

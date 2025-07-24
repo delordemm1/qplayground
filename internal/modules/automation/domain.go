@@ -140,6 +140,13 @@ type AutomationConfig struct {
 	Notifications []NotificationChannelConfig `json:"notifications"`
 }
 
+// StepConfig represents the parsed step configuration
+type StepConfig struct {
+	SkipCondition    string  `json:"skip_condition,omitempty"`    // e.g., "loop_index_is_even", "loop_index_is_odd", "loop_index_is_prime", "random"
+	RunOnlyCondition string  `json:"run_only_condition,omitempty"` // alternative to skip_condition
+	Probability      float64 `json:"probability,omitempty"`        // for random condition, defaults to 0.5
+}
+
 // Automation represents an automation workflow
 type Automation struct {
 	ID          string
@@ -157,6 +164,7 @@ type AutomationStep struct {
 	AutomationID string
 	Name         string
 	StepOrder    int
+	ConfigJSON   string // JSON string containing step-level configuration like skip conditions
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }

@@ -60,6 +60,7 @@ type ExportedNotificationChannelConfig struct {
 type ExportedAutomationStep struct {
 	Name      string                     `json:"name"`
 	StepOrder int                        `json:"step_order"`
+	Config    map[string]interface{}     `json:"config,omitempty"`
 	Actions   []ExportedAutomationAction `json:"actions"`
 }
 

@@ -414,6 +414,7 @@
           body: JSON.stringify({
             name: step.Name,
             step_order: newOrder,
+            config_json: step.ConfigJSON || "{}",
           }),
         }
       );

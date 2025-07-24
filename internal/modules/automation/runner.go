@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"regexp"
 	"strconv"
 	"strings"
@@ -274,6 +275,54 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 		default:
 		}
 
+		// Parse step configuration and check for skip conditions
+		shouldSkipStep := false
+		
+		if step.ConfigJSON != "" {
+			var stepConfigMap map[string]interface{}
+			if err := json.Unmarshal([]byte(step.ConfigJSON), &stepConfigMap); err != nil {
+				runContext.Logger.Warn("Failed to parse step config JSON", "step_id", step.ID, "error", err)
+			} else {
+				// Check for skip_condition
+				if skipCondition, ok := stepConfigMap["skip_condition"].(string); ok && skipCondition != "" {
+					probability := 0.5 // Default probability
+					if prob, ok := stepConfigMap["probability"].(float64); ok {
+						probability = prob
+					}
+					
+					shouldSkip := evaluateLoopIndexCondition(skipCondition, loopIndex, probability)
+					if shouldSkip {
+						shouldSkipStep = true
+						runContext.Logger.Info("Skipping step due to skip condition", 
+							"step_name", step.Name, 
+							"condition", skipCondition, 
+							"loop_index", loopIndex)
+					}
+				}
+				
+				// Check for run_only_condition
+				if runOnlyCondition, ok := stepConfigMap["run_only_condition"].(string); ok && runOnlyCondition != "" {
+					probability := 0.5 // Default probability
+					if prob, ok := stepConfigMap["probability"].(float64); ok {
+						probability = prob
+					}
+					
+					shouldRun := evaluateLoopIndexCondition(runOnlyCondition, loopIndex, probability)
+					if !shouldRun {
+						shouldSkipStep = true
+						runContext.Logger.Info("Skipping step due to run_only condition not met", 
+							"step_name", step.Name, 
+							"condition", runOnlyCondition, 
+							"loop_index", loopIndex)
+					}
+				}
+			}
+		}
+		
+		// Skip this step if conditions indicate so
+		if shouldSkipStep {
+			continue
+		}
 		// Update step context
 		runContext.StepName = step.Name
 		runContext.StepID = step.ID
@@ -560,6 +609,40 @@ func (r *Runner) ResolveVariablesInString(input string, varContext *VariableCont
 	return result, nil
 }
 
+// evaluateLoopIndexCondition evaluates loop index based conditions
+func evaluateLoopIndexCondition(conditionType string, loopIndex int, probability float64) bool {
+	switch conditionType {
+	case "loop_index_is_even":
+		return loopIndex%2 == 0
+	case "loop_index_is_odd":
+		return loopIndex%2 != 0
+	case "loop_index_is_prime":
+		return isPrime(loopIndex)
+	case "random":
+		return rand.Float64() < probability
+	default:
+		return false
+	}
+}
+
+// isPrime checks if a number is prime
+func isPrime(n int) bool {
+	if n < 2 {
+		return false
+	}
+	if n == 2 {
+		return true
+	}
+	if n%2 == 0 {
+		return false
+	}
+	for i := 3; i*i <= n; i += 2 {
+		if n%i == 0 {
+			return false
+		}
+	}
+	return true
+}
 // generateFakerValue generates a fake value based on the faker method
 func (r *Runner) generateFakerValue(method string) string {
 	gofakeit.Seed(time.Now().UnixNano()) // Ensure randomness

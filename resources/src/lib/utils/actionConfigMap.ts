@@ -150,8 +150,15 @@ export function validateActionConfig(
       if (!config.key) errors.push("Object key is required");
       break;
     case "playwright:if_else":
-      if (!config.selector) errors.push("Selector is required");
       if (!config.condition_type) errors.push("Condition type is required");
+      
+      // Selector is only required for non-loop-index and non-random conditions
+      const requiresSelector = !config.condition_type?.startsWith("loop_index_is_") && 
+                              config.condition_type !== "random";
+      if (requiresSelector && !config.selector) {
+        errors.push("Selector is required for this condition type");
+      }
+      
       // Validate nested actions have action_type
       if (config.if_actions) {
         for (const action of config.if_actions) {
@@ -163,8 +170,10 @@ export function validateActionConfig(
       }
       if (config.else_if_conditions) {
         for (const condition of config.else_if_conditions) {
-          if (!condition.selector) {
-            errors.push("All ELSE IF conditions must have a selector");
+          const elseIfRequiresSelector = !condition.condition_type?.startsWith("loop_index_is_") && 
+                                        condition.condition_type !== "random";
+          if (elseIfRequiresSelector && !condition.selector) {
+            errors.push("Selector is required for ELSE IF conditions of this type");
             break;
           }
           if (!condition.condition_type) {

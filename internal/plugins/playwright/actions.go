@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -11,6 +12,12 @@ import (
 	"github.com/playwright-community/playwright-go"
 )
 
+func init() {
+	// Seed the random number generator for probabilistic conditions
+	rand.Seed(time.Now().UnixNano())
+	
+	// Register actions
+	automation.RegisterAction("playwright:goto", func() automation.PluginAction { return &GotoAction{} })
 func init() {
 	automation.RegisterAction("playwright:goto", func() automation.PluginAction { return &GotoAction{} })
 	automation.RegisterAction("playwright:click", func() automation.PluginAction { return &ClickAction{} })
@@ -36,6 +43,49 @@ func init() {
 	automation.RegisterAction("playwright:if_else", func() automation.PluginAction { return &IfElseAction{} })
 	automation.RegisterAction("playwright:log", func() automation.PluginAction { return &LogAction{} })
 	automation.RegisterAction("playwright:loop_until", func() automation.PluginAction { return &LoopUntilAction{} })
+}
+
+// Helper functions for loop index conditions
+func isEven(n int) bool {
+	return n%2 == 0
+}
+
+func isOdd(n int) bool {
+	return n%2 != 0
+}
+
+func isPrime(n int) bool {
+	if n < 2 {
+		return false
+	}
+	if n == 2 {
+		return true
+	}
+	if n%2 == 0 {
+		return false
+	}
+	for i := 3; i*i <= n; i += 2 {
+		if n%i == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// evaluateLoopIndexCondition evaluates loop index based conditions
+func evaluateLoopIndexCondition(conditionType string, loopIndex int, probability float64) bool {
+	switch conditionType {
+	case "loop_index_is_even":
+		return isEven(loopIndex)
+	case "loop_index_is_odd":
+		return isOdd(loopIndex)
+	case "loop_index_is_prime":
+		return isPrime(loopIndex)
+	case "random":
+		return rand.Float64() < probability
+	default:
+		return false
+	}
 }
 
 // Helper function to send success event for actions
@@ -811,14 +861,19 @@ type IfElseAction struct{}
 
 func (a *IfElseAction) Execute(ctx context.Context, actionConfig map[string]any, runContext *automation.RunContext) error {
 	startTime := time.Now()
-	selector, ok := actionConfig["selector"].(string)
-	if !ok || selector == "" {
-		return fmt.Errorf("playwright:if_else action requires a 'selector' string in config")
-	}
-
 	conditionType, ok := actionConfig["condition_type"].(string)
 	if !ok || conditionType == "" {
 		return fmt.Errorf("playwright:if_else action requires a 'condition_type' string in config")
+	}
+
+	// Selector is only required for non-loop-index and non-random conditions
+	var selector string
+	if !strings.HasPrefix(conditionType, "loop_index_is_") && conditionType != "random" {
+		var selectorOk bool
+		selector, selectorOk = actionConfig["selector"].(string)
+		if !selectorOk || selector == "" {
+			return fmt.Errorf("playwright:if_else action requires a 'selector' string for condition type '%s'", conditionType)
+		}
 	}
 
 	runContext.Logger.Info("Executing playwright:if_else", "selector", selector, "condition_type", conditionType)
@@ -842,7 +897,7 @@ func (a *IfElseAction) Execute(ctx context.Context, actionConfig map[string]any,
 	}()
 
 	// Evaluate main condition
-	conditionMet, err := a.evaluateCondition(runContext, selector, conditionType)
+	conditionMet, err := a.evaluateCondition(runContext, selector, conditionType, actionConfig)
 	if err != nil {
 		executionError = fmt.Errorf("failed to evaluate main condition: %w", err)
 		return executionError
@@ -878,7 +933,7 @@ func (a *IfElseAction) Execute(ctx context.Context, actionConfig map[string]any,
 
 			runContext.Logger.Info("Evaluating else-if condition", "index", i, "selector", elseIfSelector, "condition_type", elseIfConditionType)
 
-			elseIfConditionMet, err := a.evaluateCondition(runContext, elseIfSelector, elseIfConditionType)
+			elseIfConditionMet, err := a.evaluateCondition(runContext, elseIfSelector, elseIfConditionType, elseIfMap)
 			if err != nil {
 				runContext.Logger.Warn("Failed to evaluate else-if condition", "index", i, "error", err)
 				continue
@@ -913,7 +968,21 @@ func (a *IfElseAction) Execute(ctx context.Context, actionConfig map[string]any,
 	return executionError
 }
 
-func (a *IfElseAction) evaluateCondition(runContext *automation.RunContext, selector, conditionType string) (bool, error) {
+func (a *IfElseAction) evaluateCondition(runContext *automation.RunContext, selector, conditionType string, actionConfig map[string]interface{}) (bool, error) {
+	// Handle loop index conditions that don't require a selector
+	if strings.HasPrefix(conditionType, "loop_index_is_") || conditionType == "random" {
+		probability := 0.5 // Default probability
+		if prob, ok := actionConfig["probability"].(float64); ok {
+			probability = prob
+		}
+		return evaluateLoopIndexCondition(conditionType, runContext.VariableContext.LoopIndex, probability), nil
+	}
+
+	// Handle selector-based conditions
+	if selector == "" {
+		return false, fmt.Errorf("selector is required for condition type: %s", conditionType)
+	}
+	
 	locator := runContext.PlaywrightPage.Locator(selector).First()
 
 	switch conditionType {
@@ -1269,6 +1338,17 @@ func (a *LoopUntilAction) Execute(ctx context.Context, actionConfig map[string]a
 }
 
 func (a *LoopUntilAction) evaluateCondition(runContext *automation.RunContext, selector, conditionType string) (bool, error) {
+	// Handle loop index conditions that don't require a selector
+	if strings.HasPrefix(conditionType, "loop_index_is_") || conditionType == "random" {
+		probability := 0.5 // Default probability for random condition
+		return evaluateLoopIndexCondition(conditionType, runContext.VariableContext.LoopIndex, probability), nil
+	}
+
+	// Handle selector-based conditions
+	if selector == "" {
+		return false, fmt.Errorf("selector is required for condition type: %s", conditionType)
+	}
+	
 	locator := runContext.PlaywrightPage.Locator(selector).First()
 
 	switch conditionType {
