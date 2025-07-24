@@ -185,7 +185,6 @@ func (r *automationRepository) CreateStep(ctx context.Context, step *AutomationS
 
 	var createdAt, updatedAt pgtype.Timestamp
 	var configJSON pgtype.Text
-	var configJSON pgtype.Text
 	err = r.db.QueryRow(ctx, query, args...).Scan(
 		&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &configJSON, &createdAt, &updatedAt,
 	)
@@ -193,9 +192,6 @@ func (r *automationRepository) CreateStep(ctx context.Context, step *AutomationS
 		return fmt.Errorf("failed to create step: %w", err)
 	}
 
-	if configJSON.Valid {
-		step.ConfigJSON = configJSON.String
-	}
 	if configJSON.Valid {
 		step.ConfigJSON = configJSON.String
 	}
@@ -226,12 +222,8 @@ func (r *automationRepository) GetStepsByAutomationID(ctx context.Context, autom
 		var createdAt, updatedAt pgtype.Timestamp
 		var configJSON pgtype.Text
 		err := rows.Scan(&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &configJSON, &createdAt, &updatedAt)
-		err := rows.Scan(&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &configJSON, &createdAt, &updatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan step: %w", err)
-		}
-		if configJSON.Valid {
-			step.ConfigJSON = configJSON.String
 		}
 		if configJSON.Valid {
 			step.ConfigJSON = configJSON.String
@@ -248,7 +240,6 @@ func (r *automationRepository) UpdateStep(ctx context.Context, step *AutomationS
 	query, args, err := r.sq.Update("automation_steps").
 		Set("name", step.Name).
 		Set("step_order", step.StepOrder).
-		Set("config_json", step.ConfigJSON).
 		Set("config_json", step.ConfigJSON).
 		Set("updated_at", time.Now()).
 		Where(sq.Eq{"id": step.ID}).
@@ -558,19 +549,7 @@ func (r *automationRepository) ShiftActionOrdersAfterDelete(ctx context.Context,
 
 // Order management methods
 func (r *automationRepository) GetStepByID(ctx context.Context, id string) (*AutomationStep, error) {
-					Timestamp:  time.Now(),
-					StepName:   step.Name,
-					ActionType: "step_skip",
-					Message:    fmt.Sprintf("Step skipped: %s", skipReason),
-					LoopIndex:  loopIndex,
-				}:
-				default:
-					// Channel is full, skip this event to avoid blocking
-				}
-			}
-			continue // Skip to next step
-		}
-
+	query, args, err := r.sq.Select("id", "automation_id", "name", "step_order", "config_json", "created_at", "updated_at").
 		From("automation_steps").
 		Where(sq.Eq{"id": id}).
 		ToSql()

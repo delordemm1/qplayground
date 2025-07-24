@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"time"
 
 	sq "github.com/Masterminds/squirrel"
@@ -11,6 +12,56 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+	// Register actions
+	automation.RegisterAction("playwright:goto", func() automation.PluginAction { return &GotoAction{} })
+	automation.RegisterAction("playwright:click", func() automation.PluginAction { return &ClickAction{} })
+	automation.RegisterAction("playwright:fill", func() automation.PluginAction { return &FillAction{} })
+	automation.RegisterAction("playwright:type", func() automation.PluginAction { return &TypeAction{} })
+	automation.RegisterAction("playwright:press", func() automation.PluginAction { return &PressAction{} })
+	automation.RegisterAction("playwright:check", func() automation.PluginAction { return &CheckAction{} })
+	automation.RegisterAction("playwright:uncheck", func() automation.PluginAction { return &UncheckAction{} })
+	automation.RegisterAction("playwright:select_option", func() automation.PluginAction { return &SelectOptionAction{} })
+	automation.RegisterAction("playwright:hover", func() automation.PluginAction { return &HoverAction{} })
+	automation.RegisterAction("playwright:wait_for_selector", func() automation.PluginAction { return &WaitForSelectorAction{} })
+	automation.RegisterAction("playwright:wait_for_timeout", func() automation.PluginAction { return &WaitForTimeoutAction{} })
+	automation.RegisterAction("playwright:wait_for_load_state", func() automation.PluginAction { return &WaitForLoadStateAction{} })
+	automation.RegisterAction("playwright:get_text", func() automation.PluginAction { return &GetTextAction{} })
+	automation.RegisterAction("playwright:get_attribute", func() automation.PluginAction { return &GetAttributeAction{} })
+	automation.RegisterAction("playwright:screenshot", func() automation.PluginAction { return &ScreenshotAction{} })
+	automation.RegisterAction("playwright:reload", func() automation.PluginAction { return &ReloadAction{} })
+	automation.RegisterAction("playwright:go_back", func() automation.PluginAction { return &GoBackAction{} })
+	automation.RegisterAction("playwright:go_forward", func() automation.PluginAction { return &GoForwardAction{} })
+	automation.RegisterAction("playwright:scroll", func() automation.PluginAction { return &ScrollAction{} })
+	automation.RegisterAction("playwright:set_viewport", func() automation.PluginAction { return &SetViewportAction{} })
+	automation.RegisterAction("playwright:evaluate", func() automation.PluginAction { return &EvaluateAction{} })
+	automation.RegisterAction("playwright:if_else", func() automation.PluginAction { return &IfElseAction{} })
+	automation.RegisterAction("playwright:loop_until", func() automation.PluginAction { return &LoopUntilAction{} })
+	automation.RegisterAction("playwright:log", func() automation.PluginAction { return &LogAction{} })
+}
+
+// Helper functions for loop index conditions
+func IsEven(n int) bool {
+	return n%2 == 0
+}
+
+func IsOdd(n int) bool {
+	return n%2 != 0
+}
+
+func IsPrime(n int) bool {
+	if n <= 1 {
+		return false
+	}
+	for i := 2; i*i <= n; i++ {
+		if n%i == 0 {
+			return false
+		}
+	}
+	return true
+}
 
 type DBTX interface {
 	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
@@ -185,7 +236,6 @@ func (r *automationRepository) CreateStep(ctx context.Context, step *AutomationS
 
 	var createdAt, updatedAt pgtype.Timestamp
 	var configJSON pgtype.Text
-	var configJSON pgtype.Text
 	err = r.db.QueryRow(ctx, query, args...).Scan(
 		&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &configJSON, &createdAt, &updatedAt,
 	)
@@ -193,9 +243,6 @@ func (r *automationRepository) CreateStep(ctx context.Context, step *AutomationS
 		return fmt.Errorf("failed to create step: %w", err)
 	}
 
-	if configJSON.Valid {
-		step.ConfigJSON = configJSON.String
-	}
 	if configJSON.Valid {
 		step.ConfigJSON = configJSON.String
 	}
@@ -226,12 +273,8 @@ func (r *automationRepository) GetStepsByAutomationID(ctx context.Context, autom
 		var createdAt, updatedAt pgtype.Timestamp
 		var configJSON pgtype.Text
 		err := rows.Scan(&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &configJSON, &createdAt, &updatedAt)
-		err := rows.Scan(&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &configJSON, &createdAt, &updatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan step: %w", err)
-		}
-		if configJSON.Valid {
-			step.ConfigJSON = configJSON.String
 		}
 		if configJSON.Valid {
 			step.ConfigJSON = configJSON.String
@@ -248,7 +291,6 @@ func (r *automationRepository) UpdateStep(ctx context.Context, step *AutomationS
 	query, args, err := r.sq.Update("automation_steps").
 		Set("name", step.Name).
 		Set("step_order", step.StepOrder).
-		Set("config_json", step.ConfigJSON).
 		Set("config_json", step.ConfigJSON).
 		Set("updated_at", time.Now()).
 		Where(sq.Eq{"id": step.ID}).
@@ -558,6 +600,7 @@ func (r *automationRepository) ShiftActionOrdersAfterDelete(ctx context.Context,
 
 // Order management methods
 func (r *automationRepository) GetStepByID(ctx context.Context, id string) (*AutomationStep, error) {
+	query, args, err := r.sq.Select("id", "automation_id", "name", "step_order", "config_json", "created_at", "updated_at").
 		From("automation_steps").
 		Where(sq.Eq{"id": id}).
 		ToSql()

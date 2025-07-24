@@ -549,6 +549,7 @@ func (r *automationRepository) ShiftActionOrdersAfterDelete(ctx context.Context,
 
 // Order management methods
 func (r *automationRepository) GetStepByID(ctx context.Context, id string) (*AutomationStep, error) {
+	query, args, err := r.sq.Select("id", "automation_id", "name", "step_order", "config_json", "created_at", "updated_at").
 		From("automation_steps").
 		Where(sq.Eq{"id": id}).
 		ToSql()
@@ -558,8 +559,9 @@ func (r *automationRepository) GetStepByID(ctx context.Context, id string) (*Aut
 
 	var step AutomationStep
 	var createdAt, updatedAt pgtype.Timestamp
+	var configJSON pgtype.Text
 	err = r.db.QueryRow(ctx, query, args...).Scan(
-		&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &createdAt, &updatedAt,
+		&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &configJSON, &createdAt, &updatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -568,6 +570,9 @@ func (r *automationRepository) GetStepByID(ctx context.Context, id string) (*Aut
 		return nil, fmt.Errorf("failed to get step: %w", err)
 	}
 
+	if configJSON.Valid {
+		step.ConfigJSON = configJSON.String
+	}
 	step.CreatedAt = createdAt.Time
 	step.UpdatedAt = updatedAt.Time
 	return &step, nil
