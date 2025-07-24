@@ -141,7 +141,7 @@ func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *Autom
 
 		for i := 0; i < runCount; i++ {
 			wg.Go(func() {
-				defer wg.Done()
+				// defer wg.Done()
 				loopIndex := i
 				err := r.executeSingleRun(ctx, automation, &automationConfig, run, loopIndex, projectID)
 
@@ -235,7 +235,7 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 
 	// Launch browser
 	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-		Headless: playwright.Bool(false), // Run headless for automation
+		Headless: playwright.Bool(true), // Run headless for automation
 		Args: []string{
 			"--no-sandbox",
 			"--disable-setuid-sandbox",
