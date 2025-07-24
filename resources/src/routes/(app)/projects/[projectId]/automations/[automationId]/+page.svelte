@@ -31,6 +31,7 @@
 
   type Action = {
     ID: string;
+    Name: string;
     ActionType: string;
     ActionConfigJSON: string;
     ActionOrder: number;
@@ -294,6 +295,7 @@
   }
 
   async function handleSaveAction(data: {
+    name: string;
     action_type: string;
     action_config_json: string;
     action_order: number;
@@ -703,7 +705,10 @@
                   <li class="py-3 grid grid-cols-8 gap-3 items-center ml-6">
                     <div class="w-full col-span-7">
                       <p class="text-sm font-medium text-gray-700">
-                        {action.ActionOrder}. {action.ActionType}
+                        {action.ActionOrder}. {action.Name || action.ActionType}
+                        {#if action.Name}
+                          <span class="text-xs text-gray-500">({action.ActionType})</span>
+                        {/if}
                       </p>
                       <pre
                         class="bg-gray-50 p-2 rounded-md text-xs overflow-auto max-w-">{JSON.stringify(

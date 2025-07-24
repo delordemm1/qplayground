@@ -28,6 +28,7 @@ type RunEvent struct {
 	StepID         string                 `json:"step_id,omitempty"`
 	StepName       string                 `json:"step_name,omitempty"`
 	ActionID       string                 `json:"action_id,omitempty"`
+	ActionName     string                 `json:"action_name,omitempty"`
 	ParentActionID string                 `json:"parent_action_id,omitempty"`
 	ActionType     string                 `json:"action_type,omitempty"`
 	Message        string                 `json:"message,omitempty"`
@@ -50,6 +51,7 @@ type RunContext struct {
 	StepName          string            // Current step name for context
 	StepID            string            // Current step ID for context
 	ActionID          string            // Current action ID for context
+	ActionName        string            // Current action name for context
 	ParentActionID    string            // Parent action ID for context
 	LoopIndex         int               // Current loop index for multi-run context
 	Runner            *Runner           // Reference to runner for variable resolution
@@ -167,6 +169,7 @@ type AutomationStep struct {
 type AutomationAction struct {
 	ID               string
 	StepID           string
+	Name             string // Optional human-readable name for the action
 	ActionType       string // e.g., "playwright:goto", "playwright:click"
 	ActionConfigJSON string // JSON string containing action-specific parameters
 	ActionOrder      int

@@ -146,3 +146,19 @@ func (s *SSEManager) SendRunOutputFile(projectID, automationID, runID, outputFil
 		OutputFile: outputFile,
 	})
 }
+
+// SendStepSummary sends a step summary update for live dashboard
+func (s *SSEManager) SendStepSummary(projectID, automationID, runID, stepID, stepName string, completedCount, inProgressCount, failedCount, totalUsers int, avgDurationMs int64, filesCount int) error {
+	return s.SendRunProgress(projectID, automationID, runID, RunProgressMessage{
+		Type:              "step_summary",
+		RunID:             runID,
+		StepID:            stepID,
+		StepName:          stepName,
+		CompletedCount:    completedCount,
+		InProgressCount:   inProgressCount,
+		FailedCount:       failedCount,
+		TotalUsersForStep: totalUsers,
+		AverageDurationMs: avgDurationMs,
+		FilesCount:        filesCount,
+	})
+}

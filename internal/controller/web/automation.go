@@ -753,6 +753,7 @@ func (h *AutomationHandler) GetRun(w http.ResponseWriter, r *http.Request) {
 }
 
 type CreateActionRequest struct {
+	Name             string `json:"name"`
 	ActionType       string `json:"action_type" validate:"required"`
 	ActionConfigJSON string `json:"action_config_json"`
 	ActionOrder      int    `json:"action_order" validate:"min=0"`
@@ -797,6 +798,7 @@ func (h *AutomationHandler) CreateAction(w http.ResponseWriter, r *http.Request)
 	}
 
 	action, err := h.automationService.CreateAction(r.Context(), stepID, req.ActionType, req.ActionConfigJSON, req.ActionOrder)
+	action, err := h.automationService.CreateAction(r.Context(), stepID, req.Name, req.ActionType, req.ActionConfigJSON, req.ActionOrder)
 	if err != nil {
 		platform.SetFlashError(r.Context(), h.sessionManager, "Failed to create action")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -854,6 +856,7 @@ func (h *AutomationHandler) UpdateAction(w http.ResponseWriter, r *http.Request)
 	action := &automation.AutomationAction{
 		ID:               actionID,
 		StepID:           stepID,
+		Name:             req.Name,
 		ActionType:       req.ActionType,
 		ActionConfigJSON: req.ActionConfigJSON,
 		ActionOrder:      req.ActionOrder,

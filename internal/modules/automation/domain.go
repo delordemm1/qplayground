@@ -15,28 +15,30 @@ import (
 type RunEventType string
 
 const (
-	RunEventTypeLog        RunEventType = "log"
-	RunEventTypeError      RunEventType = "error"
-	RunEventTypeOutputFile RunEventType = "output_file"
-	RunEventTypeStep       RunEventType = "step"
+	RunEventTypeLog         RunEventType = "log"
+	RunEventTypeError       RunEventType = "error"
+	RunEventTypeOutputFile  RunEventType = "output_file"
+	RunEventTypeStep        RunEventType = "step"
+	RunEventTypeStepSummary RunEventType = "step_summary"
 )
 
 // RunEvent represents an event emitted during automation execution
 type RunEvent struct {
-	Type       RunEventType           `json:"type"`
-	Timestamp  time.Time              `json:"timestamp"`
-	StepID     string                 `json:"step_id,omitempty"`
-	StepName   string                 `json:"step_name,omitempty"`
-	ActionID   string                 `json:"action_id,omitempty"`
-	ParentActionID string             `json:"parent_action_id,omitempty"`
-	ActionType string                 `json:"action_type,omitempty"`
-	Message    string                 `json:"message,omitempty"`
-	Error      string                 `json:"error,omitempty"`
-	OutputFile string                 `json:"output_file,omitempty"`
-	Duration   int64                  `json:"duration_ms,omitempty"`
-	LoopIndex  int                    `json:"loop_index,omitempty"`
-	LocalLoopIndex int                `json:"local_loop_index,omitempty"`
-	Data       map[string]interface{} `json:"data,omitempty"`
+	Type           RunEventType           `json:"type"`
+	Timestamp      time.Time              `json:"timestamp"`
+	StepID         string                 `json:"step_id,omitempty"`
+	StepName       string                 `json:"step_name,omitempty"`
+	ActionID       string                 `json:"action_id,omitempty"`
+	ActionName     string                 `json:"action_name,omitempty"`
+	ParentActionID string                 `json:"parent_action_id,omitempty"`
+	ActionType     string                 `json:"action_type,omitempty"`
+	Message        string                 `json:"message,omitempty"`
+	Error          string                 `json:"error,omitempty"`
+	OutputFile     string                 `json:"output_file,omitempty"`
+	Duration       int64                  `json:"duration_ms,omitempty"`
+	LoopIndex      int                    `json:"loop_index,omitempty"`
+	LocalLoopIndex int                    `json:"local_loop_index,omitempty"`
+	Data           map[string]interface{} `json:"data,omitempty"`
 }
 
 // RunContext holds shared resources and state for a single automation run.
@@ -173,6 +175,7 @@ type AutomationStep struct {
 type AutomationAction struct {
 	ID               string
 	StepID           string
+	Name             string // Optional human-readable name for the action
 	ActionType       string // e.g., "playwright:goto", "playwright:click"
 	ActionConfigJSON string // JSON string containing action-specific parameters
 	ActionOrder      int
@@ -192,6 +195,33 @@ type AutomationRun struct {
 	ErrorMessage    string
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+}
+
+// RunProgressMessage represents a progress update for an automation run
+type RunProgressMessage struct {
+	Type        string                 `json:"type"` // "status", "log", "step", "action", "error", "complete", "step_summary"
+	RunID       string                 `json:"runId"`
+	Status      string                 `json:"status,omitempty"`
+	StepName    string                 `json:"stepName,omitempty"`
+	StepID      string                 `json:"stepId,omitempty"`
+	ActionType  string                 `json:"actionType,omitempty"`
+	ActionName  string                 `json:"actionName,omitempty"`
+	Message     string                 `json:"message,omitempty"`
+	Error       string                 `json:"error,omitempty"`
+	Progress    int                    `json:"progress,omitempty"` // 0-100
+	TotalSteps  int                    `json:"totalSteps,omitempty"`
+	CurrentStep int                    `json:"currentStep,omitempty"`
+	Duration    int64                  `json:"duration,omitempty"` // milliseconds
+	OutputFile  string                 `json:"outputFile,omitempty"`
+	FilesCount  int                    `json:"filesCount,omitempty"`
+	Timestamp   time.Time              `json:"timestamp"`
+	Data        map[string]interface{} `json:"data,omitempty"`
+	// Step summary specific fields
+	CompletedCount    int   `json:"completedCount,omitempty"`
+	InProgressCount   int   `json:"inProgressCount,omitempty"`
+	FailedCount       int   `json:"failedCount,omitempty"`
+	TotalUsersForStep int   `json:"totalUsersForStep,omitempty"`
+	AverageDurationMs int64 `json:"averageDurationMs,omitempty"`
 }
 
 // AutomationRepository defines the interface for automation data operations

@@ -48,6 +48,7 @@ func sendSuccessEvent(runContext *automation.RunContext, actionType, message str
 			StepName:         runContext.StepName,
 			StepID:           runContext.StepID,
 			ActionID:         runContext.ActionID,
+			ActionName:       runContext.ActionName,
 			ParentActionID:   runContext.ParentActionID,
 			ActionType:       actionType,
 			Message:          message,
@@ -71,6 +72,7 @@ func sendErrorEvent(runContext *automation.RunContext, actionType, errorMsg stri
 			StepName:         runContext.StepName,
 			StepID:           runContext.StepID,
 			ActionID:         runContext.ActionID,
+			ActionName:       runContext.ActionName,
 			ParentActionID:   runContext.ParentActionID,
 			ActionType:       actionType,
 			Error:            errorMsg,
@@ -1028,6 +1030,7 @@ func (a *LogAction) Execute(ctx context.Context, actionConfig map[string]interfa
 			StepName:       runContext.StepName,
 			StepID:         runContext.StepID,
 			ActionID:       runContext.ActionID,
+			ActionName:     runContext.ActionName,
 			ParentActionID: runContext.ParentActionID,
 			ActionType:     "playwright:log",
 			Message:        fmt.Sprintf("[%s] %s", strings.ToUpper(level), message),
@@ -1170,6 +1173,7 @@ func (a *LoopUntilAction) Execute(ctx context.Context, actionConfig map[string]a
 				break
 			}
 		}
+				ActionName:     runContext.ActionName,
 
 		// Execute loop actions
 		for actionIndex, actionData := range loopActions {

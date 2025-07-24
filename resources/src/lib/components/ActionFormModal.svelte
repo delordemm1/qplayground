@@ -19,6 +19,7 @@
 
   type Action = {
     ID: string;
+    Name: string;
     ActionType: string;
     ActionConfigJSON: string;
     ActionOrder: number;
@@ -29,6 +30,7 @@
     action?: Action | null;
     maxOrder?: number; // Maximum current order for default calculation
     onSave: (action: {
+      name: string;
       action_type: string;
       action_config_json: string;
       action_order: number;
@@ -44,6 +46,7 @@
     onClose,
   }: Props = $props();
 
+  let actionName = $state("");
   let actionType = $state("");
   let actionOrder = $state(0);
   let isLoading = $state(false);
@@ -59,6 +62,7 @@
   // Effect to initialize form fields when modal opens or action prop changes
   $effect(() => {
     if (open) {
+      actionName = action?.Name || "";
       actionType = action?.ActionType || "";
       actionOrder = action?.ActionOrder || maxOrder + 1;
       errors = {};
@@ -127,6 +131,7 @@
     isLoading = true;
     try {
       await onSave({
+        name: actionName,
         action_type: actionType,
         action_config_json: actionConfigJsonString,
         action_order: actionOrder,
@@ -155,6 +160,7 @@
 
     isDuplicating = true;
     // Reset to creation mode with copied data
+    actionName = action.Name;
     actionType = action.ActionType;
     actionOrder = (maxOrder || 0) + 1;
 
@@ -199,6 +205,23 @@
     {/if}
 
     <form onsubmit={handleSubmit} class="space-y-4">
+      <div>
+        <Label for="actionName" class="mb-2">Action Name (optional)</Label>
+        <Input
+          id="actionName"
+          type="text"
+          bind:value={actionName}
+          placeholder="e.g., 'Login with test user', 'Fill registration form'"
+          class={errors.name ? "border-red-500" : ""}
+        />
+        <p class="text-xs text-gray-500 mt-1">
+          Optional human-readable name to identify this action in reports
+        </p>
+        {#if errors.name}
+          <p class="mt-2 text-sm text-red-600">{errors.name}</p>
+        {/if}
+      </div>
+
       <div>
         <Label for="actionType" class="mb-2">Action Type</Label>
         <Select

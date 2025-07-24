@@ -278,29 +278,33 @@ func (r *automationRepository) DeleteStep(ctx context.Context, id string) error 
 // Action CRUD
 func (r *automationRepository) CreateAction(ctx context.Context, action *AutomationAction) error {
 	query, args, err := r.sq.Insert("automation_actions").
-		Columns("id", "step_id", "action_type", "action_config_json", "action_order").
-		Values(action.ID, action.StepID, action.ActionType, action.ActionConfigJSON, action.ActionOrder).
-		Suffix("RETURNING id, step_id, action_type, action_config_json, action_order, created_at, updated_at").
+		Columns("id", "step_id", "action_name", "action_type", "action_config_json", "action_order").
+		Values(action.ID, action.StepID, action.Name, action.ActionType, action.ActionConfigJSON, action.ActionOrder).
+		Suffix("RETURNING id, step_id, action_name, action_type, action_config_json, action_order, created_at, updated_at").
 		ToSql()
 	if err != nil {
 		return fmt.Errorf("failed to build query: %w", err)
 	}
 
 	var createdAt, updatedAt pgtype.Timestamp
+	var actionName pgtype.Text
 	err = r.db.QueryRow(ctx, query, args...).Scan(
-		&action.ID, &action.StepID, &action.ActionType, &action.ActionConfigJSON, &action.ActionOrder, &createdAt, &updatedAt,
+		&action.ID, &action.StepID, &actionName, &action.ActionType, &action.ActionConfigJSON, &action.ActionOrder, &createdAt, &updatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create action: %w", err)
 	}
 
+	if actionName.Valid {
+		action.Name = actionName.String
+	}
 	action.CreatedAt = createdAt.Time
 	action.UpdatedAt = updatedAt.Time
 	return nil
 }
 
 func (r *automationRepository) GetActionsByStepID(ctx context.Context, stepID string) ([]*AutomationAction, error) {
-	query, args, err := r.sq.Select("id", "step_id", "action_type", "action_config_json", "action_order", "created_at", "updated_at").
+	query, args, err := r.sq.Select("id", "step_id", "action_name", "action_type", "action_config_json", "action_order", "created_at", "updated_at").
 		From("automation_actions").
 		Where(sq.Eq{"step_id": stepID}).
 		OrderBy("action_order ASC").
@@ -319,9 +323,13 @@ func (r *automationRepository) GetActionsByStepID(ctx context.Context, stepID st
 	for rows.Next() {
 		var action AutomationAction
 		var createdAt, updatedAt pgtype.Timestamp
-		err := rows.Scan(&action.ID, &action.StepID, &action.ActionType, &action.ActionConfigJSON, &action.ActionOrder, &createdAt, &updatedAt)
+		var actionName pgtype.Text
+		err := rows.Scan(&action.ID, &action.StepID, &actionName, &action.ActionType, &action.ActionConfigJSON, &action.ActionOrder, &createdAt, &updatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan action: %w", err)
+		}
+		if actionName.Valid {
+			action.Name = actionName.String
 		}
 		action.CreatedAt = createdAt.Time
 		action.UpdatedAt = updatedAt.Time
@@ -333,6 +341,7 @@ func (r *automationRepository) GetActionsByStepID(ctx context.Context, stepID st
 
 func (r *automationRepository) UpdateAction(ctx context.Context, action *AutomationAction) error {
 	query, args, err := r.sq.Update("automation_actions").
+		Set("action_name", action.Name).
 		Set("action_type", action.ActionType).
 		Set("action_config_json", action.ActionConfigJSON).
 		Set("action_order", action.ActionOrder).
@@ -579,7 +588,7 @@ func (r *automationRepository) GetStepByID(ctx context.Context, id string) (*Aut
 }
 
 func (r *automationRepository) GetActionByID(ctx context.Context, id string) (*AutomationAction, error) {
-	query, args, err := r.sq.Select("id", "step_id", "action_type", "action_config_json", "action_order", "created_at", "updated_at").
+	query, args, err := r.sq.Select("id", "step_id", "action_name", "action_type", "action_config_json", "action_order", "created_at", "updated_at").
 		From("automation_actions").
 		Where(sq.Eq{"id": id}).
 		ToSql()
@@ -589,8 +598,9 @@ func (r *automationRepository) GetActionByID(ctx context.Context, id string) (*A
 
 	var action AutomationAction
 	var createdAt, updatedAt pgtype.Timestamp
+	var actionName pgtype.Text
 	err = r.db.QueryRow(ctx, query, args...).Scan(
-		&action.ID, &action.StepID, &action.ActionType, &action.ActionConfigJSON, &action.ActionOrder, &createdAt, &updatedAt,
+		&action.ID, &action.StepID, &actionName, &action.ActionType, &action.ActionConfigJSON, &action.ActionOrder, &createdAt, &updatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -599,6 +609,9 @@ func (r *automationRepository) GetActionByID(ctx context.Context, id string) (*A
 		return nil, fmt.Errorf("failed to get action: %w", err)
 	}
 
+	if actionName.Valid {
+		action.Name = actionName.String
+	}
 	action.CreatedAt = createdAt.Time
 	action.UpdatedAt = updatedAt.Time
 	return &action, nil
@@ -676,7 +689,7 @@ func (r *automationRepository) GetStepByAutomationIDAndOrder(ctx context.Context
 
 // GetActionByStepIDAndOrder retrieves an action by step ID and order
 func (r *automationRepository) GetActionByStepIDAndOrder(ctx context.Context, stepID string, order int) (*AutomationAction, error) {
-	query, args, err := r.sq.Select("id", "step_id", "action_type", "action_config_json", "action_order", "created_at", "updated_at").
+	query, args, err := r.sq.Select("id", "step_id", "action_name", "action_type", "action_config_json", "action_order", "created_at", "updated_at").
 		From("automation_actions").
 		Where(sq.And{
 			sq.Eq{"step_id": stepID},
@@ -689,8 +702,9 @@ func (r *automationRepository) GetActionByStepIDAndOrder(ctx context.Context, st
 
 	var action AutomationAction
 	var createdAt, updatedAt pgtype.Timestamp
+	var actionName pgtype.Text
 	err = r.db.QueryRow(ctx, query, args...).Scan(
-		&action.ID, &action.StepID, &action.ActionType, &action.ActionConfigJSON, &action.ActionOrder, &createdAt, &updatedAt,
+		&action.ID, &action.StepID, &actionName, &action.ActionType, &action.ActionConfigJSON, &action.ActionOrder, &createdAt, &updatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -699,6 +713,9 @@ func (r *automationRepository) GetActionByStepIDAndOrder(ctx context.Context, st
 		return nil, fmt.Errorf("failed to get action: %w", err)
 	}
 
+	if actionName.Valid {
+		action.Name = actionName.String
+	}
 	action.CreatedAt = createdAt.Time
 	action.UpdatedAt = updatedAt.Time
 	return &action, nil

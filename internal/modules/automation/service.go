@@ -140,10 +140,11 @@ func (s *automationService) DeleteStep(ctx context.Context, id string) error {
 }
 
 // Action management
-func (s *automationService) CreateAction(ctx context.Context, stepID, actionType, actionConfigJSON string, actionOrder int) (*AutomationAction, error) {
+func (s *automationService) CreateAction(ctx context.Context, stepID, name, actionType, actionConfigJSON string, actionOrder int) (*AutomationAction, error) {
 	action := &AutomationAction{
 		ID:               platform.UtilGenerateUUID(),
 		StepID:           stepID,
+		Name:             name,
 		ActionType:       actionType,
 		ActionConfigJSON: actionConfigJSON,
 		ActionOrder:      actionOrder,
@@ -151,11 +152,11 @@ func (s *automationService) CreateAction(ctx context.Context, stepID, actionType
 
 	err := s.automationRepo.CreateAction(ctx, action)
 	if err != nil {
-		slog.Error("Failed to create action", "error", err, "stepID", stepID, "actionType", actionType)
+		slog.Error("Failed to create action", "error", err, "stepID", stepID, "name", name, "actionType", actionType)
 		return nil, fmt.Errorf("failed to create action: %w", err)
 	}
 
-	slog.Info("Action created", "actionID", action.ID, "stepID", stepID, "actionType", actionType)
+	slog.Info("Action created", "actionID", action.ID, "stepID", stepID, "name", name, "actionType", actionType)
 	return action, nil
 }
 
@@ -418,6 +419,7 @@ func (s *automationService) GetFullAutomationConfig(ctx context.Context, automat
 
 			exportedActions = append(exportedActions, ExportedAutomationAction{
 				ID:           action.ID,
+				Name:         action.Name,
 				ActionType:   action.ActionType,
 				ActionConfig: actionConfig,
 				ActionOrder:  action.ActionOrder,

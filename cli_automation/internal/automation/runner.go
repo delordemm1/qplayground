@@ -275,6 +275,7 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 			}
 
 			runContext.ActionID = action.ID
+			runContext.ActionName = action.Name
 			runContext.ParentActionID = "" // Reset for top-level actions
 			// Execute action
 			actionErr := pluginAction.Execute(ctx, resolvedActionConfig, runContext)
@@ -282,6 +283,7 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 			if actionErr != nil {
 				runContext.Logger.Error("Action failed",
 					"action_type", action.ActionType,
+					"action_name", action.Name,
 					"error", actionErr,
 					"loop_index", loopIndex)
 
@@ -290,6 +292,7 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 
 			runContext.Logger.Info("Action completed",
 				"action_type", action.ActionType,
+				"action_name", action.Name,
 				"loop_index", loopIndex)
 		}
 	}
@@ -321,6 +324,7 @@ func (r *Runner) processAllEvents(ctx context.Context, eventCh <-chan RunEvent, 
 					"step_name":        event.StepName,
 					"step_id":          event.StepID,
 					"action_id":        event.ActionID,
+					"action_name":      event.ActionName,
 					"parent_action_id": event.ParentActionID,
 					"action_type":      event.ActionType,
 					"message":          event.Message,
@@ -337,6 +341,7 @@ func (r *Runner) processAllEvents(ctx context.Context, eventCh <-chan RunEvent, 
 					"step_name":        event.StepName,
 					"step_id":          event.StepID,
 					"action_id":        event.ActionID,
+					"action_name":      event.ActionName,
 					"parent_action_id": event.ParentActionID,
 					"action_type":      event.ActionType,
 					"error":            event.Error,
@@ -356,6 +361,7 @@ func (r *Runner) processAllEvents(ctx context.Context, eventCh <-chan RunEvent, 
 					"step_name":        event.StepName,
 					"step_id":          event.StepID,
 					"action_id":        event.ActionID,
+					"action_name":      event.ActionName,
 					"parent_action_id": event.ParentActionID,
 					"action_type":      event.ActionType,
 					"output_file":      event.OutputFile,

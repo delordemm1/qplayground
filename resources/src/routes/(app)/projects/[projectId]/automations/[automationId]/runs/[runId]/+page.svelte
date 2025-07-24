@@ -4,6 +4,7 @@
   import { showSuccessToast, showErrorToast } from "$lib/utils/toast";
   import ImageViewerModal from "$lib/components/ImageViewerModal.svelte";
   import RunPerformanceChart from "$lib/components/RunPerformanceChart.svelte";
+  import UserExplorerModal from "$lib/components/UserExplorerModal.svelte";
   import { ChevronDownOutline, ChevronRightOutline, DownloadOutline, TableColumnOutline } from "flowbite-svelte-icons";
 
   type Project = {
@@ -61,6 +62,12 @@
   let showStepImageViewerModal = $state(false);
   let stepImageFiles = $state<string[]>([]);
   
+  // User Explorer Modal state
+  let showUserExplorerModal = $state(false);
+  
+  // Live step summaries from SSE
+  let liveStepSummaries = $state<Map<string, any>>(new Map());
+  
   // Initialize SSE connection for real-time updates
   $effect(() => {
     if (typeof window !== 'undefined') {
@@ -116,13 +123,32 @@
         liveProgress = data.progress || 0;
         break;
         
+      case 'step_summary':
+        // Update live step summaries for dashboard
+        liveStepSummaries.set(data.stepId, {
+          stepId: data.stepId,
+          stepName: data.stepName,
+          completedCount: data.completedCount,
+          inProgressCount: data.inProgressCount,
+          failedCount: data.failedCount,
+          totalUsersForStep: data.totalUsersForStep,
+          averageDurationMs: data.averageDurationMs,
+          filesCount: data.filesCount,
+        });
+        liveStepSummaries = new Map(liveStepSummaries);
+        break;
+        
       case 'log':
         liveLogs = [...liveLogs, {
           timestamp: data.timestamp,
           stepName: data.stepName,
+          stepId: data.stepId,
+          actionId: data.actionId,
+          actionName: data.actionName,
           actionType: data.actionType,
           message: data.message,
           duration: data.duration,
+          loopIndex: data.loopIndex,
           status: 'success'
         }];
         break;
@@ -131,8 +157,12 @@
         liveLogs = [...liveLogs, {
           timestamp: data.timestamp,
           stepName: data.stepName,
+          stepId: data.stepId,
+          actionId: data.actionId,
+          actionName: data.actionName,
           actionType: data.actionType,
           error: data.error,
+          loopIndex: data.loopIndex,
           status: 'failed'
         }];
         break;
@@ -216,6 +246,7 @@
     parsedLogs.forEach(log => {
       const stepId = log.step_id;
       const actionId = log.action_id;
+      const actionName = log.action_name;
       const loopIndex = log.loop_index || 0;
       
       if (!stepId) return;
@@ -260,6 +291,7 @@
         if (!step.rawActions.has(rawActionKey)) {
           step.rawActions.set(rawActionKey, {
             id: actionId,
+            name: actionName,
             loopIndex: loopIndex,
             type: log.action_type || 'Unknown Action',
             parentActionId: log.parent_action_id,
@@ -274,16 +306,14 @@
         const rawAction = step.rawActions.get(rawActionKey);
         rawAction.logs.push(log);
         
-        // Aggregate actions by type and selector
-        const actionType = log.action_type || 'Unknown Action';
-        const actionConfig = log.action_config ? JSON.parse(log.action_config) : {};
-        const selector = actionConfig.selector || '';
-        const aggregateKey = selector ? `${actionType}:${selector}` : actionType;
+        // Aggregate actions by action ID (unique action definition)
+        const aggregateKey = actionId;
         
         if (!step.aggregatedActions.has(aggregateKey)) {
           step.aggregatedActions.set(aggregateKey, {
-            type: actionType,
-            selector: selector,
+            id: actionId,
+            name: actionName,
+            type: log.action_type || 'Unknown Action',
             executions: 0,
             successCount: 0,
             failureCount: 0,
@@ -346,7 +376,8 @@
     const stepMetrics = new Map();
     const runMetrics = new Map(); // Group by loop index
     let totalUsers = new Set();
-    let totalErrors = 0;
+    let totalActionExecutions = 0;
+    let totalActionFailures = 0;
     let allDurations: number[] = [];
     
     parsedLogs.forEach(log => {
@@ -357,7 +388,12 @@
       
       totalUsers.add(loopIndex);
       if (duration > 0) allDurations.push(duration);
-      if (status === 'failed') totalErrors++;
+      
+      // Count action executions for accurate success rate
+      if (log.action_id) {
+        totalActionExecutions++;
+        if (status === 'failed') totalActionFailures++;
+      }
       
       // Step-level metrics
       if (!stepMetrics.has(stepName)) {
@@ -413,8 +449,9 @@
     
     // Calculate KPIs
     const totalUserCount = totalUsers.size;
-    const overallFailureRate = runData.filter(r => r.status === 'failed').length / runData.length * 100;
-    const successRate = 100 - overallFailureRate;
+    // More accurate success rate based on action executions
+    const successRate = totalActionExecutions > 0 ? ((totalActionExecutions - totalActionFailures) / totalActionExecutions) * 100 : 100;
+    const overallFailureRate = 100 - successRate;
     const avgResponseTime = allDurations.length > 0 ? allDurations.reduce((sum, d) => sum + d, 0) / allDurations.length : 0;
     const p95ResponseTime = calculatePercentile(allDurations, 95);
     
@@ -451,7 +488,7 @@
       successRate: successRate,
       avgResponseTime: avgResponseTime,
       p95ResponseTime: p95ResponseTime,
-      totalErrors: totalErrors,
+      totalErrors: totalActionFailures,
       insights: insights,
       // Original metrics
       stepAverages,
@@ -1142,151 +1179,194 @@
   </div>
 
     <!-- Detailed Step Report -->
-    <div class="bg-white shadow overflow-hidden sm:rounded-lg p-6 mb-6">
-      <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Step-by-Step Report</h3>
+    <div class="bg-white shadow overflow-hidden sm:rounded-lg p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg leading-6 font-medium text-gray-900">Live Step Dashboard</h3>
+        <Button onclick={() => showUserExplorerModal = true}>
+          <UserOutline class="w-4 h-4 mr-2" />
+          Explore Users
+        </Button>
+      </div>
       
       {#if enhancedReportData.length === 0}
         <p class="text-sm text-gray-500">No step data available for this run.</p>
       {:else}
-        <div class="space-y-4">
+        <div class="space-y-3">
           {#each enhancedReportData as step, stepIndex (step.id)}
-            <div class="border border-gray-200 rounded-lg">
-              <!-- Step Header -->
-              <button
-                onclick={() => toggleStep(step.id)}
-                class="w-full px-6 py-4 text-left hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-inset"
-              >
-                <div class="flex items-center justify-between">
-                  <div class="flex items-center space-x-4">
-                    <div class="flex-shrink-0">
-                      {#if expandedSteps.has(step.id)}
-                        <ChevronDownOutline class="h-5 w-5 text-gray-400" />
-                      {:else}
-                        <ChevronRightOutline class="h-5 w-5 text-gray-400" />
-                      {/if}
-                    </div>
-                    <div>
-                      <h4 class="text-lg font-medium text-gray-900">
-                        {step.name} ({step.concurrentUsers.length} users, {formatDuration(step.totalDuration)})
-                      </h4>
-                      <div class="flex items-center space-x-3 text-sm text-gray-500">
-                        <span>{step.aggregatedActions.size} unique actions</span>
-                        {#if step.totalOutputFiles > 0}
-                          <span>{step.totalOutputFiles} files</span>
-                        {/if}
-                        {#if step.totalFailures > 0}
-                          <span class="text-red-600">{step.totalFailures} failures</span>
-                        {/if}
-                      </div>
-                    </div>
-                  </div>
-                  <div class="flex items-center space-x-3">
-                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {getStatusBadgeClass(step.status)}">
-                      {step.status.toUpperCase()}
-                    </span>
-                    <span class="text-sm text-gray-500">
-                      {new Date(step.startTime).toLocaleTimeString()}
-                    </span>
+            {@const liveSummary = liveStepSummaries.get(step.id)}
+            {@const completedCount = liveSummary?.completedCount || step.concurrentUsers.length}
+            {@const inProgressCount = liveSummary?.inProgressCount || 0}
+            {@const failedCount = liveSummary?.failedCount || step.totalFailures}
+            {@const totalUsersForStep = liveSummary?.totalUsersForStep || step.concurrentUsers.length}
+            {@const avgDurationMs = liveSummary?.averageDurationMs || (step.totalDuration / Math.max(step.concurrentUsers.length, 1))}
+            {@const filesCount = liveSummary?.filesCount || step.totalOutputFiles}
+            
+            <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+              <!-- Mission Control Row -->
+              <div class="grid grid-cols-12 gap-4 items-center">
+                <!-- Step Name & Status -->
+                <div class="col-span-3">
+                  <h4 class="font-medium text-gray-900">{step.name}</h4>
+                  <p class="text-sm text-gray-500">
+                    {#if inProgressCount > 0}
+                      <span class="text-blue-600">In Progress</span>
+                    {:else if failedCount > 0}
+                      <span class="text-red-600">Failed</span>
+                    {:else if completedCount === totalUsersForStep}
+                      <span class="text-green-600">Completed</span>
+                    {:else}
+                      <span class="text-gray-600">Pending</span>
+                    {/if}
                   </div>
                 </div>
-              </button>
 
-              <!-- Step Details (Expandable) -->
-              {#if expandedSteps.has(step.id)}
-                <div class="border-t border-gray-200 px-6 py-4">
-                  <!-- Concurrent Users Info -->
-                  {#if step.concurrentUsers.length > 1}
-                    <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
-                      <h5 class="text-sm font-medium text-blue-800 mb-2">Concurrent Execution</h5>
-                      <p class="text-sm text-blue-700">
-                        This step was executed by {step.concurrentUsers.length} concurrent users: 
-                        {step.concurrentUsers.map(idx => `User ${idx}`).join(', ')}
-                      </p>
+                <!-- User Progress Bar -->
+                <div class="col-span-4">
+                  <div class="w-full bg-gray-200 rounded-full h-6 relative overflow-hidden">
+                    {@const completedPercent = totalUsersForStep > 0 ? (completedCount / totalUsersForStep) * 100 : 0}
+                    {@const inProgressPercent = totalUsersForStep > 0 ? (inProgressCount / totalUsersForStep) * 100 : 0}
+                    {@const failedPercent = totalUsersForStep > 0 ? (failedCount / totalUsersForStep) * 100 : 0}
+                    {@const pendingPercent = 100 - completedPercent - inProgressPercent - failedPercent}
+                    
+                    <!-- Completed (Green) -->
+                    <div 
+                      class="absolute left-0 top-0 h-full bg-green-500 transition-all duration-300"
+                      style="width: {completedPercent}%"
+                    ></div>
+                    
+                    <!-- In Progress (Blue) -->
+                    <div 
+                      class="absolute top-0 h-full bg-blue-500 transition-all duration-300"
+                      style="left: {completedPercent}%; width: {inProgressPercent}%"
+                    ></div>
+                    
+                    <!-- Failed (Red) -->
+                    <div 
+                      class="absolute top-0 h-full bg-red-500 transition-all duration-300"
+                      style="left: {completedPercent + inProgressPercent}%; width: {failedPercent}%"
+                    ></div>
+                    
+                    <!-- Progress Text Overlay -->
+                    <div class="absolute inset-0 flex items-center justify-center">
+                      <span class="text-xs font-medium text-white drop-shadow">
+                        {completedPercent.toFixed(0)}% ✅ | {inProgressPercent.toFixed(0)}% 🏃 | {failedPercent.toFixed(0)}% ❌
+                      </span>
                     </div>
-                  {/if}
+                  </div>
+                </div>
 
-                  {#if step.aggregatedActions.size === 0}
-                    <p class="text-sm text-gray-500 italic">No actions recorded for this step.</p>
+                <!-- Key Metrics -->
+                <div class="col-span-3 text-center">
+                  <div class="text-sm font-medium text-gray-900">
+                    Users: {completedCount}/{totalUsersForStep}
+                  </div>
+                  <div class="text-xs text-gray-500">
+                    Avg Time: {formatDuration(avgDurationMs)}
+                  </div>
+                </div>
+
+                <!-- Files Button -->
+                <div class="col-span-2 text-right">
+                  <Button 
+                    size="sm" 
+                    color={filesCount > 0 ? "primary" : "alternative"}
+                    disabled={filesCount === 0}
+                    onclick={() => showUserExplorerModal = true}
+                  >
+                    View {filesCount} files
+                  </Button>
+                </div>
+              </div>
+
+              <!-- Expandable Details -->
+              <div class="mt-4">
+                <button
+                  onclick={() => toggleStep(step.id)}
+                  class="flex items-center text-sm text-gray-600 hover:text-gray-900"
+                >
+                  {#if expandedSteps.has(step.id)}
+                    <ChevronDownOutline class="h-4 w-4 mr-1" />
+                    Hide Details
                   {:else}
+                    <ChevronRightOutline class="h-4 w-4 mr-1" />
+                    Show Details ({step.aggregatedActions.size} actions)
+                  {/if}
+                </button>
 
-
+                {#if expandedSteps.has(step.id)}
+                  <div class="mt-4 space-y-3">
                     <!-- Aggregated Actions View -->
-                    <div class="space-y-4">
-                      <h5 class="text-sm font-semibold text-gray-800">Action Performance Summary</h5>
-                      
-                      {#each Array.from(step.aggregatedActions.entries()) as [actionKey, action] (actionKey)}
-                        <div class="bg-gray-50 border border-gray-200 rounded-md p-4">
-                          <div class="flex items-center justify-between mb-2">
-                            <div>
-                              <h6 class="text-sm font-medium text-gray-900">
-                                ▶ {action.type}
-                                {#if action.selector}
-                                  <span class="text-xs text-gray-500">({action.selector})</span>
-                                {/if}
-                              </h6>
-                              <div class="flex items-center space-x-4 text-xs text-gray-600 mt-1">
-                                <span>Executions: {((action.successCount / action.executions) * 100).toFixed(0)}% ({action.successCount}/{action.executions}) Success</span>
-                                <span>Duration: Avg: {formatDuration(action.stats.avg)} | P95: {formatDuration(action.stats.p95)} | Min: {formatDuration(action.stats.min)}</span>
-                              </div>
+                    {#each Array.from(step.aggregatedActions.entries()) as [actionKey, action] (actionKey)}
+                      <div class="bg-gray-50 border border-gray-200 rounded-md p-3">
+                        <div class="flex items-center justify-between">
+                          <div>
+                            <h6 class="text-sm font-medium text-gray-900">
+                              ▶ {action.name || action.type}
+                              {#if action.name}
+                                <span class="text-xs text-gray-500">({action.type})</span>
+                              {/if}
+                            </h6>
+                            <div class="flex items-center space-x-4 text-xs text-gray-600 mt-1">
+                              <span>Executions: {((action.successCount / action.executions) * 100).toFixed(0)}% ({action.successCount}/{action.executions}) Success</span>
+                              <span>Duration: Avg: {formatDuration(action.stats.avg)} | P95: {formatDuration(action.stats.p95)}</span>
                             </div>
-                            {#if action.failureCount > 0}
-                              <button
-                                onclick={(event) => { event.stopPropagation(); toggleFailureAction(actionKey); }}
-                                class="text-sm font-medium text-red-600 hover:text-red-800 underline"
-                              >
-                                {action.failureCount} Failure{action.failureCount > 1 ? 's' : ''}
-                              </button>
-                            {/if}
                           </div>
-                          
-                          <!-- Failure Details (Drill-down on demand) -->
-                          {#if action.failureCount > 0 && expandedFailureActions.has(actionKey)}
-                            <div class="border-t border-gray-300 pt-3 mt-3">
-                              <h6 class="text-xs font-semibold text-red-700 mb-2">Failure Details:</h6>
-                              <div class="space-y-2">
-                                {#each action.failedExecutions as failure}
-                                  <div class="bg-red-50 border border-red-200 rounded p-3">
-                                    <div class="flex items-start justify-between">
-                                      <div>
-                                        <p class="text-sm font-medium text-red-800">User {failure.loopIndex}</p>
-                                        <p class="text-xs text-red-700 mt-1">❌ {failure.errorMessage}</p>
-                                      </div>
-                                      <div class="flex space-x-2">
-                                        {#if failure.outputFiles.length > 0}
-                                          {#each failure.outputFiles as fileUrl}
-                                            {#if getFileType(fileUrl) === "image"}
-                                              <button
-                                                onclick={(event) => { event.stopPropagation(); openImageViewer(fileUrl); }}
-                                                class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded hover:bg-blue-200"
-                                              >
-                                                View Screenshot
-                                              </button>
-                                            {:else}
-                                              <a
-                                                href={fileUrl}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                onclick={(event) => event.stopPropagation()}
-                                                class="text-xs bg-gray-100 text-gray-800 px-2 py-1 rounded hover:bg-gray-200"
-                                              >
-                                                View File
-                                              </a>
-                                            {/if}
-                                          {/each}
-                                        {/if}
-                                      </div>
-                                    </div>
-                                  </div>
-                                {/each}
-                              </div>
-                            </div>
+                          {#if action.failureCount > 0}
+                            <button
+                              onclick={() => toggleFailureAction(actionKey)}
+                              class="text-sm font-medium text-red-600 hover:text-red-800 underline"
+                            >
+                              {action.failureCount} Failure{action.failureCount > 1 ? 's' : ''}
+                            </button>
                           {/if}
                         </div>
-                      {/each}
-                    </div>
-                  {/if}
-                </div>
-              {/if}
+                        
+                        <!-- Failure Details (Drill-down on demand) -->
+                        {#if action.failureCount > 0 && expandedFailureActions.has(actionKey)}
+                          <div class="border-t border-gray-300 pt-3 mt-3">
+                            <h6 class="text-xs font-semibold text-red-700 mb-2">Failure Details:</h6>
+                            <div class="space-y-2">
+                              {#each action.failedExecutions as failure}
+                                <div class="bg-red-50 border border-red-200 rounded p-3">
+                                  <div class="flex items-start justify-between">
+                                    <div>
+                                      <p class="text-sm font-medium text-red-800">User {failure.loopIndex}</p>
+                                      <p class="text-xs text-red-700 mt-1">❌ {failure.errorMessage}</p>
+                                    </div>
+                                    <div class="flex space-x-2">
+                                      {#if failure.outputFiles.length > 0}
+                                        {#each failure.outputFiles as fileUrl}
+                                          {#if getFileType(fileUrl) === "image"}
+                                            <button
+                                              onclick={() => openImageViewer(fileUrl)}
+                                              class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded hover:bg-blue-200"
+                                            >
+                                              View Screenshot
+                                            </button>
+                                          {:else}
+                                            <a
+                                              href={fileUrl}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              class="text-xs bg-gray-100 text-gray-800 px-2 py-1 rounded hover:bg-gray-200"
+                                            >
+                                              View File
+                                            </a>
+                                          {/if}
+                                        {/each}
+                                      {/if}
+                                    </div>
+                                  </div>
+                                </div>
+                              {/each}
+                            </div>
+                          </div>
+                        {/if}
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
             </div>
           {/each}
         </div>
@@ -1309,6 +1389,13 @@
   imageUrls={stepImageFiles}
   startIndex={0}
   onClose={() => showStepImageViewerModal = false}
+/>
+
+<!-- User Explorer Modal -->
+<UserExplorerModal
+  bind:open={showUserExplorerModal}
+  {reportData}
+  onClose={() => showUserExplorerModal = false}
 />
 
 <style>

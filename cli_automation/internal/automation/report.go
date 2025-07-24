@@ -100,6 +100,7 @@ func generateHTMLReport(automation *Automation, run *AutomationRun, config *Auto
 			if _, exists := step.Actions[actionKey]; !exists {
 				step.Actions[actionKey] = &ActionReport{
 					ID:             actionID,
+					Name:           getString(log, "action_name"),
 					Type:           getString(log, "action_type"),
 					ParentActionID: getString(log, "parent_action_id"),
 					LoopIndex:      loopIndex,
@@ -230,6 +231,7 @@ type StepReport struct {
 
 type ActionReport struct {
 	ID             string
+	Name           string
 	Type           string
 	ParentActionID string
 	LoopIndex      int
@@ -493,12 +495,17 @@ func generateHTMLContent(automation *Automation, run *AutomationRun, config *Aut
 				parentInfo = fmt.Sprintf(" (nested under %s)", action.ParentActionID[:8])
 			}
 
+			actionDisplayName := action.Type
+			if action.Name != "" {
+				actionDisplayName = fmt.Sprintf("%s (%s)", action.Name, action.Type)
+			}
+
 			html.WriteString(fmt.Sprintf(`
                 <div class="%s">
                     <div class="action-title">%s%s</div>
                     <div class="action-meta">
                         User %d | <span class="status-badge %s">%s</span> | Duration: %dms
-                    </div>`, actionClass, action.Type, parentInfo, action.LoopIndex, actionStatusClass, strings.ToUpper(action.Status), action.Duration))
+                    </div>`, actionClass, actionDisplayName, parentInfo, action.LoopIndex, actionStatusClass, strings.ToUpper(action.Status), action.Duration))
 
 			if action.Error != "" {
 				html.WriteString(fmt.Sprintf(`<div style="color: #dc2626; margin-top: 5px;">Error: %s</div>`, action.Error))
