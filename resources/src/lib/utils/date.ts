@@ -7,10 +7,10 @@ export const formatDate = (dateString: string) => {
   });
 };
 
-export function toRFC3339(date: Date|string) {
-    if (typeof date === 'string') {
-        date = new Date(date);
-    }
+export function toRFC3339(date: Date | string) {
+  if (typeof date === "string") {
+    date = new Date(date);
+  }
   const pad = (n: number) => (n < 10 ? "0" + n : n);
 
   const year = date.getFullYear();
@@ -30,29 +30,42 @@ export function toRFC3339(date: Date|string) {
 }
 
 /**
-   * Formats a date string or Date object for a datetime-local input.
-   * @param {string | Date} dateValue - The date to format.
-   * @returns {string} The formatted date string or an empty string.
-   */
+ * Formats a date string or Date object for a datetime-local input.
+ * @param {string | Date} dateValue - The date to format.
+ * @returns {string} The formatted date string or an empty string.
+ */
 export function formatDateForInput(dateValue: string | Date): string {
   // Return an empty string if the input is null, undefined, or empty
-  if (!dateValue) return '';
+  if (!dateValue) return "";
 
   const date = new Date(dateValue);
 
   // Check if the created date is valid
   if (isNaN(date.getTime())) {
-    return '';
+    return "";
   }
 
   // Get local date and time components
   const year = date.getFullYear();
   // Pad month, day, hours, and minutes with a leading zero if they are single-digit
-  const month = String(date.getMonth() + 1).padStart(2, '0'); // getMonth() is 0-indexed
-  const day = String(date.getDate()).padStart(2, '0');
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, "0"); // getMonth() is 0-indexed
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
 
   // Return the correctly formatted string
   return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+// Helper function to format duration
+export function formatDuration(durationMs: number): string {
+  if (durationMs < 1000) {
+    return `${durationMs}ms`;
+  } else if (durationMs < 60000) {
+    return `${(durationMs / 1000).toFixed(2)}s`;
+  } else {
+    const minutes = Math.floor(durationMs / 60000);
+    const seconds = ((durationMs % 60000) / 1000).toFixed(2);
+    return `${minutes}m ${seconds}s`;
+  }
 }

@@ -7,7 +7,7 @@ import (
 
 	"log/slog"
 
-	"github.com/delordemm1/qplayground/internal/modules/storage"
+	"github.com/delordemm1/qplayground-cli/internal/storage"
 	"github.com/playwright-community/playwright-go"
 )
 
@@ -23,20 +23,20 @@ const (
 
 // RunEvent represents an event emitted during automation execution
 type RunEvent struct {
-	Type       RunEventType           `json:"type"`
-	Timestamp  time.Time              `json:"timestamp"`
-	StepID     string                 `json:"step_id,omitempty"`
-	StepName   string                 `json:"step_name,omitempty"`
-	ActionID   string                 `json:"action_id,omitempty"`
-	ParentActionID string             `json:"parent_action_id,omitempty"`
-	ActionType string                 `json:"action_type,omitempty"`
-	Message    string                 `json:"message,omitempty"`
-	Error      string                 `json:"error,omitempty"`
-	OutputFile string                 `json:"output_file,omitempty"`
-	Duration   int64                  `json:"duration_ms,omitempty"`
-	LoopIndex  int                    `json:"loop_index,omitempty"`
-	LocalLoopIndex int                `json:"local_loop_index,omitempty"`
-	Data       map[string]interface{} `json:"data,omitempty"`
+	Type           RunEventType           `json:"type"`
+	Timestamp      time.Time              `json:"timestamp"`
+	StepID         string                 `json:"step_id,omitempty"`
+	StepName       string                 `json:"step_name,omitempty"`
+	ActionID       string                 `json:"action_id,omitempty"`
+	ParentActionID string                 `json:"parent_action_id,omitempty"`
+	ActionType     string                 `json:"action_type,omitempty"`
+	Message        string                 `json:"message,omitempty"`
+	Error          string                 `json:"error,omitempty"`
+	OutputFile     string                 `json:"output_file,omitempty"`
+	Duration       int64                  `json:"duration_ms,omitempty"`
+	LoopIndex      int                    `json:"loop_index,omitempty"`
+	LocalLoopIndex int                    `json:"local_loop_index,omitempty"`
+	Data           map[string]interface{} `json:"data,omitempty"`
 }
 
 // RunContext holds shared resources and state for a single automation run.
@@ -147,6 +147,7 @@ type Automation struct {
 	Name        string
 	Description string
 	ConfigJSON  string // JSON string containing variables, run settings, templates
+	Steps       []*AutomationStep
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
@@ -157,6 +158,7 @@ type AutomationStep struct {
 	AutomationID string
 	Name         string
 	StepOrder    int
+	Actions      []*AutomationAction
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }
@@ -184,78 +186,4 @@ type AutomationRun struct {
 	ErrorMessage    string
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
-}
-
-// AutomationRepository defines the interface for automation data operations
-type AutomationRepository interface {
-	// Automation CRUD
-	CreateAutomation(ctx context.Context, automation *Automation) error
-	GetAutomationByID(ctx context.Context, id string) (*Automation, error)
-	GetAutomationsByProjectID(ctx context.Context, projectID string) ([]*Automation, error)
-	UpdateAutomation(ctx context.Context, automation *Automation) error
-	DeleteAutomation(ctx context.Context, id string) error
-
-	// Step CRUD
-	CreateStep(ctx context.Context, step *AutomationStep) error
-	GetStepsByAutomationID(ctx context.Context, automationID string) ([]*AutomationStep, error)
-	UpdateStep(ctx context.Context, step *AutomationStep) error
-	DeleteStep(ctx context.Context, id string) error
-
-	// Action CRUD
-	CreateAction(ctx context.Context, action *AutomationAction) error
-	GetActionsByStepID(ctx context.Context, stepID string) ([]*AutomationAction, error)
-	UpdateAction(ctx context.Context, action *AutomationAction) error
-	DeleteAction(ctx context.Context, id string) error
-
-	// Run CRUD
-	CreateRun(ctx context.Context, run *AutomationRun) error
-	GetRunByID(ctx context.Context, id string) (*AutomationRun, error)
-	GetRunsByAutomationID(ctx context.Context, automationID string) ([]*AutomationRun, error)
-	UpdateRun(ctx context.Context, run *AutomationRun) error
-
-	// Order management
-	GetStepByID(ctx context.Context, id string) (*AutomationStep, error)
-	GetActionByID(ctx context.Context, id string) (*AutomationAction, error)
-	GetStepByAutomationIDAndOrder(ctx context.Context, automationID string, order int) (*AutomationStep, error)
-	GetActionByStepIDAndOrder(ctx context.Context, stepID string, order int) (*AutomationAction, error)
-	GetMaxStepOrder(ctx context.Context, automationID string) (int, error)
-	GetMaxActionOrder(ctx context.Context, stepID string) (int, error)
-	ShiftStepOrders(ctx context.Context, automationID string, startOrder, endOrder int, increment bool) error
-	ShiftActionOrders(ctx context.Context, stepID string, startOrder, endOrder int, increment bool) error
-	ShiftActionOrdersAfterDelete(ctx context.Context, stepID string, deletedOrder int) error
-}
-
-// AutomationService defines the interface for automation business logic
-type AutomationService interface {
-	// Automation management
-	CreateAutomation(ctx context.Context, projectID, name, description, configJSON string) (*Automation, error)
-	GetAutomationsByProject(ctx context.Context, projectID string) ([]*Automation, error)
-	GetAutomationByID(ctx context.Context, id string) (*Automation, error)
-	GetFullAutomationConfig(ctx context.Context, automationID string) (*ExportedAutomationConfig, error)
-	UpdateAutomation(ctx context.Context, automation *Automation) error
-	DeleteAutomation(ctx context.Context, id string) error
-
-	// Step management
-	CreateStep(ctx context.Context, automationID, name string, stepOrder int) (*AutomationStep, error)
-	GetStepsByAutomation(ctx context.Context, automationID string) ([]*AutomationStep, error)
-	UpdateStep(ctx context.Context, step *AutomationStep) error
-	DeleteStep(ctx context.Context, id string) error
-
-	// Action management
-	CreateAction(ctx context.Context, stepID, actionType, actionConfigJSON string, actionOrder int) (*AutomationAction, error)
-	GetActionsByStep(ctx context.Context, stepID string) ([]*AutomationAction, error)
-	UpdateAction(ctx context.Context, action *AutomationAction) error
-	DeleteAction(ctx context.Context, id string) error
-
-	// Run management
-	TriggerRun(ctx context.Context, automationID string) (*AutomationRun, error)
-	GetRunsByAutomation(ctx context.Context, automationID string) ([]*AutomationRun, error)
-	GetRunByID(ctx context.Context, id string) (*AutomationRun, error)
-
-	// Order management helpers
-	GetMaxStepOrder(ctx context.Context, automationID string) (int, error)
-	GetMaxActionOrder(ctx context.Context, stepID string) (int, error)
-
-	// Run cache management
-	UpdateRunStatus(ctx context.Context, runID, status string) error
 }

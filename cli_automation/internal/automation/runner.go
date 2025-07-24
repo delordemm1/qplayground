@@ -12,38 +12,31 @@ import (
 	"time"
 
 	"github.com/brianvoe/gofakeit/v7"
-	"github.com/delordemm1/qplayground/internal/modules/notification"
-	"github.com/delordemm1/qplayground/internal/modules/storage"
+	"github.com/delordemm1/qplayground-cli/internal/notification"
+	"github.com/delordemm1/qplayground-cli/internal/storage"
+	"github.com/delordemm1/qplayground-cli/internal/utils"
 	"github.com/playwright-community/playwright-go"
 )
 
 // Runner orchestrates the execution of automations.
 type Runner struct {
-	automationRepo      AutomationRepository
 	storageService      storage.StorageService
 	notificationService notification.NotificationService
-	sseManager          *SSEManager
+	outputBaseDir       string
 }
 
 // NewRunner creates a new Runner instance.
-func NewRunner(automationRepo AutomationRepository, storageService storage.StorageService, notificationService notification.NotificationService, sseManager *SSEManager) *Runner {
+func NewRunner(storageService storage.StorageService, notificationService notification.NotificationService, outputBaseDir string) *Runner {
 	return &Runner{
-		automationRepo:      automationRepo,
 		storageService:      storageService,
 		notificationService: notificationService,
-		sseManager:          sseManager,
+		outputBaseDir:       outputBaseDir,
 	}
 }
 
 // RunAutomation executes a given automation.
-func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *AutomationRun) error {
-	// 1. Fetch Automation details from DB
-	automation, err := r.automationRepo.GetAutomationByID(ctx, run.AutomationID)
-	if err != nil {
-		return fmt.Errorf("failed to get automation: %w", err)
-	}
-
-	// 2. Parse automation configuration
+func (r *Runner) RunAutomation(ctx context.Context, automation *Automation, run *AutomationRun) error {
+	// Parse automation configuration
 	var automationConfig AutomationConfig
 	if automation.ConfigJSON != "" {
 		if err := json.Unmarshal([]byte(automation.ConfigJSON), &automationConfig); err != nil {
@@ -78,7 +71,6 @@ func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *Autom
 		if rec := recover(); rec != nil {
 			run.Status = "failed"
 			run.ErrorMessage = fmt.Sprintf("panic: %v", rec)
-			r.automationRepo.UpdateRun(ctx, run)
 			panic(rec) // Re-throw panic
 		}
 
@@ -89,10 +81,11 @@ func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *Autom
 			run.Status = "completed"
 		}
 
-		r.automationRepo.UpdateRun(ctx, run)
+		// Generate final report
+		r.generateFinalReport(automation, run, &automationConfig)
 	}()
 
-	// 3. Determine run count and mode
+	// Determine run count and mode
 	runCount := 1
 	runMode := "sequential"
 	runDelay := time.Duration(1000) * time.Millisecond
@@ -109,11 +102,6 @@ func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *Autom
 		"run_count", runCount,
 		"run_mode", runMode)
 
-	// Send initial status update via SSE
-	if r.sseManager != nil {
-		r.sseManager.SendRunStatusUpdate(projectID, run.AutomationID, run.ID, "running")
-	}
-
 	// Create shared event channel and data structures for all runs
 	eventCh := make(chan RunEvent, 1000) // Large buffer for concurrent runs
 	var allLogs []map[string]any
@@ -122,9 +110,9 @@ func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *Autom
 
 	// Start single event processor for all runs
 	eventProcessorDone := make(chan struct{})
-	go r.processAllEvents(ctx, eventCh, &allLogs, &allOutputFiles, &mu, run, projectID, eventProcessorDone)
+	go r.processAllEvents(ctx, eventCh, &allLogs, &allOutputFiles, &mu, run, eventProcessorDone)
 
-	// 4. Execute runs based on configuration
+	// Execute runs based on configuration
 	var executionError error
 
 	if runMode == "parallel" && runCount > 1 {
@@ -135,7 +123,7 @@ func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *Autom
 			wg.Add(1)
 			go func(loopIndex int) {
 				defer wg.Done()
-				err := r.executeSingleRun(ctx, automation, &automationConfig, run, loopIndex, projectID, eventCh)
+				err := r.executeSingleRun(ctx, automation, &automationConfig, run, loopIndex, eventCh)
 
 				if err != nil {
 					// For parallel execution, we'll just log the error
@@ -149,7 +137,7 @@ func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *Autom
 	} else {
 		// Sequential execution
 		for i := 0; i < runCount; i++ {
-			err := r.executeSingleRun(ctx, automation, &automationConfig, run, i, projectID, eventCh)
+			err := r.executeSingleRun(ctx, automation, &automationConfig, run, i, eventCh)
 
 			if err != nil {
 				executionError = err
@@ -169,8 +157,6 @@ func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *Autom
 
 	if executionError != nil {
 		err = executionError
-		// Send error notifications
-		go r.sendNotifications(context.Background(), automation, run, &automationConfig)
 		return err
 	}
 
@@ -179,25 +165,11 @@ func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *Autom
 		"run_id", run.ID,
 		"total_runs", runCount)
 
-	// Send completion update via SSE
-	if r.sseManager != nil {
-		totalDuration := int64(0)
-		if run.StartTime != nil && run.EndTime != nil {
-			totalDuration = run.EndTime.Sub(*run.StartTime).Milliseconds()
-		}
-
-		r.sseManager.SendRunComplete(projectID, run.AutomationID, run.ID, "completed", totalDuration, allOutputFiles)
-	}
-
-	// Send completion notifications
-	go r.sendNotifications(context.Background(), automation, run, &automationConfig)
-
 	return nil
 }
 
 // executeSingleRun executes a single run of the automation
-func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, automationConfig *AutomationConfig, run *AutomationRun, loopIndex int, projectID string, eventCh chan RunEvent) error {
-
+func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, automationConfig *AutomationConfig, run *AutomationRun, loopIndex int, eventCh chan<- RunEvent) error {
 	// Initialize Playwright for this run
 	pw, err := playwright.Run()
 	if err != nil {
@@ -233,7 +205,7 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 		LoopIndex:    loopIndex,
 		Timestamp:    time.Now().Format("20060102-150405"),
 		RunID:        run.ID,
-		UserID:       "", // TODO: Get from context if available
+		UserID:       "", // Not applicable for CLI
 		ProjectID:    automation.ProjectID,
 		AutomationID: automation.ID,
 		StaticVars:   make(map[string]string),
@@ -259,14 +231,8 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 		AutomationConfig:  automationConfig,
 	}
 
-	// Fetch and execute steps
-	steps, err := r.automationRepo.GetStepsByAutomationID(ctx, automation.ID)
-	if err != nil {
-		return fmt.Errorf("failed to get automation steps: %w", err)
-	}
-
-	totalSteps := len(steps)
-	for stepIndex, step := range steps {
+	totalSteps := len(automation.Steps)
+	for stepIndex, step := range automation.Steps {
 		// Check for cancellation before each step
 		select {
 		case <-ctx.Done():
@@ -280,18 +246,7 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 
 		runContext.Logger.Info("Executing step", "step_name", step.Name, "step_order", step.StepOrder, "loop_index", loopIndex)
 
-		// Send step progress update via SSE
-		if r.sseManager != nil {
-			r.sseManager.SendRunStep(automation.ProjectID, run.AutomationID, run.ID, step.Name, stepIndex+1, totalSteps)
-		}
-
-		// Get actions for this step
-		stepActions, err := r.automationRepo.GetActionsByStepID(ctx, step.ID)
-		if err != nil {
-			return fmt.Errorf("failed to get actions for step %s: %w", step.Name, err)
-		}
-
-		for _, action := range stepActions {
+		for _, action := range step.Actions {
 			// Check for cancellation before each action
 			select {
 			case <-ctx.Done():
@@ -342,12 +297,9 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 	return nil
 }
 
-// processAllEvents handles events from the shared event channel and updates the database periodically
-func (r *Runner) processAllEvents(ctx context.Context, eventCh <-chan RunEvent, logs *[]map[string]any, outputFiles *[]string, mu *sync.Mutex, run *AutomationRun, projectID string, done chan<- struct{}) {
+// processAllEvents handles events from the shared event channel
+func (r *Runner) processAllEvents(ctx context.Context, eventCh <-chan RunEvent, logs *[]map[string]any, outputFiles *[]string, mu *sync.Mutex, run *AutomationRun, done chan<- struct{}) {
 	defer close(done)
-
-	ticker := time.NewTicker(5 * time.Second) // Save to DB every 5 seconds
-	defer ticker.Stop()
 
 	for {
 		select {
@@ -355,7 +307,7 @@ func (r *Runner) processAllEvents(ctx context.Context, eventCh <-chan RunEvent, 
 			if !ok {
 				// Channel closed, save final state and exit
 				mu.Lock()
-				r.saveRunProgress(ctx, run, *logs, *outputFiles)
+				r.saveRunProgress(run, *logs, *outputFiles)
 				mu.Unlock()
 				return
 			}
@@ -365,100 +317,86 @@ func (r *Runner) processAllEvents(ctx context.Context, eventCh <-chan RunEvent, 
 			switch event.Type {
 			case RunEventTypeLog:
 				logEntry := map[string]any{
-					"parent_action_id": event.ParentActionID,
-					"local_loop_index": event.LocalLoopIndex,
 					"timestamp":        event.Timestamp.Format(time.RFC3339),
 					"step_name":        event.StepName,
 					"step_id":          event.StepID,
 					"action_id":        event.ActionID,
+					"parent_action_id": event.ParentActionID,
 					"action_type":      event.ActionType,
 					"message":          event.Message,
 					"loop_index":       event.LoopIndex,
+					"local_loop_index": event.LocalLoopIndex,
 					"duration_ms":      event.Duration,
 					"status":           "success",
 				}
 				*logs = append(*logs, logEntry)
 
-				// Send SSE update
-				if r.sseManager != nil {
-					r.sseManager.SendRunLog(projectID, run.AutomationID, run.ID, event.StepName, event.ActionType, event.Message, event.Duration)
-				}
-
 			case RunEventTypeError:
 				logEntry := map[string]any{
-					"parent_action_id": event.ParentActionID,
-					"local_loop_index": event.LocalLoopIndex,
 					"timestamp":        event.Timestamp.Format(time.RFC3339),
 					"step_name":        event.StepName,
 					"step_id":          event.StepID,
 					"action_id":        event.ActionID,
+					"parent_action_id": event.ParentActionID,
 					"action_type":      event.ActionType,
 					"error":            event.Error,
 					"loop_index":       event.LoopIndex,
+					"local_loop_index": event.LocalLoopIndex,
 					"duration_ms":      event.Duration,
 					"status":           "failed",
 				}
 				*logs = append(*logs, logEntry)
-
-				// Send SSE update
-				if r.sseManager != nil {
-					r.sseManager.SendRunError(projectID, run.AutomationID, run.ID, event.StepName, event.ActionType, event.Error)
-				}
 
 			case RunEventTypeOutputFile:
 				*outputFiles = append(*outputFiles, event.OutputFile)
 
 				// Also add to logs for completeness
 				logEntry := map[string]any{
-					"parent_action_id": event.ParentActionID,
-					"local_loop_index": event.LocalLoopIndex,
 					"timestamp":        event.Timestamp.Format(time.RFC3339),
 					"step_name":        event.StepName,
 					"step_id":          event.StepID,
 					"action_id":        event.ActionID,
+					"parent_action_id": event.ParentActionID,
 					"action_type":      event.ActionType,
 					"output_file":      event.OutputFile,
 					"loop_index":       event.LoopIndex,
+					"local_loop_index": event.LocalLoopIndex,
 					"duration_ms":      event.Duration,
 					"status":           "success",
 				}
 				*logs = append(*logs, logEntry)
-
-				// Send SSE update
-				if r.sseManager != nil {
-					r.sseManager.SendRunOutputFile(projectID, run.AutomationID, run.ID, event.OutputFile)
-				}
 			}
-			mu.Unlock()
-
-		case <-ticker.C:
-			// Periodic save to database
-			mu.Lock()
-			r.saveRunProgress(ctx, run, *logs, *outputFiles)
 			mu.Unlock()
 
 		case <-ctx.Done():
 			// Context cancelled, save final state and exit
 			mu.Lock()
-			r.saveRunProgress(ctx, run, *logs, *outputFiles)
+			r.saveRunProgress(run, *logs, *outputFiles)
 			mu.Unlock()
 			return
 		}
 	}
 }
 
-// saveRunProgress saves the current logs and output files to the database
-func (r *Runner) saveRunProgress(ctx context.Context, run *AutomationRun, logs []map[string]any, outputFiles []string) {
+// saveRunProgress saves the current logs and output files to the run object
+func (r *Runner) saveRunProgress(run *AutomationRun, logs []map[string]any, outputFiles []string) {
 	// Update run with current logs and output files
 	logsBytes, _ := json.Marshal(logs)
 	run.LogsJSON = string(logsBytes)
 
 	outputFilesBytes, _ := json.Marshal(outputFiles)
 	run.OutputFilesJSON = string(outputFilesBytes)
+}
 
-	// Save to database
-	if err := r.automationRepo.UpdateRun(ctx, run); err != nil {
-		slog.Error("Failed to save run progress", "run_id", run.ID, "error", err)
+// generateFinalReport generates the final report after automation completion
+func (r *Runner) generateFinalReport(automation *Automation, run *AutomationRun, automationConfig *AutomationConfig) {
+	if r.outputBaseDir == "" {
+		return // No output directory specified
+	}
+
+	err := GenerateReports(automation, run, automationConfig, r.outputBaseDir)
+	if err != nil {
+		slog.Error("Failed to generate final report", "error", err, "run_id", run.ID)
 	}
 }
 
@@ -503,7 +441,7 @@ func (r *Runner) ResolveVariablesInString(input string, varContext *VariableCont
 		switch varName {
 		case "loopIndex":
 			return strconv.Itoa(varContext.LoopIndex)
-		case "localLoopIndex": // Add this case
+		case "localLoopIndex":
 			return strconv.Itoa(varContext.LocalLoopIndex)
 		case "timestamp":
 			return varContext.Timestamp
@@ -584,7 +522,7 @@ func (r *Runner) generateFakerValue(method string) string {
 	case "password":
 		return gofakeit.Password(true, true, true, true, false, 12)
 	case "uuid":
-		return gofakeit.UUID()
+		return utils.UtilGenerateUUID()
 	case "number":
 		return strconv.Itoa(gofakeit.Number(1, 1000))
 	case "date":
@@ -592,64 +530,5 @@ func (r *Runner) generateFakerValue(method string) string {
 	default:
 		slog.Warn("Unknown faker method", "method", method)
 		return fmt.Sprintf("{{faker.%s}}", method)
-	}
-}
-
-// sendNotifications sends notifications based on the automation configuration
-func (r *Runner) sendNotifications(ctx context.Context, automation *Automation, run *AutomationRun, automationConfig *AutomationConfig) {
-	if len(automationConfig.Notifications) == 0 {
-		return // No notifications configured
-	}
-
-	// Get project information (you might need to add this to the Runner or pass it in)
-	// For now, we'll use the project ID from the automation
-	projectName := "Unknown Project" // TODO: Fetch actual project name if needed
-
-	// Parse output files from run
-	var outputFiles []string
-	if run.OutputFilesJSON != "" {
-		json.Unmarshal([]byte(run.OutputFilesJSON), &outputFiles)
-	}
-
-	// Parse logs from run
-	var logs []map[string]any
-	if run.LogsJSON != "" {
-		json.Unmarshal([]byte(run.LogsJSON), &logs)
-	}
-
-	// Build notification message
-	message := notification.NotificationMessage{
-		AutomationID:   automation.ID,
-		AutomationName: automation.Name,
-		ProjectID:      automation.ProjectID,
-		ProjectName:    projectName,
-		RunID:          run.ID,
-		Status:         run.Status,
-		StartTime:      run.StartTime,
-		EndTime:        run.EndTime,
-		ErrorMessage:   run.ErrorMessage,
-		OutputFiles:    outputFiles,
-		LogsCount:      len(logs),
-	}
-
-	// Convert our config to the notification service format
-	channels := make([]notification.NotificationChannelConfig, len(automationConfig.Notifications))
-	for i, channel := range automationConfig.Notifications {
-		channels[i] = notification.NotificationChannelConfig{
-			ID:         channel.ID,
-			Type:       channel.Type,
-			OnComplete: channel.OnComplete,
-			OnError:    channel.OnError,
-			Config:     channel.Config,
-		}
-	}
-
-	// Dispatch notifications
-	err := r.notificationService.DispatchAutomationNotification(ctx, message, channels)
-	if err != nil {
-		slog.Error("Failed to dispatch automation notifications",
-			"automation_id", automation.ID,
-			"run_id", run.ID,
-			"error", err)
 	}
 }

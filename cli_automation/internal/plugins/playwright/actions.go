@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/delordemm1/qplayground/internal/modules/automation"
+	"github.com/delordemm1/qplayground-cli/internal/automation"
 	"github.com/playwright-community/playwright-go"
 )
 
@@ -43,17 +43,17 @@ func sendSuccessEvent(runContext *automation.RunContext, actionType, message str
 	if runContext.EventCh != nil {
 		select {
 		case runContext.EventCh <- automation.RunEvent{
-			ParentActionID: runContext.ParentActionID,
-			LocalLoopIndex: runContext.VariableContext.LocalLoopIndex,
-			Type:           automation.RunEventTypeLog,
-			Timestamp:      time.Now(),
-			StepName:       runContext.StepName,
-			StepID:         runContext.StepID,
-			ActionID:       runContext.ActionID,
-			ActionType:     actionType,
-			Message:        message,
-			Duration:       duration.Milliseconds(),
-			LoopIndex:      runContext.LoopIndex,
+			Type:             automation.RunEventTypeLog,
+			Timestamp:        time.Now(),
+			StepName:         runContext.StepName,
+			StepID:           runContext.StepID,
+			ActionID:         runContext.ActionID,
+			ParentActionID:   runContext.ParentActionID,
+			ActionType:       actionType,
+			Message:          message,
+			Duration:         duration.Milliseconds(),
+			LoopIndex:        runContext.LoopIndex,
+			LocalLoopIndex:   runContext.VariableContext.LocalLoopIndex,
 		}:
 		default:
 			// Channel is full, skip this event to avoid blocking
@@ -66,17 +66,17 @@ func sendErrorEvent(runContext *automation.RunContext, actionType, errorMsg stri
 	if runContext.EventCh != nil {
 		select {
 		case runContext.EventCh <- automation.RunEvent{
-			ParentActionID: runContext.ParentActionID,
-			LocalLoopIndex: runContext.VariableContext.LocalLoopIndex,
-			Type:           automation.RunEventTypeError,
-			Timestamp:      time.Now(),
-			StepName:       runContext.StepName,
-			StepID:         runContext.StepID,
-			ActionID:       runContext.ActionID,
-			ActionType:     actionType,
-			Error:          errorMsg,
-			Duration:       duration.Milliseconds(),
-			LoopIndex:      runContext.LoopIndex,
+			Type:             automation.RunEventTypeError,
+			Timestamp:        time.Now(),
+			StepName:         runContext.StepName,
+			StepID:           runContext.StepID,
+			ActionID:         runContext.ActionID,
+			ParentActionID:   runContext.ParentActionID,
+			ActionType:       actionType,
+			Error:            errorMsg,
+			Duration:         duration.Milliseconds(),
+			LoopIndex:        runContext.LoopIndex,
+			LocalLoopIndex:   runContext.VariableContext.LocalLoopIndex,
 		}:
 		default:
 			// Channel is full, skip this event to avoid blocking
@@ -154,7 +154,7 @@ func (a *ClickAction) Execute(ctx context.Context, actionConfig map[string]inter
 		options.Force = playwright.Bool(force)
 	}
 
-	err = runContext.PlaywrightPage.Locator(selector).First().Click(options)
+	err = runContext.PlaywrightPage.Locator(selector).Click(options)
 	duration := time.Since(startTime)
 
 	if err != nil {
@@ -189,7 +189,7 @@ func (a *FillAction) Execute(ctx context.Context, actionConfig map[string]interf
 		options.Force = playwright.Bool(force)
 	}
 
-	err = runContext.PlaywrightPage.Locator(selector).First().Fill(value, options)
+	err = runContext.PlaywrightPage.Locator(selector).Fill(value, options)
 	duration := time.Since(startTime)
 
 	if err != nil {
@@ -219,12 +219,12 @@ func (a *TypeAction) Execute(ctx context.Context, actionConfig map[string]interf
 
 	runContext.Logger.Info("Executing playwright:type", "selector", selector, "text", text)
 
-	options := playwright.LocatorPressSequentiallyOptions{}
+	options := playwright.LocatorTypeOptions{}
 	if delay, ok := actionConfig["delay"].(float64); ok {
 		options.Delay = playwright.Float(delay)
 	}
 
-	err = runContext.PlaywrightPage.Locator(selector).First().PressSequentially(text, options)
+	err = runContext.PlaywrightPage.Locator(selector).Type(text, options)
 	duration := time.Since(startTime)
 
 	if err != nil {
@@ -259,7 +259,7 @@ func (a *PressAction) Execute(ctx context.Context, actionConfig map[string]inter
 		options.Delay = playwright.Float(delay)
 	}
 
-	err = runContext.PlaywrightPage.Locator(selector).First().Press(key, options)
+	err = runContext.PlaywrightPage.Locator(selector).Press(key, options)
 	duration := time.Since(startTime)
 
 	if err != nil {
@@ -290,7 +290,7 @@ func (a *CheckAction) Execute(ctx context.Context, actionConfig map[string]inter
 		options.Force = playwright.Bool(force)
 	}
 
-	err = runContext.PlaywrightPage.Locator(selector).First().Check(options)
+	err = runContext.PlaywrightPage.Locator(selector).Check(options)
 	duration := time.Since(startTime)
 
 	if err != nil {
@@ -321,7 +321,7 @@ func (a *UncheckAction) Execute(ctx context.Context, actionConfig map[string]int
 		options.Force = playwright.Bool(force)
 	}
 
-	err = runContext.PlaywrightPage.Locator(selector).First().Uncheck(options)
+	err = runContext.PlaywrightPage.Locator(selector).Uncheck(options)
 	duration := time.Since(startTime)
 
 	if err != nil {
@@ -368,7 +368,7 @@ func (a *SelectOptionAction) Execute(ctx context.Context, actionConfig map[strin
 		return fmt.Errorf("playwright:select_option action requires 'value', 'values', 'label', or 'index' in config")
 	}
 
-	_, err = runContext.PlaywrightPage.Locator(selector).First().SelectOption(selectOptions)
+	_, err = runContext.PlaywrightPage.Locator(selector).SelectOption(selectOptions)
 	duration := time.Since(startTime)
 
 	if err != nil {
@@ -468,66 +468,55 @@ func (a *ScreenshotAction) Execute(ctx context.Context, actionConfig map[string]
 		return fmt.Errorf("failed to take screenshot: %w", err)
 	}
 
-	// Check if we should upload to R2
-	uploadToR2, _ := actionConfig["upload_to_r2"].(bool)
-	if uploadToR2 {
-		r2Key, ok := actionConfig["r2_key"].(string)
-		if !ok || r2Key == "" {
-			errMsg := "playwright:screenshot with upload_to_r2 requires an 'r2_key' string in config"
-			sendErrorEvent(runContext, "playwright:screenshot", errMsg, duration)
-			return fmt.Errorf(errMsg)
-		}
-
-		// Determine content type
-		contentType := "image/png" // Default
-		if format, ok := actionConfig["format"].(string); ok {
-			switch format {
-			case "jpeg":
-				contentType = "image/jpeg"
-			case "png":
-				contentType = "image/png"
-			}
-		}
-
-		// Upload to R2
-		reader := bytes.NewReader(screenshotBytes)
-		_, err := runContext.StorageService.UploadFile(ctx, r2Key, reader, contentType)
-		if err != nil {
-			sendErrorEvent(runContext, "playwright:screenshot", fmt.Sprintf("failed to upload screenshot to R2: %v", err), duration)
-			return fmt.Errorf("failed to upload screenshot to R2: %w", err)
-		}
-
-		runContext.Logger.Info("Screenshot uploaded to R2", "key", r2Key, "size", len(screenshotBytes))
-
-		// Get the public URL for the uploaded screenshot
-		publicURL := runContext.StorageService.GetPublicURL(r2Key)
-
-		// Send output file event
-		if runContext.EventCh != nil {
-			select {
-			case runContext.EventCh <- automation.RunEvent{
-				Type:           automation.RunEventTypeOutputFile,
-				Timestamp:      time.Now(),
-				StepID:         runContext.StepID,
-				ActionID:       runContext.ActionID,
-				ParentActionID: runContext.ParentActionID,
-				StepName:       runContext.StepName,
-				ActionType:     "playwright:screenshot",
-				OutputFile:     publicURL,
-				Duration:       duration.Milliseconds(),
-				LoopIndex:      runContext.LoopIndex,
-				LocalLoopIndex: runContext.VariableContext.LocalLoopIndex,
-			}:
-			default:
-				// Channel is full, skip this event to avoid blocking
-			}
-		}
-
-		sendSuccessEvent(runContext, "playwright:screenshot", fmt.Sprintf("Successfully took screenshot and uploaded to R2: %s", r2Key), duration)
-	} else {
-		sendSuccessEvent(runContext, "playwright:screenshot", "Successfully took screenshot", duration)
+	// Always save screenshot to local storage
+	screenshotKey := fmt.Sprintf("screenshots/%s-%d.png", runContext.VariableContext.Timestamp, runContext.LoopIndex)
+	if r2Key, ok := actionConfig["r2_key"].(string); ok && r2Key != "" {
+		screenshotKey = r2Key
 	}
 
+	// Determine content type
+	contentType := "image/png" // Default
+	if format, ok := actionConfig["format"].(string); ok {
+		switch format {
+		case "jpeg":
+			contentType = "image/jpeg"
+		case "png":
+			contentType = "image/png"
+		}
+	}
+
+	// Upload to storage (local in CLI mode)
+	reader := bytes.NewReader(screenshotBytes)
+	publicURL, err := runContext.StorageService.UploadFile(ctx, screenshotKey, reader, contentType)
+	if err != nil {
+		sendErrorEvent(runContext, "playwright:screenshot", fmt.Sprintf("failed to save screenshot: %v", err), duration)
+		return fmt.Errorf("failed to save screenshot: %w", err)
+	}
+
+	runContext.Logger.Info("Screenshot saved", "key", screenshotKey, "size", len(screenshotBytes))
+
+	// Send output file event
+	if runContext.EventCh != nil {
+		select {
+		case runContext.EventCh <- automation.RunEvent{
+			Type:           automation.RunEventTypeOutputFile,
+			Timestamp:      time.Now(),
+			StepID:         runContext.StepID,
+			ActionID:       runContext.ActionID,
+			ParentActionID: runContext.ParentActionID,
+			StepName:       runContext.StepName,
+			ActionType:     "playwright:screenshot",
+			OutputFile:     publicURL,
+			Duration:       duration.Milliseconds(),
+			LoopIndex:      runContext.LoopIndex,
+			LocalLoopIndex: runContext.VariableContext.LocalLoopIndex,
+		}:
+		default:
+			// Channel is full, skip this event to avoid blocking
+		}
+	}
+
+	sendSuccessEvent(runContext, "playwright:screenshot", fmt.Sprintf("Successfully took screenshot: %s", screenshotKey), duration)
 	return nil
 }
 
@@ -574,7 +563,7 @@ func (a *HoverAction) Execute(ctx context.Context, actionConfig map[string]inter
 		options.Force = playwright.Bool(force)
 	}
 
-	err = runContext.PlaywrightPage.Locator(selector).First().Hover(options)
+	err = runContext.PlaywrightPage.Locator(selector).Hover(options)
 	duration := time.Since(startTime)
 
 	if err != nil {
@@ -631,7 +620,7 @@ func (a *GetTextAction) Execute(ctx context.Context, actionConfig map[string]int
 
 	runContext.Logger.Info("Executing playwright:get_text", "selector", selector)
 
-	text, err := runContext.PlaywrightPage.Locator(selector).First().TextContent()
+	text, err := runContext.PlaywrightPage.Locator(selector).TextContent()
 	duration := time.Since(startTime)
 
 	if err != nil {
@@ -663,7 +652,7 @@ func (a *GetAttributeAction) Execute(ctx context.Context, actionConfig map[strin
 
 	runContext.Logger.Info("Executing playwright:get_attribute", "selector", selector, "attribute", attribute)
 
-	value, err := runContext.PlaywrightPage.Locator(selector).First().GetAttribute(attribute)
+	value, err := runContext.PlaywrightPage.Locator(selector).GetAttribute(attribute)
 	duration := time.Since(startTime)
 
 	if err != nil {
@@ -903,18 +892,12 @@ func (a *IfElseAction) Execute(ctx context.Context, actionConfig map[string]any,
 		return executionError
 	}
 
-	// Execute final_actions
-	// if finalActions, ok := actionConfig["final_actions"].([]interface{}); ok {
-	// 	runContext.Logger.Info("No conditions met and no else actions defined, executing final_actions", "count", len(finalActions))
-	// 	return a.executeNestedActions(ctx, finalActions, runContext)
-	// }
-
 	runContext.Logger.Info("No conditions met and no else actions defined")
 	return executionError
 }
 
 func (a *IfElseAction) evaluateCondition(runContext *automation.RunContext, selector, conditionType string) (bool, error) {
-	locator := runContext.PlaywrightPage.Locator(selector).First()
+	locator := runContext.PlaywrightPage.Locator(selector)
 
 	switch conditionType {
 	case "is_enabled":
@@ -976,6 +959,7 @@ func (a *IfElseAction) executeNestedActions(ctx context.Context, actions []inter
 		}
 		runContext.ParentActionID = runContext.ActionID
 		runContext.ActionID = nestedActionID
+
 		// Get the plugin action
 		pluginAction, err := automation.GetAction(actionType)
 		if err != nil {
@@ -1146,6 +1130,7 @@ func (a *LoopUntilAction) Execute(ctx context.Context, actionConfig map[string]a
 
 		// Set the local loop index in the variable context
 		runContext.VariableContext.LocalLoopIndex = loopCount
+
 		// Check selector condition if provided
 		if selector != "" && conditionType != "" {
 			conditionMet, err := a.evaluateCondition(runContext, selector, conditionType)
@@ -1231,6 +1216,7 @@ func (a *LoopUntilAction) Execute(ctx context.Context, actionConfig map[string]a
 			}
 			runContext.ParentActionID = runContext.ActionID
 			runContext.ActionID = loopActionID
+
 			// Get the plugin action
 			pluginAction, err := automation.GetAction(actionType)
 			if err != nil {
@@ -1269,7 +1255,7 @@ func (a *LoopUntilAction) Execute(ctx context.Context, actionConfig map[string]a
 }
 
 func (a *LoopUntilAction) evaluateCondition(runContext *automation.RunContext, selector, conditionType string) (bool, error) {
-	locator := runContext.PlaywrightPage.Locator(selector).First()
+	locator := runContext.PlaywrightPage.Locator(selector)
 
 	switch conditionType {
 	case "is_enabled":

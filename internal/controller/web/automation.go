@@ -41,9 +41,6 @@ func NewAutomationRouter(automationHandler *AutomationHandler) chi.Router {
 	// Export automation config
 	r.Get("/{id}/export", automationHandler.ExportAutomationConfig)
 
-	// Run report
-	r.Get("/{id}/runs/{runId}/report", automationHandler.GetRunReport)
-
 	// SSE endpoint for run progress
 	r.Get("/{id}/runs/{runId}/events", automationHandler.GetRunEvents)
 
@@ -1092,67 +1089,4 @@ func (h *AutomationHandler) ExportAutomationConfig(w http.ResponseWriter, r *htt
 	w.Write(jsonData)
 
 	platform.SetFlashSuccess(r.Context(), h.sessionManager, "Automation config exported successfully")
-}
-
-func (h *AutomationHandler) GetRunReport(w http.ResponseWriter, r *http.Request) {
-	user := getUserFromContext(r.Context())
-	if user == nil {
-		http.Redirect(w, r, "/auth", http.StatusFound)
-		return
-	}
-
-	projectID := chi.URLParam(r, "projectId")
-	automationID := chi.URLParam(r, "id")
-	runID := chi.URLParam(r, "runId")
-
-	// Verify project belongs to user's organization
-	project, err := h.projectService.GetProjectByID(r.Context(), projectID)
-	if err != nil {
-		platform.UtilHandleServerErr(w, err)
-		return
-	}
-
-	if user.CurrentOrgID == nil || project.OrganizationID != *user.CurrentOrgID {
-		w.WriteHeader(http.StatusForbidden)
-		w.Write([]byte("Access denied"))
-		return
-	}
-
-	automation, err := h.automationService.GetAutomationByID(r.Context(), automationID)
-	if err != nil {
-		platform.UtilHandleServerErr(w, err)
-		return
-	}
-
-	// Verify automation belongs to the project
-	if automation.ProjectID != projectID {
-		w.WriteHeader(http.StatusForbidden)
-		w.Write([]byte("Access denied"))
-		return
-	}
-
-	run, err := h.automationService.GetRunByID(r.Context(), runID)
-	if err != nil {
-		platform.UtilHandleServerErr(w, err)
-		return
-	}
-
-	// Verify run belongs to the automation
-	if run.AutomationID != automationID {
-		w.WriteHeader(http.StatusForbidden)
-		w.Write([]byte("Access denied"))
-		return
-	}
-
-	err = h.inertia.Render(w, r, "projects/[projectId]/automations/[automationId]/runs/[runId]/report", inertia.Props{
-		"params":     map[string]string{"automationId": automationID, "projectId": projectID, "runId": runID},
-		"run":        run,
-		"automation": automation,
-		"project":    project,
-		"user":       user,
-	})
-	if err != nil {
-		platform.UtilHandleServerErr(w, err)
-		return
-	}
 }

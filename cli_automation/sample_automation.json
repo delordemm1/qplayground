@@ -1,0 +1,98 @@
+{
+  "automation": {
+    "name": "Sample Web Test",
+    "description": "A sample automation that tests a website with multiple concurrent users",
+    "config": {
+      "variables": [
+        {
+          "key": "testEmail",
+          "type": "dynamic",
+          "value": "{{faker.email}}",
+          "description": "Random email for testing"
+        },
+        {
+          "key": "testName",
+          "type": "dynamic", 
+          "value": "{{faker.name}}",
+          "description": "Random name for testing"
+        }
+      ],
+      "multirun": {
+        "enabled": true,
+        "mode": "parallel",
+        "count": 3,
+        "delay": 1000
+      },
+      "timeout": 300,
+      "retries": 0,
+      "screenshots": {
+        "enabled": true,
+        "onError": true,
+        "onSuccess": true,
+        "path": "screenshots/{{timestamp}}-{{loopIndex}}.png"
+      },
+      "notifications": []
+    }
+  },
+  "steps": [
+    {
+      "name": "Navigate to Website",
+      "step_order": 1,
+      "actions": [
+        {
+          "id": "action-1",
+          "action_type": "playwright:goto",
+          "action_config": {
+            "url": "https://example.com",
+            "timeout": 30000
+          },
+          "action_order": 1
+        },
+        {
+          "id": "action-2",
+          "action_type": "playwright:screenshot",
+          "action_config": {
+            "full_page": true,
+            "format": "png",
+            "r2_key": "screenshots/homepage-{{loopIndex}}.png"
+          },
+          "action_order": 2
+        }
+      ]
+    },
+    {
+      "name": "Test Form Interaction",
+      "step_order": 2,
+      "actions": [
+        {
+          "id": "action-3",
+          "action_type": "playwright:wait_for_selector",
+          "action_config": {
+            "selector": "body",
+            "timeout": 10000
+          },
+          "action_order": 1
+        },
+        {
+          "id": "action-4",
+          "action_type": "playwright:log",
+          "action_config": {
+            "message": "User {{loopIndex}} is testing with email: {{testEmail}} and name: {{testName}}",
+            "level": "info"
+          },
+          "action_order": 2
+        },
+        {
+          "id": "action-5",
+          "action_type": "playwright:screenshot",
+          "action_config": {
+            "full_page": true,
+            "format": "png",
+            "r2_key": "screenshots/final-{{loopIndex}}.png"
+          },
+          "action_order": 3
+        }
+      ]
+    }
+  ]
+}

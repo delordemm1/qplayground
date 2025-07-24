@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { Chart, registerables } from 'chart.js';
+  import { formatDuration } from '$lib/utils/date';
 
   type PerformanceMetrics = {
     stepAverages: Array<{
