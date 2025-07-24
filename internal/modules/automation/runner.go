@@ -185,6 +185,7 @@ func (r *automationRepository) CreateStep(ctx context.Context, step *AutomationS
 
 	var createdAt, updatedAt pgtype.Timestamp
 	var configJSON pgtype.Text
+	var configJSON pgtype.Text
 	err = r.db.QueryRow(ctx, query, args...).Scan(
 		&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &configJSON, &createdAt, &updatedAt,
 	)
@@ -192,6 +193,9 @@ func (r *automationRepository) CreateStep(ctx context.Context, step *AutomationS
 		return fmt.Errorf("failed to create step: %w", err)
 	}
 
+	if configJSON.Valid {
+		step.ConfigJSON = configJSON.String
+	}
 	if configJSON.Valid {
 		step.ConfigJSON = configJSON.String
 	}
@@ -222,8 +226,12 @@ func (r *automationRepository) GetStepsByAutomationID(ctx context.Context, autom
 		var createdAt, updatedAt pgtype.Timestamp
 		var configJSON pgtype.Text
 		err := rows.Scan(&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &configJSON, &createdAt, &updatedAt)
+		err := rows.Scan(&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &configJSON, &createdAt, &updatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan step: %w", err)
+		}
+		if configJSON.Valid {
+			step.ConfigJSON = configJSON.String
 		}
 		if configJSON.Valid {
 			step.ConfigJSON = configJSON.String
@@ -240,6 +248,7 @@ func (r *automationRepository) UpdateStep(ctx context.Context, step *AutomationS
 	query, args, err := r.sq.Update("automation_steps").
 		Set("name", step.Name).
 		Set("step_order", step.StepOrder).
+		Set("config_json", step.ConfigJSON).
 		Set("config_json", step.ConfigJSON).
 		Set("updated_at", time.Now()).
 		Where(sq.Eq{"id": step.ID}).
@@ -549,27 +558,18 @@ func (r *automationRepository) ShiftActionOrdersAfterDelete(ctx context.Context,
 
 // Order management methods
 func (r *automationRepository) GetStepByID(ctx context.Context, id string) (*AutomationStep, error) {
-	}
-}
-
-// isPrime checks if a number is prime
-func (r *Runner) isPrime(n int) bool {
-	if n < 2 {
-		return false
-	}
-	if n == 2 {
-		return true
-	}
-	if n%2 == 0 {
-		return false
-	}
-	for i := 3; i*i <= n; i += 2 {
-		if n%i == 0 {
-			return false
+					Timestamp:  time.Now(),
+					StepName:   step.Name,
+					ActionType: "step_skip",
+					Message:    fmt.Sprintf("Step skipped: %s", skipReason),
+					LoopIndex:  loopIndex,
+				}:
+				default:
+					// Channel is full, skip this event to avoid blocking
+				}
+			}
+			continue // Skip to next step
 		}
-	}
-	return true
-}
 
 		From("automation_steps").
 		Where(sq.Eq{"id": id}).
@@ -580,8 +580,9 @@ func (r *Runner) isPrime(n int) bool {
 
 	var step AutomationStep
 	var createdAt, updatedAt pgtype.Timestamp
+	var configJSON pgtype.Text
 	err = r.db.QueryRow(ctx, query, args...).Scan(
-		&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &createdAt, &updatedAt,
+		&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &configJSON, &createdAt, &updatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -590,6 +591,9 @@ func (r *Runner) isPrime(n int) bool {
 		return nil, fmt.Errorf("failed to get step: %w", err)
 	}
 
+	if configJSON.Valid {
+		step.ConfigJSON = configJSON.String
+	}
 	step.CreatedAt = createdAt.Time
 	step.UpdatedAt = updatedAt.Time
 	return &step, nil
@@ -659,7 +663,7 @@ func (r *automationRepository) GetMaxActionOrder(ctx context.Context, stepID str
 
 // GetStepByAutomationIDAndOrder retrieves a step by automation ID and order
 func (r *automationRepository) GetStepByAutomationIDAndOrder(ctx context.Context, automationID string, order int) (*AutomationStep, error) {
-	query, args, err := r.sq.Select("id", "automation_id", "name", "step_order", "created_at", "updated_at").
+	query, args, err := r.sq.Select("id", "automation_id", "name", "step_order", "config_json", "created_at", "updated_at").
 		From("automation_steps").
 		Where(sq.And{
 			sq.Eq{"automation_id": automationID},
@@ -672,8 +676,9 @@ func (r *automationRepository) GetStepByAutomationIDAndOrder(ctx context.Context
 
 	var step AutomationStep
 	var createdAt, updatedAt pgtype.Timestamp
+	var configJSON pgtype.Text
 	err = r.db.QueryRow(ctx, query, args...).Scan(
-		&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &createdAt, &updatedAt,
+		&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &configJSON, &createdAt, &updatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -682,6 +687,9 @@ func (r *automationRepository) GetStepByAutomationIDAndOrder(ctx context.Context
 		return nil, fmt.Errorf("failed to get step: %w", err)
 	}
 
+	if configJSON.Valid {
+		step.ConfigJSON = configJSON.String
+	}
 	step.CreatedAt = createdAt.Time
 	step.UpdatedAt = updatedAt.Time
 	return &step, nil

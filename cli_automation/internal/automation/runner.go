@@ -558,17 +558,17 @@ func (r *automationRepository) ShiftActionOrdersAfterDelete(ctx context.Context,
 
 // Order management methods
 func (r *automationRepository) GetStepByID(ctx context.Context, id string) (*AutomationStep, error) {
-	}
-	if n%2 == 0 {
-		return false
-	}
-	for i := 3; i*i <= n; i += 2 {
-		if n%i == 0 {
-			return false
+				"step_name":         step.Name,
+				"action_type":       "step_skip",
+				"message":           fmt.Sprintf("Step skipped: %s", skipReason),
+				"status":            "skipped",
+				"loop_index":        loopIndex,
+				"local_loop_index":  0,
+				"duration_ms":       0,
+			}
+			runContext.Logs = append(runContext.Logs, logEntry)
+			continue // Skip to next step
 		}
-	}
-	return true
-}
 
 		From("automation_steps").
 		Where(sq.Eq{"id": id}).
