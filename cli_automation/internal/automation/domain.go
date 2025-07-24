@@ -2,188 +2,794 @@ package automation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
-	"log/slog"
-
-	"github.com/delordemm1/qplayground-cli/internal/storage"
-	"github.com/playwright-community/playwright-go"
+	sq "github.com/Masterminds/squirrel"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// RunEventType represents the type of event emitted during automation execution
-type RunEventType string
-
-const (
-	RunEventTypeLog        RunEventType = "log"
-	RunEventTypeError      RunEventType = "error"
-	RunEventTypeOutputFile RunEventType = "output_file"
-	RunEventTypeStep       RunEventType = "step"
-)
-
-// RunEvent represents an event emitted during automation execution
-type RunEvent struct {
-	Type           RunEventType           `json:"type"`
-	Timestamp      time.Time              `json:"timestamp"`
-	StepID         string                 `json:"step_id,omitempty"`
-	StepName       string                 `json:"step_name,omitempty"`
-	ActionID       string                 `json:"action_id,omitempty"`
-	ParentActionID string                 `json:"parent_action_id,omitempty"`
-	ActionType     string                 `json:"action_type,omitempty"`
-	Message        string                 `json:"message,omitempty"`
-	Error          string                 `json:"error,omitempty"`
-	OutputFile     string                 `json:"output_file,omitempty"`
-	Duration       int64                  `json:"duration_ms,omitempty"`
-	LoopIndex      int                    `json:"loop_index,omitempty"`
-	LocalLoopIndex int                    `json:"local_loop_index,omitempty"`
-	Data           map[string]interface{} `json:"data,omitempty"`
+type DBTX interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+	QueryRow(context.Context, string, ...any) pgx.Row
 }
 
-// RunContext holds shared resources and state for a single automation run.
-// This will be passed to each plugin action.
-type RunContext struct {
-	PlaywrightBrowser playwright.Browser
-	PlaywrightPage    playwright.Page
-	StorageService    storage.StorageService
-	Logger            *slog.Logger
-	EventCh           chan RunEvent
-	StepName          string            // Current step name for context
-	StepID            string            // Current step ID for context
-	ActionID          string            // Current action ID for context
-	ParentActionID    string            // Parent action ID for context
-	LoopIndex         int               // Current loop index for multi-run context
-	Runner            *Runner           // Reference to runner for variable resolution
-	VariableContext   *VariableContext  // Variable context for resolution
-	AutomationConfig  *AutomationConfig // Automation config for variable resolution
+type automationRepository struct {
+	db DBTX
+	sq sq.StatementBuilderType
 }
 
-// PluginAction defines the interface for any executable action provided by a plugin.
-type PluginAction interface {
-	// Execute performs the action.
-	// actionConfig: The specific configuration for this action (from automation_actions.action_config_json).
-	// runContext: Shared context for the entire automation run.
-	Execute(ctx context.Context, actionConfig map[string]interface{}, runContext *RunContext) error
-}
-
-// ActionFactory is a function type that creates a new instance of a PluginAction.
-type ActionFactory func() PluginAction
-
-// Global registry for plugin actions
-var actionRegistry = make(map[string]ActionFactory)
-
-// RegisterAction registers a new plugin action type with its factory function.
-func RegisterAction(actionType string, factory ActionFactory) {
-	actionRegistry[actionType] = factory
-}
-
-// GetAction retrieves a plugin action instance by type.
-func GetAction(actionType string) (PluginAction, error) {
-	factory, exists := actionRegistry[actionType]
-	if !exists {
-		return nil, fmt.Errorf("unknown action type: %s", actionType)
+func NewAutomationRepository(conn DBTX) AutomationRepository {
+	return &automationRepository{
+		db: conn,
+		sq: sq.StatementBuilder.PlaceholderFormat(sq.Dollar),
 	}
-	return factory(), nil
 }
 
-// VariableContext holds context variables for resolution
-type VariableContext struct {
-	LoopIndex      int
-	LocalLoopIndex int
-	Timestamp      string
-	RunID          string
-	UserID         string
-	ProjectID      string
-	AutomationID   string
-	StaticVars     map[string]string
+// Automation CRUD
+func (r *automationRepository) CreateAutomation(ctx context.Context, automation *Automation) error {
+	query, args, err := r.sq.Insert("automations").
+		Columns("id", "project_id", "name", "description", "config_json").
+		Values(automation.ID, automation.ProjectID, automation.Name, automation.Description, automation.ConfigJSON).
+		Suffix("RETURNING id, project_id, name, description, config_json, created_at, updated_at").
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var createdAt, updatedAt pgtype.Timestamp
+	var description, configJSON pgtype.Text
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&automation.ID, &automation.ProjectID, &automation.Name, &description, &configJSON, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create automation: %w", err)
+	}
+
+	if description.Valid {
+		automation.Description = description.String
+	}
+	if configJSON.Valid {
+		automation.ConfigJSON = configJSON.String
+	}
+	automation.CreatedAt = createdAt.Time
+	automation.UpdatedAt = updatedAt.Time
+	return nil
 }
 
-// Variable represents a configuration variable
-type Variable struct {
-	Key         string `json:"key"`
-	Type        string `json:"type"` // "static", "dynamic", "environment"
-	Value       string `json:"value"`
-	Description string `json:"description,omitempty"`
+func (r *automationRepository) GetAutomationByID(ctx context.Context, id string) (*Automation, error) {
+	query, args, err := r.sq.Select("id", "project_id", "name", "description", "config_json", "created_at", "updated_at").
+		From("automations").
+		Where(sq.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var automation Automation
+	var createdAt, updatedAt pgtype.Timestamp
+	var description, configJSON pgtype.Text
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&automation.ID, &automation.ProjectID, &automation.Name, &description, &configJSON, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("automation not found")
+		}
+		return nil, fmt.Errorf("failed to get automation: %w", err)
+	}
+
+	if description.Valid {
+		automation.Description = description.String
+	}
+	if configJSON.Valid {
+		automation.ConfigJSON = configJSON.String
+	}
+	automation.CreatedAt = createdAt.Time
+	automation.UpdatedAt = updatedAt.Time
+	return &automation, nil
 }
 
-// MultiRunConfig represents multi-run configuration
-type MultiRunConfig struct {
-	Enabled bool   `json:"enabled"`
-	Mode    string `json:"mode"` // "sequential", "parallel"
-	Count   int    `json:"count"`
-	Delay   int    `json:"delay"` // delay in milliseconds
+func (r *automationRepository) GetAutomationsByProjectID(ctx context.Context, projectID string) ([]*Automation, error) {
+	query, args, err := r.sq.Select("id", "project_id", "name", "description", "config_json", "created_at", "updated_at").
+		From("automations").
+		Where(sq.Eq{"project_id": projectID}).
+		OrderBy("created_at DESC").
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query automations: %w", err)
+	}
+	defer rows.Close()
+
+	var automations []*Automation
+	for rows.Next() {
+		var automation Automation
+		var createdAt, updatedAt pgtype.Timestamp
+		var description, configJSON pgtype.Text
+		err := rows.Scan(&automation.ID, &automation.ProjectID, &automation.Name, &description, &configJSON, &createdAt, &updatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan automation: %w", err)
+		}
+		if description.Valid {
+			automation.Description = description.String
+		}
+		if configJSON.Valid {
+			automation.ConfigJSON = configJSON.String
+		}
+		automation.CreatedAt = createdAt.Time
+		automation.UpdatedAt = updatedAt.Time
+		automations = append(automations, &automation)
+	}
+
+	return automations, nil
 }
 
-// ScreenshotConfig represents screenshot configuration
-type ScreenshotConfig struct {
-	Enabled   bool   `json:"enabled"`
-	OnError   bool   `json:"onError"`
-	OnSuccess bool   `json:"onSuccess"`
-	Path      string `json:"path"`
+func (r *automationRepository) UpdateAutomation(ctx context.Context, automation *Automation) error {
+	query, args, err := r.sq.Update("automations").
+		Set("name", automation.Name).
+		Set("description", automation.Description).
+		Set("config_json", automation.ConfigJSON).
+		Set("updated_at", time.Now()).
+		Where(sq.Eq{"id": automation.ID}).
+		Suffix("RETURNING updated_at").
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var updatedAt pgtype.Timestamp
+	err = r.db.QueryRow(ctx, query, args...).Scan(&updatedAt)
+	if err != nil {
+		return fmt.Errorf("failed to update automation: %w", err)
+	}
+
+	automation.UpdatedAt = updatedAt.Time
+	return nil
 }
 
-// NotificationChannelConfig represents notification configuration
-type NotificationChannelConfig struct {
-	ID         string         `json:"id"`
-	Type       string         `json:"type"` // "slack", "email", "webhook"
-	OnComplete bool           `json:"onComplete"`
-	OnError    bool           `json:"onError"`
-	Config     map[string]any `json:"config"`
+func (r *automationRepository) DeleteAutomation(ctx context.Context, id string) error {
+	query, args, err := r.sq.Delete("automations").
+		Where(sq.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	_, err = r.db.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to delete automation: %w", err)
+	}
+
+	return nil
 }
 
-// AutomationConfig represents the parsed automation configuration
-type AutomationConfig struct {
-	Variables     []Variable                  `json:"variables"`
-	Multirun      MultiRunConfig              `json:"multirun"`
-	Timeout       int                         `json:"timeout"` // in seconds
-	Retries       int                         `json:"retries"`
-	Screenshots   ScreenshotConfig            `json:"screenshots"`
-	Notifications []NotificationChannelConfig `json:"notifications"`
+// Step CRUD
+func (r *automationRepository) CreateStep(ctx context.Context, step *AutomationStep) error {
+	query, args, err := r.sq.Insert("automation_steps").
+		Columns("id", "automation_id", "name", "step_order", "config_json").
+		Values(step.ID, step.AutomationID, step.Name, step.StepOrder, step.ConfigJSON).
+		Suffix("RETURNING id, automation_id, name, step_order, config_json, created_at, updated_at").
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var createdAt, updatedAt pgtype.Timestamp
+	var configJSON pgtype.Text
+	var configJSON pgtype.Text
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &configJSON, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create step: %w", err)
+	}
+
+	if configJSON.Valid {
+		step.ConfigJSON = configJSON.String
+	}
+	if configJSON.Valid {
+		step.ConfigJSON = configJSON.String
+	}
+	step.CreatedAt = createdAt.Time
+	step.UpdatedAt = updatedAt.Time
+	return nil
 }
 
-// Automation represents an automation workflow
-type Automation struct {
-	ID          string
-	ProjectID   string
-	Name        string
-	Description string
-	ConfigJSON  string // JSON string containing variables, run settings, templates
-	Steps       []*AutomationStep
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+func (r *automationRepository) GetStepsByAutomationID(ctx context.Context, automationID string) ([]*AutomationStep, error) {
+	query, args, err := r.sq.Select("id", "automation_id", "name", "step_order", "config_json", "created_at", "updated_at").
+		From("automation_steps").
+		Where(sq.Eq{"automation_id": automationID}).
+		OrderBy("step_order ASC").
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query steps: %w", err)
+	}
+	defer rows.Close()
+
+	var steps []*AutomationStep
+	for rows.Next() {
+		var step AutomationStep
+		var createdAt, updatedAt pgtype.Timestamp
+		var configJSON pgtype.Text
+		err := rows.Scan(&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &configJSON, &createdAt, &updatedAt)
+		err := rows.Scan(&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &configJSON, &createdAt, &updatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan step: %w", err)
+		}
+		if configJSON.Valid {
+			step.ConfigJSON = configJSON.String
+		}
+		if configJSON.Valid {
+			step.ConfigJSON = configJSON.String
+		}
+		step.CreatedAt = createdAt.Time
+		step.UpdatedAt = updatedAt.Time
+		steps = append(steps, &step)
+	}
+
+	return steps, nil
 }
 
-// AutomationStep represents a step within an automation
-type AutomationStep struct {
-	ID           string
-	AutomationID string
-	Name         string
-	StepOrder    int
-	Actions      []*AutomationAction
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+func (r *automationRepository) UpdateStep(ctx context.Context, step *AutomationStep) error {
+	query, args, err := r.sq.Update("automation_steps").
+		Set("name", step.Name).
+		Set("step_order", step.StepOrder).
+		Set("config_json", step.ConfigJSON).
+		Set("config_json", step.ConfigJSON).
+		Set("updated_at", time.Now()).
+		Where(sq.Eq{"id": step.ID}).
+		Suffix("RETURNING updated_at").
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var updatedAt pgtype.Timestamp
+	err = r.db.QueryRow(ctx, query, args...).Scan(&updatedAt)
+	if err != nil {
+		return fmt.Errorf("failed to update step: %w", err)
+	}
+
+	step.UpdatedAt = updatedAt.Time
+	return nil
 }
 
-// AutomationAction represents an action within a step
-type AutomationAction struct {
-	ID               string
-	StepID           string
-	ActionType       string // e.g., "playwright:goto", "playwright:click"
-	ActionConfigJSON string // JSON string containing action-specific parameters
-	ActionOrder      int
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+func (r *automationRepository) DeleteStep(ctx context.Context, id string) error {
+	query, args, err := r.sq.Delete("automation_steps").
+		Where(sq.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	_, err = r.db.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to delete step: %w", err)
+	}
+
+	return nil
 }
 
-// AutomationRun represents an execution of an automation
-type AutomationRun struct {
-	ID              string
-	AutomationID    string
-	Status          string // pending, running, completed, failed, cancelled
-	StartTime       *time.Time
-	EndTime         *time.Time
-	LogsJSON        string // JSON string containing execution logs
-	OutputFilesJSON string // JSON string containing file paths/URLs
-	ErrorMessage    string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+// Action CRUD
+func (r *automationRepository) CreateAction(ctx context.Context, action *AutomationAction) error {
+	query, args, err := r.sq.Insert("automation_actions").
+		Columns("id", "step_id", "action_type", "action_config_json", "action_order").
+		Values(action.ID, action.StepID, action.ActionType, action.ActionConfigJSON, action.ActionOrder).
+		Suffix("RETURNING id, step_id, action_type, action_config_json, action_order, created_at, updated_at").
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var createdAt, updatedAt pgtype.Timestamp
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&action.ID, &action.StepID, &action.ActionType, &action.ActionConfigJSON, &action.ActionOrder, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create action: %w", err)
+	}
+
+	action.CreatedAt = createdAt.Time
+	action.UpdatedAt = updatedAt.Time
+	return nil
+}
+
+func (r *automationRepository) GetActionsByStepID(ctx context.Context, stepID string) ([]*AutomationAction, error) {
+	query, args, err := r.sq.Select("id", "step_id", "action_type", "action_config_json", "action_order", "created_at", "updated_at").
+		From("automation_actions").
+		Where(sq.Eq{"step_id": stepID}).
+		OrderBy("action_order ASC").
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query actions: %w", err)
+	}
+	defer rows.Close()
+
+	var actions []*AutomationAction
+	for rows.Next() {
+		var action AutomationAction
+		var createdAt, updatedAt pgtype.Timestamp
+		err := rows.Scan(&action.ID, &action.StepID, &action.ActionType, &action.ActionConfigJSON, &action.ActionOrder, &createdAt, &updatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan action: %w", err)
+		}
+		action.CreatedAt = createdAt.Time
+		action.UpdatedAt = updatedAt.Time
+		actions = append(actions, &action)
+	}
+
+	return actions, nil
+}
+
+func (r *automationRepository) UpdateAction(ctx context.Context, action *AutomationAction) error {
+	query, args, err := r.sq.Update("automation_actions").
+		Set("action_type", action.ActionType).
+		Set("action_config_json", action.ActionConfigJSON).
+		Set("action_order", action.ActionOrder).
+		Set("updated_at", time.Now()).
+		Where(sq.Eq{"id": action.ID}).
+		Suffix("RETURNING updated_at").
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var updatedAt pgtype.Timestamp
+	err = r.db.QueryRow(ctx, query, args...).Scan(&updatedAt)
+	if err != nil {
+		return fmt.Errorf("failed to update action: %w", err)
+	}
+
+	action.UpdatedAt = updatedAt.Time
+	return nil
+}
+
+func (r *automationRepository) DeleteAction(ctx context.Context, id string) error {
+	query, args, err := r.sq.Delete("automation_actions").
+		Where(sq.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	_, err = r.db.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to delete action: %w", err)
+	}
+
+	return nil
+}
+
+// Run CRUD
+func (r *automationRepository) CreateRun(ctx context.Context, run *AutomationRun) error {
+	query, args, err := r.sq.Insert("automation_runs").
+		Columns("id", "automation_id", "status", "logs_json", "output_files_json", "error_message").
+		Values(run.ID, run.AutomationID, run.Status, run.LogsJSON, run.OutputFilesJSON, run.ErrorMessage).
+		Suffix("RETURNING id, automation_id, status, start_time, end_time, logs_json, output_files_json, error_message, created_at, updated_at").
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var createdAt, updatedAt, startTime, endTime pgtype.Timestamp
+	var logsJSON, outputFilesJSON, errorMessage pgtype.Text
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&run.ID, &run.AutomationID, &run.Status, &startTime, &endTime, &logsJSON, &outputFilesJSON, &errorMessage, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create run: %w", err)
+	}
+
+	if startTime.Valid {
+		run.StartTime = &startTime.Time
+	}
+	if endTime.Valid {
+		run.EndTime = &endTime.Time
+	}
+	if logsJSON.Valid {
+		run.LogsJSON = logsJSON.String
+	}
+	if outputFilesJSON.Valid {
+		run.OutputFilesJSON = outputFilesJSON.String
+	}
+	if errorMessage.Valid {
+		run.ErrorMessage = errorMessage.String
+	}
+	run.CreatedAt = createdAt.Time
+	run.UpdatedAt = updatedAt.Time
+	return nil
+}
+
+func (r *automationRepository) GetRunByID(ctx context.Context, id string) (*AutomationRun, error) {
+	query, args, err := r.sq.Select("id", "automation_id", "status", "start_time", "end_time", "logs_json", "output_files_json", "error_message", "created_at", "updated_at").
+		From("automation_runs").
+		Where(sq.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var run AutomationRun
+	var createdAt, updatedAt, startTime, endTime pgtype.Timestamp
+	var logsJSON, outputFilesJSON, errorMessage pgtype.Text
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&run.ID, &run.AutomationID, &run.Status, &startTime, &endTime, &logsJSON, &outputFilesJSON, &errorMessage, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("run not found")
+		}
+		return nil, fmt.Errorf("failed to get run: %w", err)
+	}
+
+	if startTime.Valid {
+		run.StartTime = &startTime.Time
+	}
+	if endTime.Valid {
+		run.EndTime = &endTime.Time
+	}
+	if logsJSON.Valid {
+		run.LogsJSON = logsJSON.String
+	}
+	if outputFilesJSON.Valid {
+		run.OutputFilesJSON = outputFilesJSON.String
+	}
+	if errorMessage.Valid {
+		run.ErrorMessage = errorMessage.String
+	}
+	run.CreatedAt = createdAt.Time
+	run.UpdatedAt = updatedAt.Time
+	return &run, nil
+}
+
+func (r *automationRepository) GetRunsByAutomationID(ctx context.Context, automationID string) ([]*AutomationRun, error) {
+	query, args, err := r.sq.Select("id", "automation_id", "status", "start_time", "end_time", "logs_json", "output_files_json", "error_message", "created_at", "updated_at").
+		From("automation_runs").
+		Where(sq.Eq{"automation_id": automationID}).
+		OrderBy("created_at DESC").
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query runs: %w", err)
+	}
+	defer rows.Close()
+
+	var runs []*AutomationRun
+	for rows.Next() {
+		var run AutomationRun
+		var createdAt, updatedAt, startTime, endTime pgtype.Timestamp
+		var logsJSON, outputFilesJSON, errorMessage pgtype.Text
+		err := rows.Scan(&run.ID, &run.AutomationID, &run.Status, &startTime, &endTime, &logsJSON, &outputFilesJSON, &errorMessage, &createdAt, &updatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan run: %w", err)
+		}
+		if startTime.Valid {
+			run.StartTime = &startTime.Time
+		}
+		if endTime.Valid {
+			run.EndTime = &endTime.Time
+		}
+		if logsJSON.Valid {
+			run.LogsJSON = logsJSON.String
+		}
+		if outputFilesJSON.Valid {
+			run.OutputFilesJSON = outputFilesJSON.String
+		}
+		if errorMessage.Valid {
+			run.ErrorMessage = errorMessage.String
+		}
+		run.CreatedAt = createdAt.Time
+		run.UpdatedAt = updatedAt.Time
+		runs = append(runs, &run)
+	}
+
+	return runs, nil
+}
+
+func (r *automationRepository) UpdateRun(ctx context.Context, run *AutomationRun) error {
+	query, args, err := r.sq.Update("automation_runs").
+		Set("status", run.Status).
+		Set("start_time", run.StartTime).
+		Set("end_time", run.EndTime).
+		Set("logs_json", run.LogsJSON).
+		Set("output_files_json", run.OutputFilesJSON).
+		Set("error_message", run.ErrorMessage).
+		Set("updated_at", time.Now()).
+		Where(sq.Eq{"id": run.ID}).
+		Suffix("RETURNING updated_at").
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var updatedAt pgtype.Timestamp
+	err = r.db.QueryRow(ctx, query, args...).Scan(&updatedAt)
+	if err != nil {
+		return fmt.Errorf("failed to update run: %w", err)
+	}
+
+	run.UpdatedAt = updatedAt.Time
+	return nil
+}
+
+func (r *automationRepository) ShiftActionOrdersAfterDelete(ctx context.Context, stepID string, deletedOrder int) error {
+	query, args, err := r.sq.Update("automation_actions").
+		Set("action_order", sq.Expr("action_order - 1")).
+		Set("updated_at", time.Now()).
+		Where(sq.And{
+			sq.Eq{"step_id": stepID},
+			sq.Gt{"action_order": deletedOrder},
+		}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	_, err = r.db.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to shift action orders after delete: %w", err)
+	}
+
+	return nil
+}
+
+// Order management methods
+func (r *automationRepository) GetStepByID(ctx context.Context, id string) (*AutomationStep, error) {
+		From("automation_steps").
+		Where(sq.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var step AutomationStep
+	var createdAt, updatedAt pgtype.Timestamp
+	var configJSON pgtype.Text
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &configJSON, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("step not found")
+		}
+		return nil, fmt.Errorf("failed to get step: %w", err)
+	}
+
+	if configJSON.Valid {
+		step.ConfigJSON = configJSON.String
+	}
+	step.CreatedAt = createdAt.Time
+	step.UpdatedAt = updatedAt.Time
+	return &step, nil
+}
+
+func (r *automationRepository) GetActionByID(ctx context.Context, id string) (*AutomationAction, error) {
+	query, args, err := r.sq.Select("id", "step_id", "action_type", "action_config_json", "action_order", "created_at", "updated_at").
+		From("automation_actions").
+		Where(sq.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var action AutomationAction
+	var createdAt, updatedAt pgtype.Timestamp
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&action.ID, &action.StepID, &action.ActionType, &action.ActionConfigJSON, &action.ActionOrder, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("action not found")
+		}
+		return nil, fmt.Errorf("failed to get action: %w", err)
+	}
+
+	action.CreatedAt = createdAt.Time
+	action.UpdatedAt = updatedAt.Time
+	return &action, nil
+}
+
+func (r *automationRepository) GetMaxStepOrder(ctx context.Context, automationID string) (int, error) {
+	query, args, err := r.sq.Select("COALESCE(MAX(step_order), 0)").
+		From("automation_steps").
+		Where(sq.Eq{"automation_id": automationID}).
+		ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var maxOrder int
+	err = r.db.QueryRow(ctx, query, args...).Scan(&maxOrder)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get max step order: %w", err)
+	}
+
+	return maxOrder, nil
+}
+
+func (r *automationRepository) GetMaxActionOrder(ctx context.Context, stepID string) (int, error) {
+	query, args, err := r.sq.Select("COALESCE(MAX(action_order), 0)").
+		From("automation_actions").
+		Where(sq.Eq{"step_id": stepID}).
+		ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var maxOrder int
+	err = r.db.QueryRow(ctx, query, args...).Scan(&maxOrder)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get max action order: %w", err)
+	}
+
+	return maxOrder, nil
+}
+
+// GetStepByAutomationIDAndOrder retrieves a step by automation ID and order
+func (r *automationRepository) GetStepByAutomationIDAndOrder(ctx context.Context, automationID string, order int) (*AutomationStep, error) {
+	query, args, err := r.sq.Select("id", "automation_id", "name", "step_order", "config_json", "created_at", "updated_at").
+		From("automation_steps").
+		Where(sq.And{
+			sq.Eq{"automation_id": automationID},
+			sq.Eq{"step_order": order},
+		}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var step AutomationStep
+	var createdAt, updatedAt pgtype.Timestamp
+	var configJSON pgtype.Text
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &configJSON, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("step not found")
+		}
+		return nil, fmt.Errorf("failed to get step: %w", err)
+	}
+
+	if configJSON.Valid {
+		step.ConfigJSON = configJSON.String
+	}
+	step.CreatedAt = createdAt.Time
+	step.UpdatedAt = updatedAt.Time
+	return &step, nil
+}
+
+// GetActionByStepIDAndOrder retrieves an action by step ID and order
+func (r *automationRepository) GetActionByStepIDAndOrder(ctx context.Context, stepID string, order int) (*AutomationAction, error) {
+	query, args, err := r.sq.Select("id", "step_id", "action_type", "action_config_json", "action_order", "created_at", "updated_at").
+		From("automation_actions").
+		Where(sq.And{
+			sq.Eq{"step_id": stepID},
+			sq.Eq{"action_order": order},
+		}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var action AutomationAction
+	var createdAt, updatedAt pgtype.Timestamp
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&action.ID, &action.StepID, &action.ActionType, &action.ActionConfigJSON, &action.ActionOrder, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("action not found")
+		}
+		return nil, fmt.Errorf("failed to get action: %w", err)
+	}
+
+	action.CreatedAt = createdAt.Time
+	action.UpdatedAt = updatedAt.Time
+	return &action, nil
+}
+
+func (r *automationRepository) ShiftStepOrders(ctx context.Context, automationID string, startOrder, endOrder int, increment bool) error {
+	var query string
+	var args []interface{}
+	var err error
+
+	if increment {
+		// Shift orders up (increase by 1)
+		query, args, err = r.sq.Update("automation_steps").
+			Set("step_order", sq.Expr("step_order + 1")).
+			Set("updated_at", time.Now()).
+			Where(sq.And{
+				sq.Eq{"automation_id": automationID},
+				sq.GtOrEq{"step_order": startOrder},
+				sq.LtOrEq{"step_order": endOrder},
+			}).
+			ToSql()
+	} else {
+		// Shift orders down (decrease by 1)
+		query, args, err = r.sq.Update("automation_steps").
+			Set("step_order", sq.Expr("step_order - 1")).
+			Set("updated_at", time.Now()).
+			Where(sq.And{
+				sq.Eq{"automation_id": automationID},
+				sq.GtOrEq{"step_order": startOrder},
+				sq.LtOrEq{"step_order": endOrder},
+			}).
+			ToSql()
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	_, err = r.db.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to shift step orders: %w", err)
+	}
+
+	return nil
+}
+
+func (r *automationRepository) ShiftActionOrders(ctx context.Context, stepID string, startOrder, endOrder int, increment bool) error {
+	var query string
+	var args []interface{}
+	var err error
+
+	if increment {
+		// Shift orders up (increase by 1)
+		query, args, err = r.sq.Update("automation_actions").
+			Set("action_order", sq.Expr("action_order + 1")).
+			Set("updated_at", time.Now()).
+			Where(sq.And{
+				sq.Eq{"step_id": stepID},
+				sq.GtOrEq{"action_order": startOrder},
+				sq.LtOrEq{"action_order": endOrder},
+			}).
+			ToSql()
+	} else {
+		// Shift orders down (decrease by 1)
+		query, args, err = r.sq.Update("automation_actions").
+			Set("action_order", sq.Expr("action_order - 1")).
+			Set("updated_at", time.Now()).
+			Where(sq.And{
+				sq.Eq{"step_id": stepID},
+				sq.GtOrEq{"action_order": startOrder},
+				sq.LtOrEq{"action_order": endOrder},
+			}).
+			ToSql()
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	_, err = r.db.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to shift action orders: %w", err)
+	}
+
+	return nil
 }

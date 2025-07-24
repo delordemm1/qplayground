@@ -2,593 +2,777 @@ package automation
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"log/slog"
 	"time"
 
-	"github.com/delordemm1/qplayground/internal/platform"
-	"github.com/jackc/pgx/v5/pgxpool"
+	sq "github.com/Masterminds/squirrel"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type automationService struct {
-	automationRepo AutomationRepository
-	runCache       RunCache
-	pool           *pgxpool.Pool
+type DBTX interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+	QueryRow(context.Context, string, ...any) pgx.Row
 }
 
-func NewAutomationService(automationRepo AutomationRepository, runCache RunCache, pool *pgxpool.Pool) AutomationService {
-	return &automationService{
-		automationRepo: automationRepo,
-		runCache:       runCache,
-		pool:           pool,
+type automationRepository struct {
+	db DBTX
+	sq sq.StatementBuilderType
+}
+
+func NewAutomationRepository(conn DBTX) AutomationRepository {
+	return &automationRepository{
+		db: conn,
+		sq: sq.StatementBuilder.PlaceholderFormat(sq.Dollar),
 	}
 }
 
-// Automation management
-func (s *automationService) CreateAutomation(ctx context.Context, projectID, name, description, configJSON string) (*Automation, error) {
-	automation := &Automation{
-		ID:          platform.UtilGenerateUUID(),
-		ProjectID:   projectID,
-		Name:        name,
-		Description: description,
-		ConfigJSON:  configJSON,
-	}
-
-	err := s.automationRepo.CreateAutomation(ctx, automation)
+// Automation CRUD
+func (r *automationRepository) CreateAutomation(ctx context.Context, automation *Automation) error {
+	query, args, err := r.sq.Insert("automations").
+		Columns("id", "project_id", "name", "description", "config_json").
+		Values(automation.ID, automation.ProjectID, automation.Name, automation.Description, automation.ConfigJSON).
+		Suffix("RETURNING id, project_id, name, description, config_json, created_at, updated_at").
+		ToSql()
 	if err != nil {
-		slog.Error("Failed to create automation", "error", err, "projectID", projectID, "name", name)
-		return nil, fmt.Errorf("failed to create automation: %w", err)
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 
-	slog.Info("Automation created", "automationID", automation.ID, "projectID", projectID, "name", name)
-	return automation, nil
+	var createdAt, updatedAt pgtype.Timestamp
+	var description, configJSON pgtype.Text
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&automation.ID, &automation.ProjectID, &automation.Name, &description, &configJSON, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create automation: %w", err)
+	}
+
+	if description.Valid {
+		automation.Description = description.String
+	}
+	if configJSON.Valid {
+		automation.ConfigJSON = configJSON.String
+	}
+	automation.CreatedAt = createdAt.Time
+	automation.UpdatedAt = updatedAt.Time
+	return nil
 }
 
-func (s *automationService) GetAutomationsByProject(ctx context.Context, projectID string) ([]*Automation, error) {
-	automations, err := s.automationRepo.GetAutomationsByProjectID(ctx, projectID)
+func (r *automationRepository) GetAutomationByID(ctx context.Context, id string) (*Automation, error) {
+	query, args, err := r.sq.Select("id", "project_id", "name", "description", "config_json", "created_at", "updated_at").
+		From("automations").
+		Where(sq.Eq{"id": id}).
+		ToSql()
 	if err != nil {
-		slog.Error("Failed to get automations by project", "error", err, "projectID", projectID)
-		return nil, fmt.Errorf("failed to get automations: %w", err)
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var automation Automation
+	var createdAt, updatedAt pgtype.Timestamp
+	var description, configJSON pgtype.Text
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&automation.ID, &automation.ProjectID, &automation.Name, &description, &configJSON, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("automation not found")
+		}
+		return nil, fmt.Errorf("failed to get automation: %w", err)
+	}
+
+	if description.Valid {
+		automation.Description = description.String
+	}
+	if configJSON.Valid {
+		automation.ConfigJSON = configJSON.String
+	}
+	automation.CreatedAt = createdAt.Time
+	automation.UpdatedAt = updatedAt.Time
+	return &automation, nil
+}
+
+func (r *automationRepository) GetAutomationsByProjectID(ctx context.Context, projectID string) ([]*Automation, error) {
+	query, args, err := r.sq.Select("id", "project_id", "name", "description", "config_json", "created_at", "updated_at").
+		From("automations").
+		Where(sq.Eq{"project_id": projectID}).
+		OrderBy("created_at DESC").
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query automations: %w", err)
+	}
+	defer rows.Close()
+
+	var automations []*Automation
+	for rows.Next() {
+		var automation Automation
+		var createdAt, updatedAt pgtype.Timestamp
+		var description, configJSON pgtype.Text
+		err := rows.Scan(&automation.ID, &automation.ProjectID, &automation.Name, &description, &configJSON, &createdAt, &updatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan automation: %w", err)
+		}
+		if description.Valid {
+			automation.Description = description.String
+		}
+		if configJSON.Valid {
+			automation.ConfigJSON = configJSON.String
+		}
+		automation.CreatedAt = createdAt.Time
+		automation.UpdatedAt = updatedAt.Time
+		automations = append(automations, &automation)
 	}
 
 	return automations, nil
 }
 
-func (s *automationService) GetAutomationByID(ctx context.Context, id string) (*Automation, error) {
-	automation, err := s.automationRepo.GetAutomationByID(ctx, id)
+func (r *automationRepository) UpdateAutomation(ctx context.Context, automation *Automation) error {
+	query, args, err := r.sq.Update("automations").
+		Set("name", automation.Name).
+		Set("description", automation.Description).
+		Set("config_json", automation.ConfigJSON).
+		Set("updated_at", time.Now()).
+		Where(sq.Eq{"id": automation.ID}).
+		Suffix("RETURNING updated_at").
+		ToSql()
 	if err != nil {
-		slog.Error("Failed to get automation by ID", "error", err, "automationID", id)
-		return nil, fmt.Errorf("failed to get automation: %w", err)
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 
-	return automation, nil
-}
-
-func (s *automationService) UpdateAutomation(ctx context.Context, automation *Automation) error {
-	err := s.automationRepo.UpdateAutomation(ctx, automation)
+	var updatedAt pgtype.Timestamp
+	err = r.db.QueryRow(ctx, query, args...).Scan(&updatedAt)
 	if err != nil {
-		slog.Error("Failed to update automation", "error", err, "automationID", automation.ID)
 		return fmt.Errorf("failed to update automation: %w", err)
 	}
 
-	slog.Info("Automation updated", "automationID", automation.ID, "name", automation.Name)
+	automation.UpdatedAt = updatedAt.Time
 	return nil
 }
 
-func (s *automationService) DeleteAutomation(ctx context.Context, id string) error {
-	err := s.automationRepo.DeleteAutomation(ctx, id)
+func (r *automationRepository) DeleteAutomation(ctx context.Context, id string) error {
+	query, args, err := r.sq.Delete("automations").
+		Where(sq.Eq{"id": id}).
+		ToSql()
 	if err != nil {
-		slog.Error("Failed to delete automation", "error", err, "automationID", id)
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	_, err = r.db.Exec(ctx, query, args...)
+	if err != nil {
 		return fmt.Errorf("failed to delete automation: %w", err)
 	}
 
-	slog.Info("Automation deleted", "automationID", id)
 	return nil
 }
 
-// Step management
-func (s *automationService) CreateStep(ctx context.Context, automationID, name string, stepOrder int) (*AutomationStep, error) {
-	step := &AutomationStep{
-		ID:           platform.UtilGenerateUUID(),
-		AutomationID: automationID,
-		Name:         name,
-		StepOrder:    stepOrder,
-	}
-
-	err := s.automationRepo.CreateStep(ctx, step)
+// Step CRUD
+func (r *automationRepository) CreateStep(ctx context.Context, step *AutomationStep) error {
+	query, args, err := r.sq.Insert("automation_steps").
+		Columns("id", "automation_id", "name", "step_order", "config_json").
+		Values(step.ID, step.AutomationID, step.Name, step.StepOrder, step.ConfigJSON).
+		Suffix("RETURNING id, automation_id, name, step_order, config_json, created_at, updated_at").
+		ToSql()
 	if err != nil {
-		slog.Error("Failed to create step", "error", err, "automationID", automationID, "name", name)
-		return nil, fmt.Errorf("failed to create step: %w", err)
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 
-	slog.Info("Step created", "stepID", step.ID, "automationID", automationID, "name", name)
-	return step, nil
+	var createdAt, updatedAt pgtype.Timestamp
+	var configJSON pgtype.Text
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &configJSON, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create step: %w", err)
+	}
+
+	if configJSON.Valid {
+		step.ConfigJSON = configJSON.String
+	}
+	step.CreatedAt = createdAt.Time
+	step.UpdatedAt = updatedAt.Time
+	return nil
 }
 
-func (s *automationService) GetStepsByAutomation(ctx context.Context, automationID string) ([]*AutomationStep, error) {
-	steps, err := s.automationRepo.GetStepsByAutomationID(ctx, automationID)
+func (r *automationRepository) GetStepsByAutomationID(ctx context.Context, automationID string) ([]*AutomationStep, error) {
+	query, args, err := r.sq.Select("id", "automation_id", "name", "step_order", "config_json", "created_at", "updated_at").
+		From("automation_steps").
+		Where(sq.Eq{"automation_id": automationID}).
+		OrderBy("step_order ASC").
+		ToSql()
 	if err != nil {
-		slog.Error("Failed to get steps by automation", "error", err, "automationID", automationID)
-		return nil, fmt.Errorf("failed to get steps: %w", err)
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query steps: %w", err)
+	}
+	defer rows.Close()
+
+	var steps []*AutomationStep
+	for rows.Next() {
+		var step AutomationStep
+		var createdAt, updatedAt pgtype.Timestamp
+		var configJSON pgtype.Text
+		err := rows.Scan(&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &configJSON, &createdAt, &updatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan step: %w", err)
+		}
+		if configJSON.Valid {
+			step.ConfigJSON = configJSON.String
+		}
+		step.CreatedAt = createdAt.Time
+		step.UpdatedAt = updatedAt.Time
+		steps = append(steps, &step)
 	}
 
 	return steps, nil
 }
 
-func (s *automationService) UpdateStep(ctx context.Context, step *AutomationStep) error {
-	err := s.automationRepo.UpdateStep(ctx, step)
+func (r *automationRepository) UpdateStep(ctx context.Context, step *AutomationStep) error {
+	query, args, err := r.sq.Update("automation_steps").
+		Set("name", step.Name).
+		Set("step_order", step.StepOrder).
+		Set("config_json", step.ConfigJSON).
+		Set("updated_at", time.Now()).
+		Where(sq.Eq{"id": step.ID}).
+		Suffix("RETURNING updated_at").
+		ToSql()
 	if err != nil {
-		slog.Error("Failed to update step", "error", err, "stepID", step.ID)
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var updatedAt pgtype.Timestamp
+	err = r.db.QueryRow(ctx, query, args...).Scan(&updatedAt)
+	if err != nil {
 		return fmt.Errorf("failed to update step: %w", err)
 	}
 
-	slog.Info("Step updated", "stepID", step.ID, "name", step.Name)
+	step.UpdatedAt = updatedAt.Time
 	return nil
 }
 
-func (s *automationService) DeleteStep(ctx context.Context, id string) error {
-	err := s.automationRepo.DeleteStep(ctx, id)
+func (r *automationRepository) DeleteStep(ctx context.Context, id string) error {
+	query, args, err := r.sq.Delete("automation_steps").
+		Where(sq.Eq{"id": id}).
+		ToSql()
 	if err != nil {
-		slog.Error("Failed to delete step", "error", err, "stepID", id)
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	_, err = r.db.Exec(ctx, query, args...)
+	if err != nil {
 		return fmt.Errorf("failed to delete step: %w", err)
 	}
 
-	slog.Info("Step deleted", "stepID", id)
 	return nil
 }
 
-// Action management
-func (s *automationService) CreateAction(ctx context.Context, stepID, actionType, actionConfigJSON string, actionOrder int) (*AutomationAction, error) {
-	action := &AutomationAction{
-		ID:               platform.UtilGenerateUUID(),
-		StepID:           stepID,
-		ActionType:       actionType,
-		ActionConfigJSON: actionConfigJSON,
-		ActionOrder:      actionOrder,
-	}
-
-	err := s.automationRepo.CreateAction(ctx, action)
+// Action CRUD
+func (r *automationRepository) CreateAction(ctx context.Context, action *AutomationAction) error {
+	query, args, err := r.sq.Insert("automation_actions").
+		Columns("id", "step_id", "action_type", "action_config_json", "action_order").
+		Values(action.ID, action.StepID, action.ActionType, action.ActionConfigJSON, action.ActionOrder).
+		Suffix("RETURNING id, step_id, action_type, action_config_json, action_order, created_at, updated_at").
+		ToSql()
 	if err != nil {
-		slog.Error("Failed to create action", "error", err, "stepID", stepID, "actionType", actionType)
-		return nil, fmt.Errorf("failed to create action: %w", err)
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 
-	slog.Info("Action created", "actionID", action.ID, "stepID", stepID, "actionType", actionType)
-	return action, nil
+	var createdAt, updatedAt pgtype.Timestamp
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&action.ID, &action.StepID, &action.ActionType, &action.ActionConfigJSON, &action.ActionOrder, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create action: %w", err)
+	}
+
+	action.CreatedAt = createdAt.Time
+	action.UpdatedAt = updatedAt.Time
+	return nil
 }
 
-func (s *automationService) GetActionsByStep(ctx context.Context, stepID string) ([]*AutomationAction, error) {
-	actions, err := s.automationRepo.GetActionsByStepID(ctx, stepID)
+func (r *automationRepository) GetActionsByStepID(ctx context.Context, stepID string) ([]*AutomationAction, error) {
+	query, args, err := r.sq.Select("id", "step_id", "action_type", "action_config_json", "action_order", "created_at", "updated_at").
+		From("automation_actions").
+		Where(sq.Eq{"step_id": stepID}).
+		OrderBy("action_order ASC").
+		ToSql()
 	if err != nil {
-		slog.Error("Failed to get actions by step", "error", err, "stepID", stepID)
-		return nil, fmt.Errorf("failed to get actions: %w", err)
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query actions: %w", err)
+	}
+	defer rows.Close()
+
+	var actions []*AutomationAction
+	for rows.Next() {
+		var action AutomationAction
+		var createdAt, updatedAt pgtype.Timestamp
+		err := rows.Scan(&action.ID, &action.StepID, &action.ActionType, &action.ActionConfigJSON, &action.ActionOrder, &createdAt, &updatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan action: %w", err)
+		}
+		action.CreatedAt = createdAt.Time
+		action.UpdatedAt = updatedAt.Time
+		actions = append(actions, &action)
 	}
 
 	return actions, nil
 }
 
-func (s *automationService) UpdateAction(ctx context.Context, action *AutomationAction) error {
-	// Get the original action to compare orders
-	originalAction, err := s.automationRepo.GetActionByID(ctx, action.ID)
+func (r *automationRepository) UpdateAction(ctx context.Context, action *AutomationAction) error {
+	query, args, err := r.sq.Update("automation_actions").
+		Set("action_type", action.ActionType).
+		Set("action_config_json", action.ActionConfigJSON).
+		Set("action_order", action.ActionOrder).
+		Set("updated_at", time.Now()).
+		Where(sq.Eq{"id": action.ID}).
+		Suffix("RETURNING updated_at").
+		ToSql()
 	if err != nil {
-		slog.Error("Failed to get original action", "error", err, "actionID", action.ID)
-		return fmt.Errorf("failed to get original action: %w", err)
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 
-	// If order hasn't changed, perform regular update
-	if originalAction.ActionOrder == action.ActionOrder {
-		err := s.automationRepo.UpdateAction(ctx, action)
-		if err != nil {
-			slog.Error("Failed to update action", "error", err, "actionID", action.ID)
-			return fmt.Errorf("failed to update action: %w", err)
-		}
-		slog.Info("Action updated", "actionID", action.ID, "actionType", action.ActionType)
-		return nil
-	}
-
-	// Order has changed, need to swap with the action at the new order
-	tx, err := s.pool.Begin(ctx)
+	var updatedAt pgtype.Timestamp
+	err = r.db.QueryRow(ctx, query, args...).Scan(&updatedAt)
 	if err != nil {
-		slog.Error("Failed to begin transaction", "error", err)
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback(ctx)
-
-	// Create transactional repository
-	txRepo := NewAutomationRepository(tx)
-
-	// Find the action that currently occupies the new order
-	otherAction, err := txRepo.GetActionByStepIDAndOrder(ctx, action.StepID, action.ActionOrder)
-	if err != nil {
-		if err.Error() == "action not found" {
-			// No action at the new order, just update this action
-			err = txRepo.UpdateAction(ctx, action)
-			if err != nil {
-				slog.Error("Failed to update action to new order", "error", err, "actionID", action.ID)
-				return fmt.Errorf("failed to update action: %w", err)
-			}
-		} else {
-			slog.Error("Failed to get action at new order", "error", err, "stepID", action.StepID, "order", action.ActionOrder)
-			return fmt.Errorf("failed to get action at new order: %w", err)
-		}
-	} else {
-		// Swap the orders
-		otherAction.ActionOrder = originalAction.ActionOrder
-
-		// Update both actions
-		err = txRepo.UpdateAction(ctx, action)
-		if err != nil {
-			slog.Error("Failed to update action with new order", "error", err, "actionID", action.ID)
-			return fmt.Errorf("failed to update action: %w", err)
-		}
-
-		err = txRepo.UpdateAction(ctx, otherAction)
-		if err != nil {
-			slog.Error("Failed to update other action with swapped order", "error", err, "actionID", otherAction.ID)
-			return fmt.Errorf("failed to update other action: %w", err)
-		}
-
-		slog.Info("Actions order swapped",
-			"actionID", action.ID, "newOrder", action.ActionOrder,
-			"otherActionID", otherAction.ID, "otherNewOrder", otherAction.ActionOrder)
+		return fmt.Errorf("failed to update action: %w", err)
 	}
 
-	// Commit transaction
-	err = tx.Commit(ctx)
-	if err != nil {
-		slog.Error("Failed to commit transaction", "error", err)
-		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	slog.Info("Action updated", "actionID", action.ID, "actionType", action.ActionType)
+	action.UpdatedAt = updatedAt.Time
 	return nil
 }
 
-func (s *automationService) DeleteAction(ctx context.Context, id string) error {
-	// Get the action to be deleted to know its step and order
-	action, err := s.automationRepo.GetActionByID(ctx, id)
+func (r *automationRepository) DeleteAction(ctx context.Context, id string) error {
+	query, args, err := r.sq.Delete("automation_actions").
+		Where(sq.Eq{"id": id}).
+		ToSql()
 	if err != nil {
-		slog.Error("Failed to get action for deletion", "error", err, "actionID", id)
-		return fmt.Errorf("failed to get action: %w", err)
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 
-	// Start transaction for atomic delete and reorder
-	tx, err := s.pool.Begin(ctx)
+	_, err = r.db.Exec(ctx, query, args...)
 	if err != nil {
-		slog.Error("Failed to begin transaction for action deletion", "error", err)
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback(ctx)
-
-	// Create transactional repository
-	txRepo := NewAutomationRepository(tx)
-
-	// Delete the action
-	err = txRepo.DeleteAction(ctx, id)
-	if err != nil {
-		slog.Error("Failed to delete action", "error", err, "actionID", id)
 		return fmt.Errorf("failed to delete action: %w", err)
 	}
 
-	// Shift remaining actions' orders
-	err = txRepo.ShiftActionOrdersAfterDelete(ctx, action.StepID, action.ActionOrder)
-	if err != nil {
-		slog.Error("Failed to reorder actions after deletion", "error", err, "stepID", action.StepID)
-		return fmt.Errorf("failed to reorder actions: %w", err)
-	}
-
-	// Commit transaction
-	err = tx.Commit(ctx)
-	if err != nil {
-		slog.Error("Failed to commit action deletion transaction", "error", err)
-		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	slog.Info("Action deleted and orders rebalanced", "actionID", id, "stepID", action.StepID)
 	return nil
 }
 
-func (s *automationService) DeleteActionOld(ctx context.Context, id string) error {
-	err := s.automationRepo.DeleteAction(ctx, id)
+// Run CRUD
+func (r *automationRepository) CreateRun(ctx context.Context, run *AutomationRun) error {
+	query, args, err := r.sq.Insert("automation_runs").
+		Columns("id", "automation_id", "status", "logs_json", "output_files_json", "error_message").
+		Values(run.ID, run.AutomationID, run.Status, run.LogsJSON, run.OutputFilesJSON, run.ErrorMessage).
+		Suffix("RETURNING id, automation_id, status, start_time, end_time, logs_json, output_files_json, error_message, created_at, updated_at").
+		ToSql()
 	if err != nil {
-		slog.Error("Failed to delete action", "error", err, "actionID", id)
-		return fmt.Errorf("failed to delete action: %w", err)
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 
-	slog.Info("Action deleted", "actionID", id)
+	var createdAt, updatedAt, startTime, endTime pgtype.Timestamp
+	var logsJSON, outputFilesJSON, errorMessage pgtype.Text
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&run.ID, &run.AutomationID, &run.Status, &startTime, &endTime, &logsJSON, &outputFilesJSON, &errorMessage, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create run: %w", err)
+	}
+
+	if startTime.Valid {
+		run.StartTime = &startTime.Time
+	}
+	if endTime.Valid {
+		run.EndTime = &endTime.Time
+	}
+	if logsJSON.Valid {
+		run.LogsJSON = logsJSON.String
+	}
+	if outputFilesJSON.Valid {
+		run.OutputFilesJSON = outputFilesJSON.String
+	}
+	if errorMessage.Valid {
+		run.ErrorMessage = errorMessage.String
+	}
+	run.CreatedAt = createdAt.Time
+	run.UpdatedAt = updatedAt.Time
 	return nil
 }
 
-// Helper methods for order management
-func (s *automationService) GetMaxStepOrder(ctx context.Context, automationID string) (int, error) {
-	return s.automationRepo.GetMaxStepOrder(ctx, automationID)
+func (r *automationRepository) GetRunByID(ctx context.Context, id string) (*AutomationRun, error) {
+	query, args, err := r.sq.Select("id", "automation_id", "status", "start_time", "end_time", "logs_json", "output_files_json", "error_message", "created_at", "updated_at").
+		From("automation_runs").
+		Where(sq.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var run AutomationRun
+	var createdAt, updatedAt, startTime, endTime pgtype.Timestamp
+	var logsJSON, outputFilesJSON, errorMessage pgtype.Text
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&run.ID, &run.AutomationID, &run.Status, &startTime, &endTime, &logsJSON, &outputFilesJSON, &errorMessage, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("run not found")
+		}
+		return nil, fmt.Errorf("failed to get run: %w", err)
+	}
+
+	if startTime.Valid {
+		run.StartTime = &startTime.Time
+	}
+	if endTime.Valid {
+		run.EndTime = &endTime.Time
+	}
+	if logsJSON.Valid {
+		run.LogsJSON = logsJSON.String
+	}
+	if outputFilesJSON.Valid {
+		run.OutputFilesJSON = outputFilesJSON.String
+	}
+	if errorMessage.Valid {
+		run.ErrorMessage = errorMessage.String
+	}
+	run.CreatedAt = createdAt.Time
+	run.UpdatedAt = updatedAt.Time
+	return &run, nil
 }
 
-func (s *automationService) GetMaxActionOrder(ctx context.Context, stepID string) (int, error) {
-	return s.automationRepo.GetMaxActionOrder(ctx, stepID)
-}
-
-// UpdateRunStatus updates run status in both database and cache
-func (s *automationService) UpdateRunStatus(ctx context.Context, runID, status string) error {
-	// Get current run
-	run, err := s.automationRepo.GetRunByID(ctx, runID)
+func (r *automationRepository) GetRunsByAutomationID(ctx context.Context, automationID string) ([]*AutomationRun, error) {
+	query, args, err := r.sq.Select("id", "automation_id", "status", "start_time", "end_time", "logs_json", "output_files_json", "error_message", "created_at", "updated_at").
+		From("automation_runs").
+		Where(sq.Eq{"automation_id": automationID}).
+		OrderBy("created_at DESC").
+		ToSql()
 	if err != nil {
-		return fmt.Errorf("failed to get run: %w", err)
+		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 
-	// Update status
-	run.Status = status
-	if status == "completed" || status == "failed" || status == "cancelled" {
-		endTime := time.Now()
-		run.EndTime = &endTime
-	}
-
-	// Update in database
-	err = s.automationRepo.UpdateRun(ctx, run)
+	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
-		return fmt.Errorf("failed to update run in database: %w", err)
+		return nil, fmt.Errorf("failed to query runs: %w", err)
 	}
+	defer rows.Close()
 
-	// Update in cache
-	if status == "completed" || status == "failed" || status == "cancelled" {
-		err = s.runCache.SetRunStatusWithExpiry(ctx, runID, status, 1*time.Minute)
-	} else {
-		err = s.runCache.SetRunStatus(ctx, runID, status)
-	}
-
-	if err != nil {
-		slog.Warn("Failed to update run status in cache", "run_id", runID, "error", err)
-	}
-
-	return nil
-}
-
-// GetFullAutomationConfig exports the complete automation configuration
-func (s *automationService) GetFullAutomationConfig(ctx context.Context, automationID string) (*ExportedAutomationConfig, error) {
-	// Get automation
-	automation, err := s.automationRepo.GetAutomationByID(ctx, automationID)
-	if err != nil {
-		slog.Error("Failed to get automation for export", "error", err, "automationID", automationID)
-		return nil, fmt.Errorf("failed to get automation: %w", err)
-	}
-
-	// Parse automation config
-	var automationConfig ExportedAutomationMeta
-	if automation.ConfigJSON != "" {
-		var rawConfig map[string]interface{}
-		if err := json.Unmarshal([]byte(automation.ConfigJSON), &rawConfig); err != nil {
-			slog.Error("Failed to parse automation config JSON", "error", err, "automationID", automationID)
-			return nil, fmt.Errorf("failed to parse automation config: %w", err)
-		}
-
-		// Convert to typed config
-		configBytes, _ := json.Marshal(rawConfig)
-		if err := json.Unmarshal(configBytes, &automationConfig); err != nil {
-			slog.Error("Failed to convert automation config", "error", err, "automationID", automationID)
-			return nil, fmt.Errorf("failed to convert automation config: %w", err)
-		}
-	} else {
-		// Use default configuration
-		automationConfig = ExportedAutomationMeta{
-			Variables: []ExportedVariable{},
-			Multirun: ExportedMultiRunConfig{
-				Enabled: false,
-				Mode:    "sequential",
-				Count:   1,
-				Delay:   1000,
-			},
-			Timeout:       300,
-			Retries:       0,
-			Screenshots:   ExportedScreenshotConfig{Enabled: true, OnError: true, OnSuccess: false, Path: "screenshots/{{timestamp}}-{{loopIndex}}.png"},
-			Notifications: []ExportedNotificationChannelConfig{},
-		}
-	}
-
-	// Get steps
-	steps, err := s.automationRepo.GetStepsByAutomationID(ctx, automationID)
-	if err != nil {
-		slog.Error("Failed to get steps for export", "error", err, "automationID", automationID)
-		return nil, fmt.Errorf("failed to get steps: %w", err)
-	}
-
-	// Build exported steps with actions
-	var exportedSteps []ExportedAutomationStep
-	for _, step := range steps {
-		actions, err := s.automationRepo.GetActionsByStepID(ctx, step.ID)
+	var runs []*AutomationRun
+	for rows.Next() {
+		var run AutomationRun
+		var createdAt, updatedAt, startTime, endTime pgtype.Timestamp
+		var logsJSON, outputFilesJSON, errorMessage pgtype.Text
+		err := rows.Scan(&run.ID, &run.AutomationID, &run.Status, &startTime, &endTime, &logsJSON, &outputFilesJSON, &errorMessage, &createdAt, &updatedAt)
 		if err != nil {
-			slog.Error("Failed to get actions for export", "error", err, "stepID", step.ID)
-			return nil, fmt.Errorf("failed to get actions for step %s: %w", step.ID, err)
+			return nil, fmt.Errorf("failed to scan run: %w", err)
 		}
-
-		var exportedActions []ExportedAutomationAction
-		for _, action := range actions {
-			// Parse action config JSON into map
-			var actionConfig map[string]interface{}
-			if action.ActionConfigJSON != "" {
-				if err := json.Unmarshal([]byte(action.ActionConfigJSON), &actionConfig); err != nil {
-					slog.Error("Failed to parse action config JSON", "error", err, "actionID", action.ID)
-					return nil, fmt.Errorf("failed to parse action config for action %s: %w", action.ID, err)
-				}
-			}
-
-			// Recursively assign IDs to nested actions
-			actionConfig = s.assignNestedActionIDs(actionConfig)
-
-			exportedActions = append(exportedActions, ExportedAutomationAction{
-				ID:           action.ID,
-				ActionType:   action.ActionType,
-				ActionConfig: actionConfig,
-				ActionOrder:  action.ActionOrder,
-			})
+		if startTime.Valid {
+			run.StartTime = &startTime.Time
 		}
-
-		exportedSteps = append(exportedSteps, ExportedAutomationStep{
-			Name:      step.Name,
-			StepOrder: step.StepOrder,
-			Actions:   exportedActions,
-		})
-	}
-
-	exportedConfig := &ExportedAutomationConfig{
-		Automation: ExportedAutomation{
-			Name:        automation.Name,
-			Description: automation.Description,
-			Config:      automationConfig,
-		},
-		Steps: exportedSteps,
-	}
-
-	slog.Info("Automation config exported successfully", "automationID", automationID, "stepsCount", len(exportedSteps))
-	return exportedConfig, nil
-}
-
-// assignNestedActionIDs recursively assigns IDs to nested actions that don't have them
-func (s *automationService) assignNestedActionIDs(actionConfig map[string]interface{}) map[string]interface{} {
-	result := make(map[string]interface{})
-	
-	for key, value := range actionConfig {
-		switch key {
-		case "if_actions", "else_actions", "final_actions", "loop_actions":
-			if actions, ok := value.([]interface{}); ok {
-				updatedActions := make([]interface{}, len(actions))
-				for i, actionInterface := range actions {
-					if actionMap, ok := actionInterface.(map[string]interface{}); ok {
-						// Generate ID if not present
-						if _, hasID := actionMap["id"]; !hasID {
-							actionMap["id"] = platform.UtilGenerateUUID()
-						}
-						// Recursively process nested action configs
-						if actionConfigNested, ok := actionMap["action_config"].(map[string]interface{}); ok {
-							actionMap["action_config"] = s.assignNestedActionIDs(actionConfigNested)
-						}
-						updatedActions[i] = actionMap
-					} else {
-						updatedActions[i] = actionInterface
-					}
-				}
-				result[key] = updatedActions
-			} else {
-				result[key] = value
-			}
-		case "else_if_conditions":
-			if conditions, ok := value.([]interface{}); ok {
-				updatedConditions := make([]interface{}, len(conditions))
-				for i, conditionInterface := range conditions {
-					if conditionMap, ok := conditionInterface.(map[string]interface{}); ok {
-						if actions, ok := conditionMap["actions"].([]interface{}); ok {
-							updatedActions := make([]interface{}, len(actions))
-							for j, actionInterface := range actions {
-								if actionMap, ok := actionInterface.(map[string]interface{}); ok {
-									// Generate ID if not present
-									if _, hasID := actionMap["id"]; !hasID {
-										actionMap["id"] = platform.UtilGenerateUUID()
-									}
-									// Recursively process nested action configs
-									if actionConfigNested, ok := actionMap["action_config"].(map[string]interface{}); ok {
-										actionMap["action_config"] = s.assignNestedActionIDs(actionConfigNested)
-									}
-									updatedActions[j] = actionMap
-								} else {
-									updatedActions[j] = actionInterface
-								}
-							}
-							conditionMap["actions"] = updatedActions
-						}
-						updatedConditions[i] = conditionMap
-					} else {
-						updatedConditions[i] = conditionInterface
-					}
-				}
-				result[key] = updatedConditions
-			} else {
-				result[key] = value
-			}
-		default:
-			// For nested objects, recursively process them
-			if nestedMap, ok := value.(map[string]interface{}); ok {
-				result[key] = s.assignNestedActionIDs(nestedMap)
-			} else {
-				result[key] = value
-			}
+		if endTime.Valid {
+			run.EndTime = &endTime.Time
 		}
-	}
-	
-	return result
-}
-
-// Run management
-func (s *automationService) TriggerRun(ctx context.Context, automationID string) (*AutomationRun, error) {
-	// Check current running count against max concurrent runs
-	runningCount, err := s.runCache.GetRunningRunCount(ctx)
-	if err != nil {
-		slog.Warn("Failed to get running run count, proceeding anyway", "error", err)
-	} else if runningCount >= int64(platform.ENV_MAX_CONCURRENT_RUNS) {
-		// At capacity, queue the run
-		run := &AutomationRun{
-			ID:              platform.UtilGenerateUUID(),
-			AutomationID:    automationID,
-			Status:          "queued",
-			LogsJSON:        "[]",
-			OutputFilesJSON: "[]",
+		if logsJSON.Valid {
+			run.LogsJSON = logsJSON.String
 		}
-
-		err := s.automationRepo.CreateRun(ctx, run)
-		if err != nil {
-			slog.Error("Failed to create queued run", "error", err, "automationID", automationID)
-			return nil, fmt.Errorf("failed to create run: %w", err)
+		if outputFilesJSON.Valid {
+			run.OutputFilesJSON = outputFilesJSON.String
 		}
-
-		// Set status in Redis
-		if cacheErr := s.runCache.SetRunStatus(ctx, run.ID, "queued"); cacheErr != nil {
-			slog.Warn("Failed to set queued status in cache", "run_id", run.ID, "error", cacheErr)
+		if errorMessage.Valid {
+			run.ErrorMessage = errorMessage.String
 		}
-
-		slog.Info("Run queued due to capacity limit", "runID", run.ID, "automationID", automationID, "running_count", runningCount)
-		return run, nil
-	}
-
-	run := &AutomationRun{
-		ID:              platform.UtilGenerateUUID(),
-		AutomationID:    automationID,
-		Status:          "pending",
-		LogsJSON:        "[]",
-		OutputFilesJSON: "[]",
-	}
-
-	err = s.automationRepo.CreateRun(ctx, run)
-	if err != nil {
-		slog.Error("Failed to create run", "error", err, "automationID", automationID)
-		return nil, fmt.Errorf("failed to create run: %w", err)
-	}
-
-	// Set status in Redis
-	if err := s.runCache.SetRunStatus(ctx, run.ID, "pending"); err != nil {
-		slog.Warn("Failed to set pending status in cache", "run_id", run.ID, "error", err)
-	}
-
-	// TODO: Trigger actual automation execution in background
-	// For now, just create the run record
-	slog.Info("Run triggered", "runID", run.ID, "automationID", automationID)
-	return run, nil
-}
-
-func (s *automationService) GetRunsByAutomation(ctx context.Context, automationID string) ([]*AutomationRun, error) {
-	runs, err := s.automationRepo.GetRunsByAutomationID(ctx, automationID)
-	if err != nil {
-		slog.Error("Failed to get runs by automation", "error", err, "automationID", automationID)
-		return nil, fmt.Errorf("failed to get runs: %w", err)
+		run.CreatedAt = createdAt.Time
+		run.UpdatedAt = updatedAt.Time
+		runs = append(runs, &run)
 	}
 
 	return runs, nil
 }
 
-func (s *automationService) GetRunByID(ctx context.Context, id string) (*AutomationRun, error) {
-	run, err := s.automationRepo.GetRunByID(ctx, id)
+func (r *automationRepository) UpdateRun(ctx context.Context, run *AutomationRun) error {
+	query, args, err := r.sq.Update("automation_runs").
+		Set("status", run.Status).
+		Set("start_time", run.StartTime).
+		Set("end_time", run.EndTime).
+		Set("logs_json", run.LogsJSON).
+		Set("output_files_json", run.OutputFilesJSON).
+		Set("error_message", run.ErrorMessage).
+		Set("updated_at", time.Now()).
+		Where(sq.Eq{"id": run.ID}).
+		Suffix("RETURNING updated_at").
+		ToSql()
 	if err != nil {
-		slog.Error("Failed to get run by ID", "error", err, "runID", id)
-		return nil, fmt.Errorf("failed to get run: %w", err)
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 
-	return run, nil
+	var updatedAt pgtype.Timestamp
+	err = r.db.QueryRow(ctx, query, args...).Scan(&updatedAt)
+	if err != nil {
+		return fmt.Errorf("failed to update run: %w", err)
+	}
+
+	run.UpdatedAt = updatedAt.Time
+	return nil
+}
+
+func (r *automationRepository) ShiftActionOrdersAfterDelete(ctx context.Context, stepID string, deletedOrder int) error {
+	query, args, err := r.sq.Update("automation_actions").
+		Set("action_order", sq.Expr("action_order - 1")).
+		Set("updated_at", time.Now()).
+		Where(sq.And{
+			sq.Eq{"step_id": stepID},
+			sq.Gt{"action_order": deletedOrder},
+		}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	_, err = r.db.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to shift action orders after delete: %w", err)
+	}
+
+	return nil
+}
+
+// Order management methods
+func (r *automationRepository) GetStepByID(ctx context.Context, id string) (*AutomationStep, error) {
+		From("automation_steps").
+		Where(sq.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var step AutomationStep
+	var createdAt, updatedAt pgtype.Timestamp
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("step not found")
+		}
+		return nil, fmt.Errorf("failed to get step: %w", err)
+	}
+
+	step.CreatedAt = createdAt.Time
+	step.UpdatedAt = updatedAt.Time
+	return &step, nil
+}
+
+func (r *automationRepository) GetActionByID(ctx context.Context, id string) (*AutomationAction, error) {
+	query, args, err := r.sq.Select("id", "step_id", "action_type", "action_config_json", "action_order", "created_at", "updated_at").
+		From("automation_actions").
+		Where(sq.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var action AutomationAction
+	var createdAt, updatedAt pgtype.Timestamp
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&action.ID, &action.StepID, &action.ActionType, &action.ActionConfigJSON, &action.ActionOrder, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("action not found")
+		}
+		return nil, fmt.Errorf("failed to get action: %w", err)
+	}
+
+	action.CreatedAt = createdAt.Time
+	action.UpdatedAt = updatedAt.Time
+	return &action, nil
+}
+
+func (r *automationRepository) GetMaxStepOrder(ctx context.Context, automationID string) (int, error) {
+	query, args, err := r.sq.Select("COALESCE(MAX(step_order), 0)").
+		From("automation_steps").
+		Where(sq.Eq{"automation_id": automationID}).
+		ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var maxOrder int
+	err = r.db.QueryRow(ctx, query, args...).Scan(&maxOrder)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get max step order: %w", err)
+	}
+
+	return maxOrder, nil
+}
+
+func (r *automationRepository) GetMaxActionOrder(ctx context.Context, stepID string) (int, error) {
+	query, args, err := r.sq.Select("COALESCE(MAX(action_order), 0)").
+		From("automation_actions").
+		Where(sq.Eq{"step_id": stepID}).
+		ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var maxOrder int
+	err = r.db.QueryRow(ctx, query, args...).Scan(&maxOrder)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get max action order: %w", err)
+	}
+
+	return maxOrder, nil
+}
+
+// GetStepByAutomationIDAndOrder retrieves a step by automation ID and order
+func (r *automationRepository) GetStepByAutomationIDAndOrder(ctx context.Context, automationID string, order int) (*AutomationStep, error) {
+	query, args, err := r.sq.Select("id", "automation_id", "name", "step_order", "created_at", "updated_at").
+		From("automation_steps").
+		Where(sq.And{
+			sq.Eq{"automation_id": automationID},
+			sq.Eq{"step_order": order},
+		}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var step AutomationStep
+	var createdAt, updatedAt pgtype.Timestamp
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("step not found")
+		}
+		return nil, fmt.Errorf("failed to get step: %w", err)
+	}
+
+	step.CreatedAt = createdAt.Time
+	step.UpdatedAt = updatedAt.Time
+	return &step, nil
+}
+
+// GetActionByStepIDAndOrder retrieves an action by step ID and order
+func (r *automationRepository) GetActionByStepIDAndOrder(ctx context.Context, stepID string, order int) (*AutomationAction, error) {
+	query, args, err := r.sq.Select("id", "step_id", "action_type", "action_config_json", "action_order", "created_at", "updated_at").
+		From("automation_actions").
+		Where(sq.And{
+			sq.Eq{"step_id": stepID},
+			sq.Eq{"action_order": order},
+		}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var action AutomationAction
+	var createdAt, updatedAt pgtype.Timestamp
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&action.ID, &action.StepID, &action.ActionType, &action.ActionConfigJSON, &action.ActionOrder, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("action not found")
+		}
+		return nil, fmt.Errorf("failed to get action: %w", err)
+	}
+
+	action.CreatedAt = createdAt.Time
+	action.UpdatedAt = updatedAt.Time
+	return &action, nil
+}
+
+func (r *automationRepository) ShiftStepOrders(ctx context.Context, automationID string, startOrder, endOrder int, increment bool) error {
+	var query string
+	var args []interface{}
+	var err error
+
+	if increment {
+		// Shift orders up (increase by 1)
+		query, args, err = r.sq.Update("automation_steps").
+			Set("step_order", sq.Expr("step_order + 1")).
+			Set("updated_at", time.Now()).
+			Where(sq.And{
+				sq.Eq{"automation_id": automationID},
+				sq.GtOrEq{"step_order": startOrder},
+				sq.LtOrEq{"step_order": endOrder},
+			}).
+			ToSql()
+	} else {
+		// Shift orders down (decrease by 1)
+		query, args, err = r.sq.Update("automation_steps").
+			Set("step_order", sq.Expr("step_order - 1")).
+			Set("updated_at", time.Now()).
+			Where(sq.And{
+				sq.Eq{"automation_id": automationID},
+				sq.GtOrEq{"step_order": startOrder},
+				sq.LtOrEq{"step_order": endOrder},
+			}).
+			ToSql()
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	_, err = r.db.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to shift step orders: %w", err)
+	}
+
+	return nil
+}
+
+func (r *automationRepository) ShiftActionOrders(ctx context.Context, stepID string, startOrder, endOrder int, increment bool) error {
+	var query string
+	var args []interface{}
+	var err error
+
+	if increment {
+		// Shift orders up (increase by 1)
+		query, args, err = r.sq.Update("automation_actions").
+			Set("action_order", sq.Expr("action_order + 1")).
+			Set("updated_at", time.Now()).
+			Where(sq.And{
+				sq.Eq{"step_id": stepID},
+				sq.GtOrEq{"action_order": startOrder},
+				sq.LtOrEq{"action_order": endOrder},
+			}).
+			ToSql()
+	} else {
+		// Shift orders down (decrease by 1)
+		query, args, err = r.sq.Update("automation_actions").
+			Set("action_order", sq.Expr("action_order - 1")).
+			Set("updated_at", time.Now()).
+			Where(sq.And{
+				sq.Eq{"step_id": stepID},
+				sq.GtOrEq{"action_order": startOrder},
+				sq.LtOrEq{"action_order": endOrder},
+			}).
+			ToSql()
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	_, err = r.db.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to shift action orders: %w", err)
+	}
+
+	return nil
 }

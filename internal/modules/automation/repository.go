@@ -175,29 +175,33 @@ func (r *automationRepository) DeleteAutomation(ctx context.Context, id string) 
 // Step CRUD
 func (r *automationRepository) CreateStep(ctx context.Context, step *AutomationStep) error {
 	query, args, err := r.sq.Insert("automation_steps").
-		Columns("id", "automation_id", "name", "step_order").
-		Values(step.ID, step.AutomationID, step.Name, step.StepOrder).
-		Suffix("RETURNING id, automation_id, name, step_order, created_at, updated_at").
+		Columns("id", "automation_id", "name", "step_order", "config_json").
+		Values(step.ID, step.AutomationID, step.Name, step.StepOrder, step.ConfigJSON).
+		Suffix("RETURNING id, automation_id, name, step_order, config_json, created_at, updated_at").
 		ToSql()
 	if err != nil {
 		return fmt.Errorf("failed to build query: %w", err)
 	}
 
 	var createdAt, updatedAt pgtype.Timestamp
+	var configJSON pgtype.Text
 	err = r.db.QueryRow(ctx, query, args...).Scan(
-		&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &createdAt, &updatedAt,
+		&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &configJSON, &createdAt, &updatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create step: %w", err)
 	}
 
+	if configJSON.Valid {
+		step.ConfigJSON = configJSON.String
+	}
 	step.CreatedAt = createdAt.Time
 	step.UpdatedAt = updatedAt.Time
 	return nil
 }
 
 func (r *automationRepository) GetStepsByAutomationID(ctx context.Context, automationID string) ([]*AutomationStep, error) {
-	query, args, err := r.sq.Select("id", "automation_id", "name", "step_order", "created_at", "updated_at").
+	query, args, err := r.sq.Select("id", "automation_id", "name", "step_order", "config_json", "created_at", "updated_at").
 		From("automation_steps").
 		Where(sq.Eq{"automation_id": automationID}).
 		OrderBy("step_order ASC").
@@ -216,9 +220,13 @@ func (r *automationRepository) GetStepsByAutomationID(ctx context.Context, autom
 	for rows.Next() {
 		var step AutomationStep
 		var createdAt, updatedAt pgtype.Timestamp
-		err := rows.Scan(&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &createdAt, &updatedAt)
+		var configJSON pgtype.Text
+		err := rows.Scan(&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &configJSON, &createdAt, &updatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan step: %w", err)
+		}
+		if configJSON.Valid {
+			step.ConfigJSON = configJSON.String
 		}
 		step.CreatedAt = createdAt.Time
 		step.UpdatedAt = updatedAt.Time
@@ -232,6 +240,7 @@ func (r *automationRepository) UpdateStep(ctx context.Context, step *AutomationS
 	query, args, err := r.sq.Update("automation_steps").
 		Set("name", step.Name).
 		Set("step_order", step.StepOrder).
+		Set("config_json", step.ConfigJSON).
 		Set("updated_at", time.Now()).
 		Where(sq.Eq{"id": step.ID}).
 		Suffix("RETURNING updated_at").
@@ -540,7 +549,7 @@ func (r *automationRepository) ShiftActionOrdersAfterDelete(ctx context.Context,
 
 // Order management methods
 func (r *automationRepository) GetStepByID(ctx context.Context, id string) (*AutomationStep, error) {
-	query, args, err := r.sq.Select("id", "automation_id", "name", "step_order", "created_at", "updated_at").
+	query, args, err := r.sq.Select("id", "automation_id", "name", "step_order", "config_json", "created_at", "updated_at").
 		From("automation_steps").
 		Where(sq.Eq{"id": id}).
 		ToSql()
@@ -550,8 +559,9 @@ func (r *automationRepository) GetStepByID(ctx context.Context, id string) (*Aut
 
 	var step AutomationStep
 	var createdAt, updatedAt pgtype.Timestamp
+	var configJSON pgtype.Text
 	err = r.db.QueryRow(ctx, query, args...).Scan(
-		&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &createdAt, &updatedAt,
+		&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &configJSON, &createdAt, &updatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -560,6 +570,9 @@ func (r *automationRepository) GetStepByID(ctx context.Context, id string) (*Aut
 		return nil, fmt.Errorf("failed to get step: %w", err)
 	}
 
+	if configJSON.Valid {
+		step.ConfigJSON = configJSON.String
+	}
 	step.CreatedAt = createdAt.Time
 	step.UpdatedAt = updatedAt.Time
 	return &step, nil
@@ -629,7 +642,7 @@ func (r *automationRepository) GetMaxActionOrder(ctx context.Context, stepID str
 
 // GetStepByAutomationIDAndOrder retrieves a step by automation ID and order
 func (r *automationRepository) GetStepByAutomationIDAndOrder(ctx context.Context, automationID string, order int) (*AutomationStep, error) {
-	query, args, err := r.sq.Select("id", "automation_id", "name", "step_order", "created_at", "updated_at").
+	query, args, err := r.sq.Select("id", "automation_id", "name", "step_order", "config_json", "created_at", "updated_at").
 		From("automation_steps").
 		Where(sq.And{
 			sq.Eq{"automation_id": automationID},
@@ -642,8 +655,9 @@ func (r *automationRepository) GetStepByAutomationIDAndOrder(ctx context.Context
 
 	var step AutomationStep
 	var createdAt, updatedAt pgtype.Timestamp
+	var configJSON pgtype.Text
 	err = r.db.QueryRow(ctx, query, args...).Scan(
-		&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &createdAt, &updatedAt,
+		&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &configJSON, &createdAt, &updatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -652,6 +666,9 @@ func (r *automationRepository) GetStepByAutomationIDAndOrder(ctx context.Context
 		return nil, fmt.Errorf("failed to get step: %w", err)
 	}
 
+	if configJSON.Valid {
+		step.ConfigJSON = configJSON.String
+	}
 	step.CreatedAt = createdAt.Time
 	step.UpdatedAt = updatedAt.Time
 	return &step, nil

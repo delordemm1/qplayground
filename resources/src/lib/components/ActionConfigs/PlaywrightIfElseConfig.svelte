@@ -1,444 +1,778 @@
-<script lang="ts">
-  import { Label, Input, Select, Button } from "flowbite-svelte";
-  import { PlusOutline, TrashBinOutline } from "flowbite-svelte-icons";
-  import { nestedActionTypes } from "$lib/utils/actionConfigMap";
-  import NestedActionConfigurator from "../NestedActionConfigurator.svelte";
+package automation
 
-  type NestedAction = {
-    action_type: string;
-    action_config: Record<string, any>;
-  };
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
 
-  type ElseIfCondition = {
-    selector: string;
-    condition_type: string;
-    actions: NestedAction[];
-  };
+	sq "github.com/Masterminds/squirrel"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
+)
 
-  type PlaywrightIfElseConfig = {
-    selector: string;
-    condition_type: string;
-    if_actions: NestedAction[];
-    else_if_conditions: ElseIfCondition[];
-    else_actions: NestedAction[];
-    final_actions: NestedAction[];
-  };
+type DBTX interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
 
-  let { config = $bindable() }: { config: PlaywrightIfElseConfig } = $props();
+type automationRepository struct {
+	db DBTX
+	sq sq.StatementBuilderType
+}
 
-  // Ensure config is always an object
-  config = config ?? {};
+func NewAutomationRepository(conn DBTX) AutomationRepository {
+	return &automationRepository{
+		db: conn,
+		sq: sq.StatementBuilder.PlaceholderFormat(sq.Dollar),
+	}
+}
 
-  function applyDefaults(targetConfig: PlaywrightIfElseConfig) {
-    if (!targetConfig.selector) targetConfig.selector = "";
-    if (!targetConfig.condition_type)
-      targetConfig.condition_type = "is_enabled";
-    if (!targetConfig.if_actions) targetConfig.if_actions = [];
-    if (!targetConfig.else_if_conditions) targetConfig.else_if_conditions = [];
-    if (!targetConfig.else_actions) targetConfig.else_actions = [];
-    if (!targetConfig.final_actions) targetConfig.final_actions = [];
-  }
+// Automation CRUD
+func (r *automationRepository) CreateAutomation(ctx context.Context, automation *Automation) error {
+	query, args, err := r.sq.Insert("automations").
+		Columns("id", "project_id", "name", "description", "config_json").
+		Values(automation.ID, automation.ProjectID, automation.Name, automation.Description, automation.ConfigJSON).
+		Suffix("RETURNING id, project_id, name, description, config_json, created_at, updated_at").
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
 
-  // Apply defaults immediately for initial render
-  applyDefaults(config);
+	var createdAt, updatedAt pgtype.Timestamp
+	var description, configJSON pgtype.Text
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&automation.ID, &automation.ProjectID, &automation.Name, &description, &configJSON, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create automation: %w", err)
+	}
 
-  $effect(() => {
-    applyDefaults(config);
-  });
+	if description.Valid {
+		automation.Description = description.String
+	}
+	if configJSON.Valid {
+		automation.ConfigJSON = configJSON.String
+	}
+	automation.CreatedAt = createdAt.Time
+	automation.UpdatedAt = updatedAt.Time
+	return nil
+}
 
-  const conditionTypes = [
-    { value: "is_enabled", name: "Is Enabled" },
-    { value: "is_disabled", name: "Is Disabled" },
-    { value: "is_visible", name: "Is Visible" },
-    { value: "is_hidden", name: "Is Hidden" },
-    { value: "is_checked", name: "Is Checked" },
-    { value: "is_editable", name: "Is Editable" },
-  ];
+func (r *automationRepository) GetAutomationByID(ctx context.Context, id string) (*Automation, error) {
+	query, args, err := r.sq.Select("id", "project_id", "name", "description", "config_json", "created_at", "updated_at").
+		From("automations").
+		Where(sq.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
 
-  // Helper functions for managing nested actions
-  function addIfAction() {
-    config.if_actions = [
-      ...config.if_actions,
-      { action_type: "", action_config: {} },
-    ];
-  }
+	var automation Automation
+	var createdAt, updatedAt pgtype.Timestamp
+	var description, configJSON pgtype.Text
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&automation.ID, &automation.ProjectID, &automation.Name, &description, &configJSON, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("automation not found")
+		}
+		return nil, fmt.Errorf("failed to get automation: %w", err)
+	}
 
-  function removeIfAction(index: number) {
-    config.if_actions = config.if_actions.filter((_, i) => i !== index);
-  }
+	if description.Valid {
+		automation.Description = description.String
+	}
+	if configJSON.Valid {
+		automation.ConfigJSON = configJSON.String
+	}
+	automation.CreatedAt = createdAt.Time
+	automation.UpdatedAt = updatedAt.Time
+	return &automation, nil
+}
 
-  function addElseIfCondition() {
-    config.else_if_conditions = [
-      ...config.else_if_conditions,
-      { selector: "", condition_type: "is_enabled", actions: [] },
-    ];
-  }
+func (r *automationRepository) GetAutomationsByProjectID(ctx context.Context, projectID string) ([]*Automation, error) {
+	query, args, err := r.sq.Select("id", "project_id", "name", "description", "config_json", "created_at", "updated_at").
+		From("automations").
+		Where(sq.Eq{"project_id": projectID}).
+		OrderBy("created_at DESC").
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
 
-  function removeElseIfCondition(index: number) {
-    config.else_if_conditions = config.else_if_conditions.filter(
-      (_, i) => i !== index
-    );
-  }
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query automations: %w", err)
+	}
+	defer rows.Close()
 
-  function addElseIfAction(conditionIndex: number) {
-    config.else_if_conditions[conditionIndex].actions = [
-      ...config.else_if_conditions[conditionIndex].actions,
-      { action_type: "", action_config: {} },
-    ];
-  }
+	var automations []*Automation
+	for rows.Next() {
+		var automation Automation
+		var createdAt, updatedAt pgtype.Timestamp
+		var description, configJSON pgtype.Text
+		err := rows.Scan(&automation.ID, &automation.ProjectID, &automation.Name, &description, &configJSON, &createdAt, &updatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan automation: %w", err)
+		}
+		if description.Valid {
+			automation.Description = description.String
+		}
+		if configJSON.Valid {
+			automation.ConfigJSON = configJSON.String
+		}
+		automation.CreatedAt = createdAt.Time
+		automation.UpdatedAt = updatedAt.Time
+		automations = append(automations, &automation)
+	}
 
-  function removeElseIfAction(conditionIndex: number, actionIndex: number) {
-    config.else_if_conditions[conditionIndex].actions =
-      config.else_if_conditions[conditionIndex].actions.filter(
-        (_, i) => i !== actionIndex
-      );
-  }
+	return automations, nil
+}
 
-  function addElseAction() {
-    config.else_actions = [
-      ...config.else_actions,
-      { action_type: "", action_config: {} },
-    ];
-  }
+func (r *automationRepository) UpdateAutomation(ctx context.Context, automation *Automation) error {
+	query, args, err := r.sq.Update("automations").
+		Set("name", automation.Name).
+		Set("description", automation.Description).
+		Set("config_json", automation.ConfigJSON).
+		Set("updated_at", time.Now()).
+		Where(sq.Eq{"id": automation.ID}).
+		Suffix("RETURNING updated_at").
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
 
-  function removeElseAction(index: number) {
-    config.else_actions = config.else_actions.filter((_, i) => i !== index);
-  }
+	var updatedAt pgtype.Timestamp
+	err = r.db.QueryRow(ctx, query, args...).Scan(&updatedAt)
+	if err != nil {
+		return fmt.Errorf("failed to update automation: %w", err)
+	}
 
-  function addFinalAction() {
-    config.final_actions = [
-      ...config.final_actions,
-      { action_type: "", action_config: {} },
-    ];
-  }
+	automation.UpdatedAt = updatedAt.Time
+	return nil
+}
 
-  function removeFinalAction(index: number) {
-    config.final_actions = config.final_actions.filter((_, i) => i !== index);
-  }
-</script>
+func (r *automationRepository) DeleteAutomation(ctx context.Context, id string) error {
+	query, args, err := r.sq.Delete("automations").
+		Where(sq.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
 
-<div class="space-y-6">
-  <!-- Main Condition -->
-  <div class="border p-4 rounded-md bg-gray-50">
-    <h4 class="text-md font-semibold mb-3">Main Condition (IF)</h4>
+	_, err = r.db.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to delete automation: %w", err)
+	}
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-      <div>
-        <Label for="if-selector" class="mb-2">Selector *</Label>
-        <Input
-          id="if-selector"
-          type="text"
-          bind:value={config.selector}
-          placeholder="input#chatbox-reply-input:not([disabled])"
-          required
-        />
-      </div>
-      <div>
-        <Label for="if-condition-type" class="mb-2">Condition *</Label>
-        <Select
-          id="if-condition-type"
-          bind:value={config.condition_type}
-          items={conditionTypes}
-        />
-      </div>
-    </div>
+	return nil
+}
 
-    <!-- IF Actions -->
-    <div>
-      <div class="flex items-center justify-between mb-3">
-        <Label class="text-sm font-medium"
-          >Actions to execute if condition is TRUE</Label
-        >
-        <Button size="sm" onclick={addIfAction}>
-          <PlusOutline class="w-4 h-4 mr-2" />
-          Add Action
-        </Button>
-      </div>
+// Step CRUD
+func (r *automationRepository) CreateStep(ctx context.Context, step *AutomationStep) error {
+	query, args, err := r.sq.Insert("automation_steps").
+		Columns("id", "automation_id", "name", "step_order", "config_json").
+		Values(step.ID, step.AutomationID, step.Name, step.StepOrder, step.ConfigJSON).
+		Suffix("RETURNING id, automation_id, name, step_order, config_json, created_at, updated_at").
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
 
-      {#if config.if_actions?.length === 0}
-        <p class="text-sm text-gray-500 italic">No actions defined</p>
-      {:else}
-        <div class="space-y-4">
-          {#each config.if_actions as action, index (index)}
-            <div class="border p-4 rounded-md bg-white">
-              <div class="flex items-center justify-between mb-3">
-                <h5 class="text-sm font-semibold">IF Action #{index + 1}</h5>
-                <Button
-                  size="sm"
-                  color="red"
-                  onclick={() => removeIfAction(index)}
-                >
-                  <TrashBinOutline class="w-4 h-4" />
-                </Button>
-              </div>
+	var createdAt, updatedAt pgtype.Timestamp
+	var configJSON pgtype.Text
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &configJSON, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create step: %w", err)
+	}
 
-              <div class="mb-4">
-                <Label for="if-action-type-{index}" class="mb-2"
-                  >Action Type *</Label
-                >
-                <Select
-                  id="if-action-type-{index}"
-                  bind:value={action.action_type}
-                  items={[
-                    { value: "", name: "Select action type" },
-                    ...nestedActionTypes.map((type) => ({
-                      value: type,
-                      name: type,
-                    })),
-                  ]}
-                />
-              </div>
+	if configJSON.Valid {
+		step.ConfigJSON = configJSON.String
+	}
+	step.CreatedAt = createdAt.Time
+	step.UpdatedAt = updatedAt.Time
+	return nil
+}
 
-              {#if action.action_type}
-                <NestedActionConfigurator
-                  actionType={action.action_type}
-                  bind:config={action.action_config}
-                />
-              {/if}
-            </div>
-          {/each}
-        </div>
-      {/if}
-    </div>
-  </div>
+func (r *automationRepository) GetStepsByAutomationID(ctx context.Context, automationID string) ([]*AutomationStep, error) {
+	query, args, err := r.sq.Select("id", "automation_id", "name", "step_order", "config_json", "created_at", "updated_at").
+		From("automation_steps").
+		Where(sq.Eq{"automation_id": automationID}).
+		OrderBy("step_order ASC").
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
 
-  <!-- ELSE IF Conditions -->
-  <div class="border p-4 rounded-md bg-gray-50">
-    <div class="flex items-center justify-between mb-3">
-      <h4 class="text-md font-semibold">ELSE IF Conditions</h4>
-      <Button size="sm" onclick={addElseIfCondition}>
-        <PlusOutline class="w-4 h-4 mr-2" />
-        Add Else If
-      </Button>
-    </div>
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query steps: %w", err)
+	}
+	defer rows.Close()
 
-    {#if config.else_if_conditions?.length === 0}
-      <p class="text-sm text-gray-500 italic">No else-if conditions defined</p>
-    {:else}
-      <div class="space-y-4">
-        {#each config.else_if_conditions as elseIfCondition, conditionIndex (conditionIndex)}
-          <div class="border p-4 rounded-md bg-white">
-            <div class="flex items-center justify-between mb-3">
-              <h5 class="text-sm font-semibold">
-                Else If #{conditionIndex + 1}
-              </h5>
-              <Button
-                size="sm"
-                color="red"
-                onclick={() => removeElseIfCondition(conditionIndex)}
-              >
-                <TrashBinOutline class="w-4 h-4" />
-              </Button>
-            </div>
+	var steps []*AutomationStep
+	for rows.Next() {
+		var step AutomationStep
+		var createdAt, updatedAt pgtype.Timestamp
+		var configJSON pgtype.Text
+		err := rows.Scan(&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &configJSON, &createdAt, &updatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan step: %w", err)
+		}
+		if configJSON.Valid {
+			step.ConfigJSON = configJSON.String
+		}
+		step.CreatedAt = createdAt.Time
+		step.UpdatedAt = updatedAt.Time
+		steps = append(steps, &step)
+	}
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <div>
-                <Label for="elseif-selector-{conditionIndex}" class="mb-2"
-                  >Selector *</Label
-                >
-                <Input
-                  id="elseif-selector-{conditionIndex}"
-                  type="text"
-                  bind:value={elseIfCondition.selector}
-                  placeholder="div#chatbox-hints button:first-child"
-                  required
-                />
-              </div>
-              <div>
-                <Label for="elseif-condition-type-{conditionIndex}" class="mb-2"
-                  >Condition *</Label
-                >
-                <Select
-                  id="elseif-condition-type-{conditionIndex}"
-                  bind:value={elseIfCondition.condition_type}
-                  items={conditionTypes}
-                />
-              </div>
-            </div>
+	return steps, nil
+}
 
-            <!-- Else If Actions -->
-            <div>
-              <div class="flex items-center justify-between mb-3">
-                <Label class="text-sm font-medium"
-                  >Actions to execute if this condition is TRUE</Label
-                >
-                <Button
-                  size="sm"
-                  onclick={() => addElseIfAction(conditionIndex)}
-                >
-                  <PlusOutline class="w-4 h-4 mr-2" />
-                  Add Action
-                </Button>
-              </div>
+func (r *automationRepository) UpdateStep(ctx context.Context, step *AutomationStep) error {
+	query, args, err := r.sq.Update("automation_steps").
+		Set("name", step.Name).
+		Set("step_order", step.StepOrder).
+		Set("config_json", step.ConfigJSON).
+		Set("updated_at", time.Now()).
+		Where(sq.Eq{"id": step.ID}).
+		Suffix("RETURNING updated_at").
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
 
-              {#if elseIfCondition.actions?.length === 0}
-                <p class="text-sm text-gray-500 italic">No actions defined</p>
-              {:else}
-                <div class="space-y-3">
-                  {#each elseIfCondition.actions as action, actionIndex (actionIndex)}
-                    <div class="border p-3 rounded-md bg-gray-100">
-                      <div class="flex items-center justify-between mb-3">
-                        <h6 class="text-xs font-semibold">
-                          Action #{actionIndex + 1}
-                        </h6>
-                        <Button
-                          size="sm"
-                          color="red"
-                          onclick={() =>
-                            removeElseIfAction(conditionIndex, actionIndex)}
-                        >
-                          <TrashBinOutline class="w-4 h-4" />
-                        </Button>
-                      </div>
+	var updatedAt pgtype.Timestamp
+	err = r.db.QueryRow(ctx, query, args...).Scan(&updatedAt)
+	if err != nil {
+		return fmt.Errorf("failed to update step: %w", err)
+	}
 
-                      <div class="mb-3">
-                        <Label
-                          for="elseif-action-type-{conditionIndex}-{actionIndex}"
-                          class="mb-1 text-xs">Action Type *</Label
-                        >
-                        <Select
-                          id="elseif-action-type-{conditionIndex}-{actionIndex}"
-                          bind:value={action.action_type}
-                          items={[
-                            { value: "", name: "Select action type" },
-                            ...nestedActionTypes.map((type) => ({
-                              value: type,
-                              name: type,
-                            })),
-                          ]}
-                        />
-                      </div>
+	step.UpdatedAt = updatedAt.Time
+	return nil
+}
 
-                      {#if action.action_type}
-                        <NestedActionConfigurator
-                          actionType={action.action_type}
-                          bind:config={action.action_config}
-                        />
-                      {/if}
-                    </div>
-                  {/each}
-                </div>
-              {/if}
-            </div>
-          </div>
-        {/each}
-      </div>
-    {/if}
-  </div>
+func (r *automationRepository) DeleteStep(ctx context.Context, id string) error {
+	query, args, err := r.sq.Delete("automation_steps").
+		Where(sq.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
 
-  <!-- ELSE Actions -->
-  <div class="border p-4 rounded-md bg-gray-50">
-    <div class="flex items-center justify-between mb-3">
-      <h4 class="text-md font-semibold">ELSE Actions</h4>
-      <Button size="sm" onclick={addElseAction}>
-        <PlusOutline class="w-4 h-4 mr-2" />
-        Add Action
-      </Button>
-    </div>
+	_, err = r.db.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to delete step: %w", err)
+	}
 
-    {#if config.else_actions?.length === 0}
-      <p class="text-sm text-gray-500 italic">No else actions defined</p>
-    {:else}
-      <div class="space-y-4">
-        {#each config.else_actions as action, index (index)}
-          <div class="border p-4 rounded-md bg-white">
-            <div class="flex items-center justify-between mb-3">
-              <h5 class="text-sm font-semibold">ELSE Action #{index + 1}</h5>
-              <Button
-                size="sm"
-                color="red"
-                onclick={() => removeElseAction(index)}
-              >
-                <TrashBinOutline class="w-4 h-4" />
-              </Button>
-            </div>
+	return nil
+}
 
-            <div class="mb-4">
-              <Label for="else-action-type-{index}" class="mb-2"
-                >Action Type *</Label
-              >
-              <Select
-                id="else-action-type-{index}"
-                bind:value={action.action_type}
-                items={[
-                  { value: "", name: "Select action type" },
-                  ...nestedActionTypes.map((type) => ({
-                    value: type,
-                    name: type,
-                  })),
-                ]}
-              />
-            </div>
+// Action CRUD
+func (r *automationRepository) CreateAction(ctx context.Context, action *AutomationAction) error {
+	query, args, err := r.sq.Insert("automation_actions").
+		Columns("id", "step_id", "action_type", "action_config_json", "action_order").
+		Values(action.ID, action.StepID, action.ActionType, action.ActionConfigJSON, action.ActionOrder).
+		Suffix("RETURNING id, step_id, action_type, action_config_json, action_order, created_at, updated_at").
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
 
-            {#if action.action_type}
-              <NestedActionConfigurator
-                actionType={action.action_type}
-                bind:config={action.action_config}
-              />
-            {/if}
-          </div>
-        {/each}
-      </div>
-    {/if}
-  </div>
+	var createdAt, updatedAt pgtype.Timestamp
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&action.ID, &action.StepID, &action.ActionType, &action.ActionConfigJSON, &action.ActionOrder, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create action: %w", err)
+	}
 
-  <!-- FINAL Actions -->
-  <div class="border p-4 rounded-md bg-green-50 border-green-200">
-    <div class="flex items-center justify-between mb-3">
-      <h4 class="text-md font-semibold text-green-800">FINAL Actions</h4>
-      <Button size="sm" onclick={addFinalAction}>
-        <PlusOutline class="w-4 h-4 mr-2" />
-        Add Action
-      </Button>
-    </div>
-    <p class="text-sm text-green-700 mb-4">
-      These actions will always execute after the IF/ELSE IF/ELSE logic
-      completes, regardless of which path was taken.
-    </p>
+	action.CreatedAt = createdAt.Time
+	action.UpdatedAt = updatedAt.Time
+	return nil
+}
 
-    {#if config.final_actions?.length === 0}
-      <p class="text-sm text-gray-500 italic">No final actions defined</p>
-    {:else}
-      <div class="space-y-4">
-        {#each config.final_actions as action, index (index)}
-          <div class="border p-4 rounded-md bg-white">
-            <div class="flex items-center justify-between mb-3">
-              <h5 class="text-sm font-semibold">FINAL Action #{index + 1}</h5>
-              <Button
-                size="sm"
-                color="red"
-                onclick={() => removeFinalAction(index)}
-              >
-                <TrashBinOutline class="w-4 h-4" />
-              </Button>
-            </div>
+func (r *automationRepository) GetActionsByStepID(ctx context.Context, stepID string) ([]*AutomationAction, error) {
+	query, args, err := r.sq.Select("id", "step_id", "action_type", "action_config_json", "action_order", "created_at", "updated_at").
+		From("automation_actions").
+		Where(sq.Eq{"step_id": stepID}).
+		OrderBy("action_order ASC").
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
 
-            <div class="mb-4">
-              <Label for="final-action-type-{index}" class="mb-2"
-                >Action Type *</Label
-              >
-              <Select
-                id="final-action-type-{index}"
-                bind:value={action.action_type}
-                items={[
-                  { value: "", name: "Select action type" },
-                  ...nestedActionTypes.map((type) => ({
-                    value: type,
-                    name: type,
-                  })),
-                ]}
-              />
-            </div>
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query actions: %w", err)
+	}
+	defer rows.Close()
 
-            {#if action.action_type}
-              <NestedActionConfigurator
-                actionType={action.action_type}
-                bind:config={action.action_config}
-              />
-            {/if}
-          </div>
-        {/each}
-      </div>
-    {/if}
-  </div>
-</div>
+	var actions []*AutomationAction
+	for rows.Next() {
+		var action AutomationAction
+		var createdAt, updatedAt pgtype.Timestamp
+		err := rows.Scan(&action.ID, &action.StepID, &action.ActionType, &action.ActionConfigJSON, &action.ActionOrder, &createdAt, &updatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan action: %w", err)
+		}
+		action.CreatedAt = createdAt.Time
+		action.UpdatedAt = updatedAt.Time
+		actions = append(actions, &action)
+	}
+
+	return actions, nil
+}
+
+func (r *automationRepository) UpdateAction(ctx context.Context, action *AutomationAction) error {
+	query, args, err := r.sq.Update("automation_actions").
+		Set("action_type", action.ActionType).
+		Set("action_config_json", action.ActionConfigJSON).
+		Set("action_order", action.ActionOrder).
+		Set("updated_at", time.Now()).
+		Where(sq.Eq{"id": action.ID}).
+		Suffix("RETURNING updated_at").
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var updatedAt pgtype.Timestamp
+	err = r.db.QueryRow(ctx, query, args...).Scan(&updatedAt)
+	if err != nil {
+		return fmt.Errorf("failed to update action: %w", err)
+	}
+
+	action.UpdatedAt = updatedAt.Time
+	return nil
+}
+
+func (r *automationRepository) DeleteAction(ctx context.Context, id string) error {
+	query, args, err := r.sq.Delete("automation_actions").
+		Where(sq.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	_, err = r.db.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to delete action: %w", err)
+	}
+
+	return nil
+}
+
+// Run CRUD
+func (r *automationRepository) CreateRun(ctx context.Context, run *AutomationRun) error {
+	query, args, err := r.sq.Insert("automation_runs").
+		Columns("id", "automation_id", "status", "logs_json", "output_files_json", "error_message").
+		Values(run.ID, run.AutomationID, run.Status, run.LogsJSON, run.OutputFilesJSON, run.ErrorMessage).
+		Suffix("RETURNING id, automation_id, status, start_time, end_time, logs_json, output_files_json, error_message, created_at, updated_at").
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var createdAt, updatedAt, startTime, endTime pgtype.Timestamp
+	var logsJSON, outputFilesJSON, errorMessage pgtype.Text
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&run.ID, &run.AutomationID, &run.Status, &startTime, &endTime, &logsJSON, &outputFilesJSON, &errorMessage, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create run: %w", err)
+	}
+
+	if startTime.Valid {
+		run.StartTime = &startTime.Time
+	}
+	if endTime.Valid {
+		run.EndTime = &endTime.Time
+	}
+	if logsJSON.Valid {
+		run.LogsJSON = logsJSON.String
+	}
+	if outputFilesJSON.Valid {
+		run.OutputFilesJSON = outputFilesJSON.String
+	}
+	if errorMessage.Valid {
+		run.ErrorMessage = errorMessage.String
+	}
+	run.CreatedAt = createdAt.Time
+	run.UpdatedAt = updatedAt.Time
+	return nil
+}
+
+func (r *automationRepository) GetRunByID(ctx context.Context, id string) (*AutomationRun, error) {
+	query, args, err := r.sq.Select("id", "automation_id", "status", "start_time", "end_time", "logs_json", "output_files_json", "error_message", "created_at", "updated_at").
+		From("automation_runs").
+		Where(sq.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var run AutomationRun
+	var createdAt, updatedAt, startTime, endTime pgtype.Timestamp
+	var logsJSON, outputFilesJSON, errorMessage pgtype.Text
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&run.ID, &run.AutomationID, &run.Status, &startTime, &endTime, &logsJSON, &outputFilesJSON, &errorMessage, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("run not found")
+		}
+		return nil, fmt.Errorf("failed to get run: %w", err)
+	}
+
+	if startTime.Valid {
+		run.StartTime = &startTime.Time
+	}
+	if endTime.Valid {
+		run.EndTime = &endTime.Time
+	}
+	if logsJSON.Valid {
+		run.LogsJSON = logsJSON.String
+	}
+	if outputFilesJSON.Valid {
+		run.OutputFilesJSON = outputFilesJSON.String
+	}
+	if errorMessage.Valid {
+		run.ErrorMessage = errorMessage.String
+	}
+	run.CreatedAt = createdAt.Time
+	run.UpdatedAt = updatedAt.Time
+	return &run, nil
+}
+
+func (r *automationRepository) GetRunsByAutomationID(ctx context.Context, automationID string) ([]*AutomationRun, error) {
+	query, args, err := r.sq.Select("id", "automation_id", "status", "start_time", "end_time", "logs_json", "output_files_json", "error_message", "created_at", "updated_at").
+		From("automation_runs").
+		Where(sq.Eq{"automation_id": automationID}).
+		OrderBy("created_at DESC").
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query runs: %w", err)
+	}
+	defer rows.Close()
+
+	var runs []*AutomationRun
+	for rows.Next() {
+		var run AutomationRun
+		var createdAt, updatedAt, startTime, endTime pgtype.Timestamp
+		var logsJSON, outputFilesJSON, errorMessage pgtype.Text
+		err := rows.Scan(&run.ID, &run.AutomationID, &run.Status, &startTime, &endTime, &logsJSON, &outputFilesJSON, &errorMessage, &createdAt, &updatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan run: %w", err)
+		}
+		if startTime.Valid {
+			run.StartTime = &startTime.Time
+		}
+		if endTime.Valid {
+			run.EndTime = &endTime.Time
+		}
+		if logsJSON.Valid {
+			run.LogsJSON = logsJSON.String
+		}
+		if outputFilesJSON.Valid {
+			run.OutputFilesJSON = outputFilesJSON.String
+		}
+		if errorMessage.Valid {
+			run.ErrorMessage = errorMessage.String
+		}
+		run.CreatedAt = createdAt.Time
+		run.UpdatedAt = updatedAt.Time
+		runs = append(runs, &run)
+	}
+
+	return runs, nil
+}
+
+func (r *automationRepository) UpdateRun(ctx context.Context, run *AutomationRun) error {
+	query, args, err := r.sq.Update("automation_runs").
+		Set("status", run.Status).
+		Set("start_time", run.StartTime).
+		Set("end_time", run.EndTime).
+		Set("logs_json", run.LogsJSON).
+		Set("output_files_json", run.OutputFilesJSON).
+		Set("error_message", run.ErrorMessage).
+		Set("updated_at", time.Now()).
+		Where(sq.Eq{"id": run.ID}).
+		Suffix("RETURNING updated_at").
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var updatedAt pgtype.Timestamp
+	err = r.db.QueryRow(ctx, query, args...).Scan(&updatedAt)
+	if err != nil {
+		return fmt.Errorf("failed to update run: %w", err)
+	}
+
+	run.UpdatedAt = updatedAt.Time
+	return nil
+}
+
+func (r *automationRepository) ShiftActionOrdersAfterDelete(ctx context.Context, stepID string, deletedOrder int) error {
+	query, args, err := r.sq.Update("automation_actions").
+		Set("action_order", sq.Expr("action_order - 1")).
+		Set("updated_at", time.Now()).
+		Where(sq.And{
+			sq.Eq{"step_id": stepID},
+			sq.Gt{"action_order": deletedOrder},
+		}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	_, err = r.db.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to shift action orders after delete: %w", err)
+	}
+
+	return nil
+}
+
+// Order management methods
+func (r *automationRepository) GetStepByID(ctx context.Context, id string) (*AutomationStep, error) {
+		From("automation_steps").
+		Where(sq.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var step AutomationStep
+	var createdAt, updatedAt pgtype.Timestamp
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("step not found")
+		}
+		return nil, fmt.Errorf("failed to get step: %w", err)
+	}
+
+	step.CreatedAt = createdAt.Time
+	step.UpdatedAt = updatedAt.Time
+	return &step, nil
+}
+
+func (r *automationRepository) GetActionByID(ctx context.Context, id string) (*AutomationAction, error) {
+	query, args, err := r.sq.Select("id", "step_id", "action_type", "action_config_json", "action_order", "created_at", "updated_at").
+		From("automation_actions").
+		Where(sq.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var action AutomationAction
+	var createdAt, updatedAt pgtype.Timestamp
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&action.ID, &action.StepID, &action.ActionType, &action.ActionConfigJSON, &action.ActionOrder, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("action not found")
+		}
+		return nil, fmt.Errorf("failed to get action: %w", err)
+	}
+
+	action.CreatedAt = createdAt.Time
+	action.UpdatedAt = updatedAt.Time
+	return &action, nil
+}
+
+func (r *automationRepository) GetMaxStepOrder(ctx context.Context, automationID string) (int, error) {
+	query, args, err := r.sq.Select("COALESCE(MAX(step_order), 0)").
+		From("automation_steps").
+		Where(sq.Eq{"automation_id": automationID}).
+		ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var maxOrder int
+	err = r.db.QueryRow(ctx, query, args...).Scan(&maxOrder)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get max step order: %w", err)
+	}
+
+	return maxOrder, nil
+}
+
+func (r *automationRepository) GetMaxActionOrder(ctx context.Context, stepID string) (int, error) {
+	query, args, err := r.sq.Select("COALESCE(MAX(action_order), 0)").
+		From("automation_actions").
+		Where(sq.Eq{"step_id": stepID}).
+		ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var maxOrder int
+	err = r.db.QueryRow(ctx, query, args...).Scan(&maxOrder)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get max action order: %w", err)
+	}
+
+	return maxOrder, nil
+}
+
+// GetStepByAutomationIDAndOrder retrieves a step by automation ID and order
+func (r *automationRepository) GetStepByAutomationIDAndOrder(ctx context.Context, automationID string, order int) (*AutomationStep, error) {
+	query, args, err := r.sq.Select("id", "automation_id", "name", "step_order", "created_at", "updated_at").
+		From("automation_steps").
+		Where(sq.And{
+			sq.Eq{"automation_id": automationID},
+			sq.Eq{"step_order": order},
+		}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var step AutomationStep
+	var createdAt, updatedAt pgtype.Timestamp
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&step.ID, &step.AutomationID, &step.Name, &step.StepOrder, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("step not found")
+		}
+		return nil, fmt.Errorf("failed to get step: %w", err)
+	}
+
+	step.CreatedAt = createdAt.Time
+	step.UpdatedAt = updatedAt.Time
+	return &step, nil
+}
+
+// GetActionByStepIDAndOrder retrieves an action by step ID and order
+func (r *automationRepository) GetActionByStepIDAndOrder(ctx context.Context, stepID string, order int) (*AutomationAction, error) {
+	query, args, err := r.sq.Select("id", "step_id", "action_type", "action_config_json", "action_order", "created_at", "updated_at").
+		From("automation_actions").
+		Where(sq.And{
+			sq.Eq{"step_id": stepID},
+			sq.Eq{"action_order": order},
+		}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var action AutomationAction
+	var createdAt, updatedAt pgtype.Timestamp
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&action.ID, &action.StepID, &action.ActionType, &action.ActionConfigJSON, &action.ActionOrder, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("action not found")
+		}
+		return nil, fmt.Errorf("failed to get action: %w", err)
+	}
+
+	action.CreatedAt = createdAt.Time
+	action.UpdatedAt = updatedAt.Time
+	return &action, nil
+}
+
+func (r *automationRepository) ShiftStepOrders(ctx context.Context, automationID string, startOrder, endOrder int, increment bool) error {
+	var query string
+	var args []interface{}
+	var err error
+
+	if increment {
+		// Shift orders up (increase by 1)
+		query, args, err = r.sq.Update("automation_steps").
+			Set("step_order", sq.Expr("step_order + 1")).
+			Set("updated_at", time.Now()).
+			Where(sq.And{
+				sq.Eq{"automation_id": automationID},
+				sq.GtOrEq{"step_order": startOrder},
+				sq.LtOrEq{"step_order": endOrder},
+			}).
+			ToSql()
+	} else {
+		// Shift orders down (decrease by 1)
+		query, args, err = r.sq.Update("automation_steps").
+			Set("step_order", sq.Expr("step_order - 1")).
+			Set("updated_at", time.Now()).
+			Where(sq.And{
+				sq.Eq{"automation_id": automationID},
+				sq.GtOrEq{"step_order": startOrder},
+				sq.LtOrEq{"step_order": endOrder},
+			}).
+			ToSql()
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	_, err = r.db.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to shift step orders: %w", err)
+	}
+
+	return nil
+}
+
+func (r *automationRepository) ShiftActionOrders(ctx context.Context, stepID string, startOrder, endOrder int, increment bool) error {
+	var query string
+	var args []interface{}
+	var err error
+
+	if increment {
+		// Shift orders up (increase by 1)
+		query, args, err = r.sq.Update("automation_actions").
+			Set("action_order", sq.Expr("action_order + 1")).
+			Set("updated_at", time.Now()).
+			Where(sq.And{
+				sq.Eq{"step_id": stepID},
+				sq.GtOrEq{"action_order": startOrder},
+				sq.LtOrEq{"action_order": endOrder},
+			}).
+			ToSql()
+	} else {
+		// Shift orders down (decrease by 1)
+		query, args, err = r.sq.Update("automation_actions").
+			Set("action_order", sq.Expr("action_order - 1")).
+			Set("updated_at", time.Now()).
+			Where(sq.And{
+				sq.Eq{"step_id": stepID},
+				sq.GtOrEq{"action_order": startOrder},
+				sq.LtOrEq{"action_order": endOrder},
+			}).
+			ToSql()
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	_, err = r.db.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to shift action orders: %w", err)
+	}
+
+	return nil
+}
