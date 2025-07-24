@@ -85,6 +85,8 @@ type RunContext struct {
 	PlaywrightPage    playwright.Page
 	StorageService    LocalStorageService
 	Logger            *LocalLogger
+	Variables         map[string]any        // Runtime variables for this run
+	AutomationConfig  *ExportedAutomationMeta // Automation configuration for variable resolution
 }
 
 // PluginAction defines the interface for any executable action provided by a plugin.
@@ -115,6 +117,7 @@ func GetAction(actionType string) (PluginAction, error) {
 // VariableContext holds context variables for resolution
 type VariableContext struct {
 	LoopIndex    int
+	LocalLoopIndex int // For nested loops
 	Timestamp    string
 	RunID        string
 	UserID       string

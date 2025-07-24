@@ -412,7 +412,11 @@ func (s *automationService) GetFullAutomationConfig(ctx context.Context, automat
 				}
 			}
 
+			// Recursively assign IDs to nested actions
+			actionConfig = s.assignNestedActionIDs(actionConfig)
+
 			exportedActions = append(exportedActions, ExportedAutomationAction{
+				ID:           action.ID,
 				ActionType:   action.ActionType,
 				ActionConfig: actionConfig,
 				ActionOrder:  action.ActionOrder,
@@ -437,6 +441,80 @@ func (s *automationService) GetFullAutomationConfig(ctx context.Context, automat
 
 	slog.Info("Automation config exported successfully", "automationID", automationID, "stepsCount", len(exportedSteps))
 	return exportedConfig, nil
+}
+
+// assignNestedActionIDs recursively assigns IDs to nested actions that don't have them
+func (s *automationService) assignNestedActionIDs(actionConfig map[string]interface{}) map[string]interface{} {
+	result := make(map[string]interface{})
+	
+	for key, value := range actionConfig {
+		switch key {
+		case "if_actions", "else_actions", "final_actions", "loop_actions":
+			if actions, ok := value.([]interface{}); ok {
+				updatedActions := make([]interface{}, len(actions))
+				for i, actionInterface := range actions {
+					if actionMap, ok := actionInterface.(map[string]interface{}); ok {
+						// Generate ID if not present
+						if _, hasID := actionMap["id"]; !hasID {
+							actionMap["id"] = platform.UtilGenerateUUID()
+						}
+						// Recursively process nested action configs
+						if actionConfigNested, ok := actionMap["action_config"].(map[string]interface{}); ok {
+							actionMap["action_config"] = s.assignNestedActionIDs(actionConfigNested)
+						}
+						updatedActions[i] = actionMap
+					} else {
+						updatedActions[i] = actionInterface
+					}
+				}
+				result[key] = updatedActions
+			} else {
+				result[key] = value
+			}
+		case "else_if_conditions":
+			if conditions, ok := value.([]interface{}); ok {
+				updatedConditions := make([]interface{}, len(conditions))
+				for i, conditionInterface := range conditions {
+					if conditionMap, ok := conditionInterface.(map[string]interface{}); ok {
+						if actions, ok := conditionMap["actions"].([]interface{}); ok {
+							updatedActions := make([]interface{}, len(actions))
+							for j, actionInterface := range actions {
+								if actionMap, ok := actionInterface.(map[string]interface{}); ok {
+									// Generate ID if not present
+									if _, hasID := actionMap["id"]; !hasID {
+										actionMap["id"] = platform.UtilGenerateUUID()
+									}
+									// Recursively process nested action configs
+									if actionConfigNested, ok := actionMap["action_config"].(map[string]interface{}); ok {
+										actionMap["action_config"] = s.assignNestedActionIDs(actionConfigNested)
+									}
+									updatedActions[j] = actionMap
+								} else {
+									updatedActions[j] = actionInterface
+								}
+							}
+							conditionMap["actions"] = updatedActions
+						}
+						updatedConditions[i] = conditionMap
+					} else {
+						updatedConditions[i] = conditionInterface
+					}
+				}
+				result[key] = updatedConditions
+			} else {
+				result[key] = value
+			}
+		default:
+			// For nested objects, recursively process them
+			if nestedMap, ok := value.(map[string]interface{}); ok {
+				result[key] = s.assignNestedActionIDs(nestedMap)
+			} else {
+				result[key] = value
+			}
+		}
+	}
+	
+	return result
 }
 
 // Run management

@@ -182,6 +182,10 @@ func (r *Runner) executeSingleRun(ctx context.Context, exportedConfig *ExportedA
 		PlaywrightPage:    page,
 		StorageService:    r.storageService,
 		Logger:            r.logger.With("loop_index", loopIndex),
+		Variables:         make(map[string]any),
+		AutomationConfig:  automationConfig,
+		Variables:         make(map[string]any),
+		AutomationConfig:  &automationConfig,
 	}
 
 	var logs []map[string]interface{}
@@ -211,7 +215,7 @@ func (r *Runner) executeSingleRun(ctx context.Context, exportedConfig *ExportedA
 			startTime := time.Now()
 
 			// Resolve variables in action config
-			resolvedActionConfig, resolveErr := r.resolveVariablesInConfig(action.ActionConfig, varContext, automationConfig)
+			resolvedActionConfig, resolveErr := resolveVariablesInConfig(action.ActionConfig, varContext, automationConfig)
 			if resolveErr != nil {
 				return nil, nil, fmt.Errorf("failed to resolve variables in action config: %w", resolveErr)
 			}
@@ -230,7 +234,9 @@ func (r *Runner) executeSingleRun(ctx context.Context, exportedConfig *ExportedA
 			logEntry := map[string]interface{}{
 				"timestamp":   time.Now().Format(time.RFC3339),
 				"step_name":   step.Name,
+				"step_id":     fmt.Sprintf("step-%d", step.StepOrder),
 				"action_type": action.ActionType,
+				"action_id":   action.ID,
 				"loop_index":  loopIndex,
 				"duration_ms": duration.Milliseconds(),
 				"status":      "success",

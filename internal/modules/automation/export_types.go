@@ -65,7 +65,7 @@ type ExportedAutomationStep struct {
 
 // ExportedAutomationAction represents an action within a step for export
 type ExportedAutomationAction struct {
-	ID           string                 `json:"id"`
+	ID           string                 `json:"id"` // Unique identifier for the action
 	ActionType   string                 `json:"action_type"`
 	ActionConfig map[string]interface{} `json:"action_config"` // Direct map instead of JSON string
 	ActionOrder  int                    `json:"action_order"`

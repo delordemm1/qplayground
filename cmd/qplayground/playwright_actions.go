@@ -3,9 +3,12 @@ package playwright
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/brianvoe/gofakeit/v6"
 	"github.com/playwright-community/playwright-go"
 )
 
@@ -1265,6 +1268,12 @@ func (a *IfElseAction) Execute(ctx context.Context, actionConfig map[string]inte
 		return a.executeNestedActions(ctx, elseActions, runContext)
 	}
 
+	// Execute final_actions regardless of condition outcomes
+	if finalActions, ok := actionConfig["final_actions"].([]interface{}); ok {
+		runContext.Logger.Info("Executing final_actions", "count", len(finalActions))
+		return a.executeNestedActions(ctx, finalActions, runContext)
+	}
+
 	runContext.Logger.Info("No conditions met and no else actions defined")
 	return nil
 }
@@ -1309,6 +1318,13 @@ func (a *IfElseAction) executeNestedActions(ctx context.Context, actions []inter
 			actionConfig = make(map[string]interface{})
 		}
 
+		// Resolve variables in nested action config
+		resolvedActionConfig, err := resolveVariablesInConfig(actionConfig, runContext.VariableContext, runContext.AutomationConfig)
+		if err != nil {
+			runContext.Logger.Error("Failed to resolve variables in nested action config", "action_type", actionType, "error", err)
+			return fmt.Errorf("failed to resolve variables in nested action '%s': %w", actionType, err)
+		}
+
 		runContext.Logger.Info("Executing nested action", "index", i, "action_type", actionType)
 
 		// Get the plugin action
@@ -1319,7 +1335,7 @@ func (a *IfElseAction) executeNestedActions(ctx context.Context, actions []inter
 		}
 
 		// Execute the nested action
-		err = pluginAction.Execute(ctx, actionConfig, runContext)
+		err = pluginAction.Execute(ctx, resolvedActionConfig, runContext)
 		if err != nil {
 			runContext.Logger.Error("Nested action failed", "action_type", actionType, "error", err)
 			return fmt.Errorf("nested action '%s' failed: %w", actionType, err)
@@ -1421,6 +1437,9 @@ func (a *LoopUntilAction) Execute(ctx context.Context, actionConfig map[string]i
 		loopCount++
 		runContext.Logger.Info("Loop iteration", "count", loopCount)
 
+		// Update local loop index in variable context
+		runContext.VariableContext.LocalLoopIndex = loopCount
+
 		// Check selector condition if provided
 		if selector != "" && conditionType != "" {
 			conditionMet, err := a.evaluateCondition(runContext, selector, conditionType)
@@ -1480,6 +1499,13 @@ func (a *LoopUntilAction) Execute(ctx context.Context, actionConfig map[string]i
 				actionConfig = make(map[string]interface{})
 			}
 
+			// Resolve variables in loop action config
+			resolvedActionConfig, err := resolveVariablesInConfig(actionConfig, runContext.VariableContext, runContext.AutomationConfig)
+			if err != nil {
+				runContext.Logger.Error("Failed to resolve variables in loop action config", "action_type", actionType, "error", err)
+				return fmt.Errorf("failed to resolve variables in loop action '%s': %w", actionType, err)
+			}
+
 			runContext.Logger.Info("Executing loop action", "loop_count", loopCount, "action_index", actionIndex, "action_type", actionType)
 
 			// Get the plugin action
@@ -1490,7 +1516,7 @@ func (a *LoopUntilAction) Execute(ctx context.Context, actionConfig map[string]i
 			}
 
 			// Execute the loop action
-			err = pluginAction.Execute(ctx, actionConfig, runContext)
+			err = pluginAction.Execute(ctx, resolvedActionConfig, runContext)
 			if err != nil {
 				runContext.Logger.Error("Loop action failed", "action_type", actionType, "loop_count", loopCount, "error", err)
 				return fmt.Errorf("loop action '%s' failed in iteration %d: %w", actionType, loopCount, err)
@@ -1525,5 +1551,136 @@ func (a *LoopUntilAction) evaluateCondition(runContext *RunContext, selector, co
 		return locator.IsEditable()
 	default:
 		return false, fmt.Errorf("unsupported condition type: %s", conditionType)
+	}
+}
+
+// Helper function to resolve variables in config (moved from runner.go for reuse)
+func resolveVariablesInConfig(config map[string]interface{}, varContext *VariableContext, automationConfig *ExportedAutomationMeta) (map[string]interface{}, error) {
+	resolved := make(map[string]interface{})
+
+	for key, value := range config {
+		switch v := value.(type) {
+		case string:
+			resolvedValue, err := resolveVariablesInString(v, varContext, automationConfig)
+			if err != nil {
+				return nil, fmt.Errorf("failed to resolve variables in field '%s': %w", key, err)
+			}
+			resolved[key] = resolvedValue
+		case map[string]interface{}:
+			// Recursively resolve nested objects
+			nestedResolved, err := resolveVariablesInConfig(v, varContext, automationConfig)
+			if err != nil {
+				return nil, err
+			}
+			resolved[key] = nestedResolved
+		default:
+			// For non-string values, keep as-is
+			resolved[key] = value
+		}
+	}
+
+	return resolved, nil
+}
+
+// Helper function to resolve variables in string (moved from runner.go for reuse)
+func resolveVariablesInString(input string, varContext *VariableContext, automationConfig *ExportedAutomationMeta) (string, error) {
+	// Pattern to match {{variableName}} or {{faker.method}}
+	re := regexp.MustCompile(`\{\{([^}]+)\}\}`)
+
+	result := re.ReplaceAllStringFunc(input, func(match string) string {
+		// Extract variable name (remove {{ and }})
+		varName := strings.Trim(match, "{}")
+
+		// Handle environment variables
+		switch varName {
+		case "loopIndex":
+			return strconv.Itoa(varContext.LoopIndex)
+		case "localLoopIndex":
+			return strconv.Itoa(varContext.LocalLoopIndex)
+		case "timestamp":
+			return varContext.Timestamp
+		case "runId":
+			return varContext.RunID
+		case "userId":
+			return varContext.UserID
+		case "projectId":
+			return varContext.ProjectID
+		case "automationId":
+			return varContext.AutomationID
+		}
+
+		// Handle faker variables
+		if strings.HasPrefix(varName, "faker.") {
+			fakerMethod := strings.TrimPrefix(varName, "faker.")
+			return generateFakerValue(fakerMethod)
+		}
+
+		// Handle static variables
+		if value, exists := varContext.StaticVars[varName]; exists {
+			return value
+		}
+
+		// Handle dynamic variables from config
+		for _, variable := range automationConfig.Variables {
+			if variable.Key == varName {
+				switch variable.Type {
+				case "static":
+					return variable.Value
+				case "dynamic":
+					// Variable.Value contains the faker method (e.g., "{{faker.email}}")
+					if strings.HasPrefix(variable.Value, "{{faker.") && strings.HasSuffix(variable.Value, "}}") {
+						fakerMethod := strings.TrimPrefix(strings.TrimSuffix(variable.Value, "}}"), "{{faker.")
+						return generateFakerValue(fakerMethod)
+					}
+					return variable.Value
+				case "environment":
+					// Variable.Value contains the environment variable (e.g., "{{timestamp}}")
+					v, err := resolveVariablesInString(variable.Value, varContext, automationConfig)
+					if err != nil {
+						return ""
+					}
+					return v
+				}
+			}
+		}
+
+		// If no match found, return the original placeholder
+		return match
+	})
+
+	return result, nil
+}
+
+// generateFakerValue generates a fake value based on the faker method
+func generateFakerValue(method string) string {
+	gofakeit.Seed(time.Now().UnixNano()) // Ensure randomness
+
+	switch method {
+	case "name":
+		return gofakeit.Name()
+	case "email":
+		return gofakeit.Email()
+	case "phone":
+		return gofakeit.Phone()
+	case "address":
+		return gofakeit.Address().Address
+	case "company":
+		return gofakeit.Company()
+	case "username":
+		return gofakeit.Username()
+	case "password":
+		return gofakeit.Password(true, true, true, true, false, 12)
+	case "uuid":
+		return gofakeit.UUID()
+	case "number":
+		return strconv.Itoa(gofakeit.Number(1, 1000))
+	case "date":
+		return gofakeit.Date().Format("2006-01-02")
+	case "lastName":
+		return gofakeit.LastName()
+	case "firstName":
+		return gofakeit.FirstName()
+	default:
+		return fmt.Sprintf("{{faker.%s}}", method)
 	}
 }
