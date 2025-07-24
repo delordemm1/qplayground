@@ -144,7 +144,7 @@ type AutomationConfig struct {
 
 // StepConfig represents the parsed step configuration
 type StepConfig struct {
-	SkipCondition    string  `json:"skip_condition,omitempty"`    // e.g., "loop_index_is_even", "loop_index_is_odd", "loop_index_is_prime", "random"
+	SkipCondition    string  `json:"skip_condition,omitempty"`     // e.g., "loop_index_is_even", "loop_index_is_odd", "loop_index_is_prime", "random"
 	RunOnlyCondition string  `json:"run_only_condition,omitempty"` // alternative to skip_condition
 	Probability      float64 `json:"probability,omitempty"`        // for random condition, defaults to 0.5
 }
@@ -274,7 +274,7 @@ type AutomationService interface {
 	DeleteAutomation(ctx context.Context, id string) error
 
 	// Step management
-	CreateStep(ctx context.Context, automationID, name string, stepOrder int) (*AutomationStep, error)
+	CreateStep(ctx context.Context, automationID, name string, stepOrder int, configJSON string) (*AutomationStep, error)
 	GetStepsByAutomation(ctx context.Context, automationID string) ([]*AutomationStep, error)
 	UpdateStep(ctx context.Context, step *AutomationStep) error
 	DeleteStep(ctx context.Context, id string) error

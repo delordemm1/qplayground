@@ -15,10 +15,7 @@ import (
 func init() {
 	// Seed the random number generator for probabilistic conditions
 	rand.Seed(time.Now().UnixNano())
-	
-	// Register actions
-	automation.RegisterAction("playwright:goto", func() automation.PluginAction { return &GotoAction{} })
-func init() {
+
 	automation.RegisterAction("playwright:goto", func() automation.PluginAction { return &GotoAction{} })
 	automation.RegisterAction("playwright:click", func() automation.PluginAction { return &ClickAction{} })
 	automation.RegisterAction("playwright:fill", func() automation.PluginAction { return &FillAction{} })
@@ -985,7 +982,7 @@ func (a *IfElseAction) evaluateCondition(runContext *automation.RunContext, sele
 	if selector == "" {
 		return false, fmt.Errorf("selector is required for condition type: %s", conditionType)
 	}
-	
+
 	locator := runContext.PlaywrightPage.Locator(selector).First()
 
 	switch conditionType {
@@ -1352,7 +1349,7 @@ func (a *LoopUntilAction) evaluateCondition(runContext *automation.RunContext, s
 	if selector == "" {
 		return false, fmt.Errorf("selector is required for condition type: %s", conditionType)
 	}
-	
+
 	locator := runContext.PlaywrightPage.Locator(selector).First()
 
 	switch conditionType {
