@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from "@inertiajs/svelte";
   import { formatDate } from "$lib/utils/date";
+  import { calculatePercentile } from "$lib/utils/date";
   import { showSuccessToast, showErrorToast } from "$lib/utils/toast";
   import ImageViewerModal from "$lib/components/ImageViewerModal.svelte";
   import RunPerformanceChart from "$lib/components/RunPerformanceChart.svelte";
@@ -10,8 +11,10 @@
     ChevronRightOutline,
     DownloadOutline,
     TableColumnOutline,
-    UserOutline
+    UserOutline,
+    ChevronDownSolid
   } from "flowbite-svelte-icons";
+  import { Dropdown, DropdownItem } from "flowbite-svelte";
 
   type Project = {
     ID: string;
@@ -644,91 +647,196 @@
   }
 
   // Export functions
-  function exportToCSV() {
+  function exportUserStepDetailCSV() {
     try {
-      const csvRows = [];
+      // 1. Prepare a structured summary from the raw logs
+      const userRunSummaries = new Map();
 
-      // CSV Headers
+      // The 'parsedLogs' variable should contain all log entries from your run
+      parsedLogs.forEach(log => {
+        const userId = log.loop_index ?? 0;
+        const stepName = log.step_name;
+
+        if (!stepName) return; // Skip logs without a step context
+
+        // Initialize the main entry for the user if it doesn't exist
+        if (!userRunSummaries.has(userId)) {
+          userRunSummaries.set(userId, {
+            overallStatus: 'success',
+            overallDuration: 0,
+            steps: new Map()
+          });
+        }
+        const userRun = userRunSummaries.get(userId);
+
+        // Initialize the summary for this specific step if it doesn't exist
+        if (!userRun.steps.has(stepName)) {
+          userRun.steps.set(stepName, {
+            status: 'success',
+            duration: 0,
+            actionCount: 0,
+            errorCount: 0,
+          });
+        }
+        const stepSummary = userRun.steps.get(stepName);
+
+        // Aggregate the data
+        const duration = log.duration_ms || 0;
+        userRun.overallDuration += duration;
+        stepSummary.duration += duration;
+        stepSummary.actionCount++;
+
+        if (log.status === 'failed') {
+          userRun.overallStatus = 'failed';
+          stepSummary.status = 'failed';
+          stepSummary.errorCount++;
+        }
+      });
+
+      // 2. Define the new, more useful CSV headers
+      const csvRows = [];
       csvRows.push([
-        "Step ID",
-        "Step Name",
-        "Step Duration (ms)",
-        "Step Status",
-        "Action ID",
-        "Parent Action ID",
-        "Action Type",
-        "Action Duration (ms)",
-        "Action Status",
-        "Error Message",
-        "Output Files",
-        "Loop Index",
-        "Local Loop Index",
-        "Timestamp",
+        'User ID',
+        'Overall Run Status',
+        'Overall Run Duration (ms)',
+        'Step Name',
+        'Step Status',
+        'Step Duration (ms)',
+        'Actions in Step',
+        'Errors in Step'
       ]);
 
-      // Process each step and action
-      enhancedReportData.forEach((step) => {
-        if (step.rawActions.size === 0) {
-          // Step with no actions
+      // 3. Build the CSV rows from the structured summary
+      userRunSummaries.forEach((runData, userId) => {
+        if (runData.steps.size === 0) {
+          // Handle cases where a user might have failed before completing any steps
           csvRows.push([
-            step.id,
-            step.name,
-            step.totalDuration,
-            step.status,
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            step.startTime,
+            userId,
+            runData.overallStatus,
+            runData.overallDuration,
+            'No Steps Recorded',
+            runData.overallStatus,
+            0,
+            0,
+            runData.overallStatus === 'failed' ? 1 : 0
           ]);
         } else {
-          // Step with actions
-          Array.from(step.rawActions.values()).forEach((action) => {
+          runData.steps.forEach((stepData, stepName) => {
             csvRows.push([
-              step.id,
-              step.name,
-              step.totalDuration,
-              step.status,
-              action.id,
-              action.parentActionId || "",
-              action.type,
-              action.duration,
-              action.status,
-              action.error || "",
-              action.outputFiles.join("; "),
-              action.loopIndex,
-              "", // Local loop index would need to be tracked separately
-              step.startTime,
+              userId,
+              runData.overallStatus,
+              runData.overallDuration,
+              stepName,
+              stepData.status,
+              stepData.duration,
+              stepData.actionCount,
+              stepData.errorCount
             ]);
           });
         }
       });
 
-      // Convert to CSV string
+      // 4. Convert to CSV string and trigger download
       const csvContent = csvRows
         .map((row) =>
           row.map((field) => `"${String(field).replace(/"/g, '""')}"`).join(",")
         )
         .join("\n");
 
-      // Download CSV
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const link = document.createElement("a");
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.download = `automation_report_${runId}.csv`;
+      link.download = `automation_per_user_detail_${runId}.csv`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-
-      showSuccessToast("Report exported to CSV successfully");
+      
+      showSuccessToast('User step detail report exported to CSV successfully');
     } catch (error) {
-      console.error("Failed to export CSV:", error);
-      showErrorToast("Failed to export CSV report");
+      console.error('Failed to export user step detail CSV:', error);
+      showErrorToast('Failed to export user step detail CSV');
+    }
+  }
+
+  function exportAggregatedSummaryCSV() {
+    try {
+      // 1. Prepare data by aggregating stats for each unique step name
+      const stepAggregates = new Map();
+
+      parsedLogs.forEach(log => {
+        const stepName = log.step_name;
+        if (!stepName) return;
+
+        if (!stepAggregates.has(stepName)) {
+          stepAggregates.set(stepName, {
+            durations: [],
+            successCount: 0,
+            failureCount: 0,
+          });
+        }
+        const stepData = stepAggregates.get(stepName);
+        
+        stepData.durations.push(log.duration_ms || 0);
+        if (log.status === 'failed') {
+          stepData.failureCount++;
+        } else {
+          stepData.successCount++;
+        }
+      });
+
+      // 2. Define headers for the aggregated summary
+      const csvRows = [];
+      csvRows.push([
+        'Step Name',
+        'Total Executions',
+        'Success Rate (%)',
+        'Failure Count',
+        'Average Duration (ms)',
+        'Min Duration (ms)',
+        'Max Duration (ms)',
+        '95th Percentile Duration (ms)'
+      ]);
+
+      // 3. Calculate final metrics and build the CSV rows
+      stepAggregates.forEach((data, stepName) => {
+        const totalExecutions = data.successCount + data.failureCount;
+        const successRate = totalExecutions > 0 ? (data.successCount / totalExecutions) * 100 : 0;
+        
+        const sortedDurations = [...data.durations].sort((a, b) => a - b);
+        const sum = sortedDurations.reduce((a, b) => a + b, 0);
+        const avg = totalExecutions > 0 ? sum / totalExecutions : 0;
+        const min = sortedDurations.length > 0 ? sortedDurations[0] : 0;
+        const max = sortedDurations.length > 0 ? sortedDurations[sortedDurations.length - 1] : 0;
+        
+        // Calculate P95
+        const p95 = sortedDurations.length > 0 ? calculatePercentile(sortedDurations, 95) : 0;
+        
+        csvRows.push([
+          stepName,
+          totalExecutions,
+          successRate.toFixed(2),
+          data.failureCount,
+          avg.toFixed(2),
+          min,
+          max,
+          p95.toFixed(2)
+        ]);
+      });
+
+      // 4. Generate and download the CSV
+      const csvContent = csvRows.map(row => row.map(field => `"${String(field).replace(/"/g, '""')}"`).join(",")).join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `automation_aggregated_summary_${runId}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      showSuccessToast("Aggregated summary exported to CSV successfully");
+    } catch (error) {
+      console.error("Failed to export aggregated CSV:", error);
+      showErrorToast("Failed to export aggregated CSV");
     }
   }
 
@@ -985,17 +1093,34 @@
         >
       </p>
     </div>
-    <div class="mt-4 flex md:mt-0 md:ml-4">
-      <button
-        onclick={exportToCSV}
-        class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-      >
-        <TableColumnOutline class="-ml-1 mr-2 h-5 w-5" />
-        Export CSV
-      </button>
+    <div class="mt-4 flex md:mt-0 md:ml-4 space-x-3">
+      <div class="relative">
+        <button
+          id="csv-export-dropdown"
+          class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+        >
+          <TableColumnOutline class="-ml-1 mr-2 h-5 w-5" />
+          Export CSV
+          <ChevronDownSolid class="ml-2 h-4 w-4" />
+        </button>
+        <Dropdown triggeredBy="#csv-export-dropdown" class="w-56">
+          <DropdownItem onclick={exportUserStepDetailCSV}>
+            <div class="flex flex-col">
+              <span class="font-medium">User Step Detail</span>
+              <span class="text-xs text-gray-500">Per-user step execution details</span>
+            </div>
+          </DropdownItem>
+          <DropdownItem onclick={exportAggregatedSummaryCSV}>
+            <div class="flex flex-col">
+              <span class="font-medium">Aggregated Summary</span>
+              <span class="text-xs text-gray-500">Step performance statistics</span>
+            </div>
+          </DropdownItem>
+        </Dropdown>
+      </div>
       <button
         onclick={exportToJSON}
-        class="ml-3 inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+        class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
       >
         <DownloadOutline class="-ml-1 mr-2 h-5 w-5" />
         Export JSON
