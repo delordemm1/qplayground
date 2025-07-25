@@ -214,14 +214,14 @@ func (b *BaseApiAction) executeApiRequest(ctx context.Context, method string, co
 		for _, hook := range config.AfterHooks {
 			var extractedValue interface{}
 			var err error
-			
+
 			if hook.Path == "" || hook.Path == "." {
 				// Store the entire response
 				extractedValue = responseJSON
 			} else {
 				extractedValue, err = b.extractJSONPath(responseJSON, hook.Path)
 			}
-			
+
 			if err != nil {
 				runContext.Logger.Warn("Failed to extract value from JSON path", "path", hook.Path, "error", err)
 				continue
@@ -237,7 +237,7 @@ func (b *BaseApiAction) executeApiRequest(ctx context.Context, method string, co
 			}
 
 			responseData.ExtractedVars[hook.SaveAs] = extractedValue
-			runContext.Logger.Info("Extracted runtime variable", 
+			runContext.Logger.Info("Extracted runtime variable",
 				"path", hook.Path,
 				"save_as", hook.SaveAs,
 				"value_type", fmt.Sprintf("%T", extractedValue),
@@ -515,7 +515,7 @@ type ApiIfElseAction struct{}
 
 func (a *ApiIfElseAction) Execute(ctx context.Context, actionConfig map[string]any, runContext *automation.RunContext) error {
 	startTime := time.Now()
-	
+
 	variablePath, ok := actionConfig["variable_path"].(string)
 	if !ok || variablePath == "" {
 		return fmt.Errorf("api:if_else action requires a 'variable_path' string in config")
@@ -623,7 +623,7 @@ func (a *ApiIfElseAction) evaluateApiCondition(variablePath, conditionType strin
 		return false, fmt.Errorf("failed to resolve variable '%s': %w", variablePath, err)
 	}
 
-	runContext.Logger.Debug("Evaluating condition", 
+	runContext.Logger.Debug("Evaluating condition",
 		"variable_path", variablePath,
 		"actual_value", actualValue,
 		"expected_value", expectedValue,
@@ -672,7 +672,7 @@ func (a *ApiIfElseAction) evaluateApiCondition(variablePath, conditionType strin
 func (a *ApiIfElseAction) compareNumbers(actual, expected interface{}, operator string) (bool, error) {
 	actualFloat, err1 := a.toFloat64(actual)
 	expectedFloat, err2 := a.toFloat64(expected)
-	
+
 	if err1 != nil || err2 != nil {
 		return false, fmt.Errorf("cannot compare non-numeric values")
 	}
@@ -716,7 +716,7 @@ func (a *ApiIfElseAction) resolveRuntimeVariable(variablePath string, runContext
 	// Remove "runtime." prefix
 	path := strings.TrimPrefix(variablePath, "runtime.")
 	pathParts := strings.Split(path, ".")
-	
+
 	if len(pathParts) == 0 {
 		return nil, fmt.Errorf("empty variable path")
 	}
@@ -746,6 +746,7 @@ func (a *ApiIfElseAction) resolveNestedPath(base interface{}, pathParts []string
 	current := base
 
 	for i, part := range pathParts {
+		_ = i
 		if current == nil {
 			return nil, fmt.Errorf("null value encountered at path segment '%s'", part)
 		}
