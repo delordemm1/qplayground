@@ -1287,3 +1287,63 @@ func (a *ApiRuntimeLoopUntilAction) resolveNestedPath(base interface{}, pathPart
 
 	return current, nil
 }
+
+// ApiLogAction implements logging messages with runtime variable support
+type ApiLogAction struct{}
+
+func (a *ApiLogAction) Execute(ctx context.Context, actionConfig map[string]interface{}, runContext *automation.RunContext) error {
+	startTime := time.Now()
+	message, ok := actionConfig["message"].(string)
+	if !ok || message == "" {
+		return fmt.Errorf("api:log action requires a 'message' string in config")
+	}
+
+	level, _ := actionConfig["level"].(string)
+	if level == "" {
+		level = "info"
+	}
+
+	// Resolve variables in the message to support runtime variable logging
+	resolvedMessage, err := runContext.Runner.ResolveVariablesInString(message, runContext.VariableContext, runContext.AutomationConfig)
+	if err != nil {
+		runContext.Logger.Warn("Failed to resolve variables in log message", "error", err)
+		resolvedMessage = message // Fall back to original message
+	}
+
+	duration := time.Since(startTime)
+
+	// Send event through the event channel
+	if runContext.EventCh != nil {
+		select {
+		case runContext.EventCh <- automation.RunEvent{
+			Type:           automation.RunEventTypeLog,
+			Timestamp:      time.Now(),
+			StepName:       runContext.StepName,
+			StepID:         runContext.StepID,
+			ActionID:       runContext.ActionID,
+			ActionName:     runContext.ActionName,
+			ParentActionID: runContext.ParentActionID,
+			ActionType:     "api:log",
+			Message:        fmt.Sprintf("[%s] %s", strings.ToUpper(level), resolvedMessage),
+			Duration:       duration.Milliseconds(),
+			LoopIndex:      runContext.LoopIndex,
+			LocalLoopIndex: runContext.VariableContext.LocalLoopIndex,
+		}:
+		default:
+			// Channel is full, skip this event to avoid blocking
+		}
+	}
+
+	switch level {
+	case "debug":
+		runContext.Logger.Debug("User Log", "message", resolvedMessage)
+	case "warn":
+		runContext.Logger.Warn("User Log", "message", resolvedMessage)
+	case "error":
+		runContext.Logger.Error("User Log", "message", resolvedMessage)
+	default:
+		runContext.Logger.Info("User Log", "message", resolvedMessage)
+	}
+
+	return nil
+}

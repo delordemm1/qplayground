@@ -365,6 +365,9 @@ export function validateActionConfig(
         }
       }
       break;
+    case "api:log":
+      if (!config.message) errors.push("Log message is required");
+      break;
   }
 
   return errors;
