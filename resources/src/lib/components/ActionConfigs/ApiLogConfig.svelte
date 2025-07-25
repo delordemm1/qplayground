@@ -63,7 +63,7 @@
     <h4 class="text-md font-semibold mb-3 text-blue-800">Usage Examples</h4>
     <div class="text-sm text-blue-700 space-y-2">
       <p><strong>Basic logging:</strong></p>
-      <p><code>Processing user registration for loop {{`{{loopIndex}}`}}</code></p>
+      <p><code>{"Processing user registration for loop `{{loopIndex}}`"}</code></p>
       
       <p><strong>Runtime variable logging:</strong></p>
       <p><code>{"User ID: {{runtime.user_id}}, Status: {{runtime.api_response.status}}"}</code></p>

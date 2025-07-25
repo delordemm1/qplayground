@@ -30,6 +30,7 @@ import ApiPatchConfig from "../components/ActionConfigs/ApiPatchConfig.svelte";
 import ApiDeleteConfig from "../components/ActionConfigs/ApiDeleteConfig.svelte";
 import ApiIfElseConfig from "../components/ActionConfigs/ApiIfElseConfig.svelte";
 import ApiRuntimeLoopUntilConfig from "../components/ActionConfigs/ApiRuntimeLoopUntilConfig.svelte";
+import ApiLogConfig from "../components/ActionConfigs/ApiLogConfig.svelte";
 
 // List of supported action types
 export const actionTypes = [
@@ -66,13 +67,14 @@ export const actionTypes = [
   "api:delete",
   "api:if_else",
   "api:runtime_loop_until",
+  "api:log",
 ];
 
 // List of action types that can be used in nested contexts (excluding if_else to prevent infinite nesting)
 export const nestedActionTypes = actionTypes.filter(type => 
   type !== "playwright:loop_until" && 
-  type !== "playwright:if_else" && 
-  type !== "api:if_else" &&
+  // type !== "playwright:if_else" && 
+  // type !== "api:if_else" &&
   type !== "api:runtime_loop_until"
 );
 
@@ -111,6 +113,7 @@ export const actionConfigComponents: Record<string, any> = {
   "api:delete": ApiDeleteConfig,
   "api:if_else": ApiIfElseConfig,
   "api:runtime_loop_until": ApiRuntimeLoopUntilConfig,
+  "api:log": ApiLogConfig,
 };
 
 // Validation function for action configurations
