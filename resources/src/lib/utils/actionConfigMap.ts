@@ -28,6 +28,7 @@ import ApiPostConfig from "../components/ActionConfigs/ApiPostConfig.svelte";
 import ApiPutConfig from "../components/ActionConfigs/ApiPutConfig.svelte";
 import ApiPatchConfig from "../components/ActionConfigs/ApiPatchConfig.svelte";
 import ApiDeleteConfig from "../components/ActionConfigs/ApiDeleteConfig.svelte";
+import ApiIfElseConfig from "../components/ActionConfigs/ApiIfElseConfig.svelte";
 
 // List of supported action types
 export const actionTypes = [
@@ -62,10 +63,15 @@ export const actionTypes = [
   "api:put",
   "api:patch",
   "api:delete",
+  "api:if_else",
 ];
 
 // List of action types that can be used in nested contexts (excluding if_else to prevent infinite nesting)
-export const nestedActionTypes = actionTypes.filter(type => type !== "playwright:loop_until");
+export const nestedActionTypes = actionTypes.filter(type => 
+  type !== "playwright:loop_until" && 
+  type !== "playwright:if_else" && 
+  type !== "api:if_else"
+);
 
 // Map action types to their respective config components
 export const actionConfigComponents: Record<string, any> = {
@@ -100,6 +106,7 @@ export const actionConfigComponents: Record<string, any> = {
   "api:put": ApiPutConfig,
   "api:patch": ApiPatchConfig,
   "api:delete": ApiDeleteConfig,
+  "api:if_else": ApiIfElseConfig,
 };
 
 // Validation function for action configurations
@@ -178,6 +185,62 @@ export function validateActionConfig(
         for (const hook of config.after_hooks) {
           if (!hook.path) errors.push("JSON path is required for all after hooks");
           if (!hook.save_as) errors.push("Save as variable name is required for all after hooks");
+        }
+      }
+      break;
+    case "api:if_else":
+      if (!config.variable_path) errors.push("Runtime variable path is required");
+      if (!config.condition_type) errors.push("Condition type is required");
+      
+      // Expected value is not required for certain condition types
+      const requiresExpectedValue = !["is_null", "is_not_null", "is_true", "is_false"].includes(config.condition_type);
+      if (requiresExpectedValue && config.expected_value === undefined) {
+        errors.push("Expected value is required for this condition type");
+      }
+      
+      // Validate nested actions have action_type
+      if (config.if_actions) {
+        for (const action of config.if_actions) {
+          if (!action.action_type) {
+            errors.push("All IF actions must have an action type");
+            break;
+          }
+        }
+      }
+      if (config.else_if_conditions) {
+        for (const condition of config.else_if_conditions) {
+          if (!condition.variable_path) {
+            errors.push("All ELSE IF conditions must have a variable path");
+            break;
+          }
+          if (!condition.condition_type) {
+            errors.push("All ELSE IF conditions must have a condition type");
+            break;
+          }
+          if (condition.actions) {
+            for (const action of condition.actions) {
+              if (!action.action_type) {
+                errors.push("All ELSE IF actions must have an action type");
+                break;
+              }
+            }
+          }
+        }
+      }
+      if (config.else_actions) {
+        for (const action of config.else_actions) {
+          if (!action.action_type) {
+            errors.push("All ELSE actions must have an action type");
+            break;
+          }
+        }
+      }
+      if (config.final_actions) {
+        for (const action of config.final_actions) {
+          if (!action.action_type) {
+            errors.push("All FINAL actions must have an action type");
+            break;
+          }
         }
       }
       break;

@@ -19,6 +19,7 @@ func init() {
 	automation.RegisterAction("api:put", func() automation.PluginAction { return &ApiPutAction{} })
 	automation.RegisterAction("api:patch", func() automation.PluginAction { return &ApiPatchAction{} })
 	automation.RegisterAction("api:delete", func() automation.PluginAction { return &ApiDeleteAction{} })
+	automation.RegisterAction("api:if_else", func() automation.PluginAction { return &ApiIfElseAction{} })
 }
 
 // Helper function to send success event for API actions
@@ -211,7 +212,16 @@ func (b *BaseApiAction) executeApiRequest(ctx context.Context, method string, co
 	// Process after_hooks to extract runtime variables
 	if responseJSON != nil && len(config.AfterHooks) > 0 {
 		for _, hook := range config.AfterHooks {
-			extractedValue, err := b.extractJSONPath(responseJSON, hook.Path)
+			var extractedValue interface{}
+			var err error
+			
+			if hook.Path == "" || hook.Path == "." {
+				// Store the entire response
+				extractedValue = responseJSON
+			} else {
+				extractedValue, err = b.extractJSONPath(responseJSON, hook.Path)
+			}
+			
 			if err != nil {
 				runContext.Logger.Warn("Failed to extract value from JSON path", "path", hook.Path, "error", err)
 				continue
@@ -219,18 +229,18 @@ func (b *BaseApiAction) executeApiRequest(ctx context.Context, method string, co
 
 			// Determine scope and save variable
 			if hook.Scope == "global" {
-				// Save to static vars (global scope)
-				runContext.VariableContext.StaticVars[hook.SaveAs] = fmt.Sprintf("%v", extractedValue)
+				// Save to global vars (global scope)
+				runContext.VariableContext.GlobalVars[hook.SaveAs] = extractedValue
 			} else {
-				// Save to runtime vars (local scope - default)
+				// Save to runtime vars (local scope - default) as interface{}
 				runContext.VariableContext.RuntimeVars[hook.SaveAs] = extractedValue
 			}
 
 			responseData.ExtractedVars[hook.SaveAs] = extractedValue
-			runContext.Logger.Info("Extracted runtime variable",
+			runContext.Logger.Info("Extracted runtime variable", 
 				"path", hook.Path,
 				"save_as", hook.SaveAs,
-				"value", extractedValue,
+				"value_type", fmt.Sprintf("%T", extractedValue),
 				"scope", hook.Scope)
 		}
 	}
@@ -498,4 +508,384 @@ func (a *ApiDeleteAction) Execute(ctx context.Context, actionConfig map[string]i
 	}
 
 	return a.executeApiRequest(ctx, "DELETE", config, runContext)
+}
+
+// ApiIfElseAction implements conditional logic based on runtime variables
+type ApiIfElseAction struct{}
+
+func (a *ApiIfElseAction) Execute(ctx context.Context, actionConfig map[string]any, runContext *automation.RunContext) error {
+	startTime := time.Now()
+	
+	variablePath, ok := actionConfig["variable_path"].(string)
+	if !ok || variablePath == "" {
+		return fmt.Errorf("api:if_else action requires a 'variable_path' string in config")
+	}
+
+	conditionType, ok := actionConfig["condition_type"].(string)
+	if !ok || conditionType == "" {
+		return fmt.Errorf("api:if_else action requires a 'condition_type' string in config")
+	}
+
+	expectedValue := actionConfig["expected_value"] // Can be any type
+
+	runContext.Logger.Info("Executing api:if_else", "variable_path", variablePath, "condition_type", conditionType)
+
+	var executionError error
+	defer func() {
+		// Always execute final actions regardless of the outcome
+		if finalErr := a.executeFinalActions(ctx, actionConfig, runContext); finalErr != nil {
+			runContext.Logger.Error("Failed to execute final actions", "error", finalErr)
+			if executionError == nil {
+				executionError = finalErr
+			}
+		}
+
+		duration := time.Since(startTime)
+		if executionError != nil {
+			sendApiErrorEvent(runContext, "api:if_else", executionError.Error(), duration, nil)
+		} else {
+			sendApiSuccessEvent(runContext, "api:if_else", "Successfully completed conditional logic", duration, ApiResponseData{})
+		}
+	}()
+
+	// Evaluate main condition
+	conditionMet, err := a.evaluateApiCondition(variablePath, conditionType, expectedValue, runContext)
+	if err != nil {
+		executionError = fmt.Errorf("failed to evaluate main condition: %w", err)
+		return executionError
+	}
+
+	if conditionMet {
+		// Execute if_actions
+		if ifActions, ok := actionConfig["if_actions"].([]interface{}); ok {
+			runContext.Logger.Info("Main condition is true, executing if_actions", "count", len(ifActions))
+			executionError = a.executeNestedActions(ctx, ifActions, runContext)
+			return executionError
+		}
+		return executionError
+	}
+
+	// Check else_if_conditions
+	if elseIfConditions, ok := actionConfig["else_if_conditions"].([]interface{}); ok {
+		for i, elseIfCondition := range elseIfConditions {
+			elseIfMap, ok := elseIfCondition.(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			elseIfVariablePath, ok := elseIfMap["variable_path"].(string)
+			if !ok || elseIfVariablePath == "" {
+				continue
+			}
+
+			elseIfConditionType, ok := elseIfMap["condition_type"].(string)
+			if !ok || elseIfConditionType == "" {
+				continue
+			}
+
+			elseIfExpectedValue := elseIfMap["expected_value"]
+
+			runContext.Logger.Info("Evaluating else-if condition", "index", i, "variable_path", elseIfVariablePath, "condition_type", elseIfConditionType)
+
+			elseIfConditionMet, err := a.evaluateApiCondition(elseIfVariablePath, elseIfConditionType, elseIfExpectedValue, runContext)
+			if err != nil {
+				runContext.Logger.Warn("Failed to evaluate else-if condition", "index", i, "error", err)
+				continue
+			}
+
+			if elseIfConditionMet {
+				// Execute this else-if's actions
+				if elseIfActions, ok := elseIfMap["actions"].([]interface{}); ok {
+					runContext.Logger.Info("Else-if condition is true, executing actions", "index", i, "count", len(elseIfActions))
+					executionError = a.executeNestedActions(ctx, elseIfActions, runContext)
+					return executionError
+				}
+				return executionError
+			}
+		}
+	}
+
+	// Execute else_actions if all conditions failed
+	if elseActions, ok := actionConfig["else_actions"].([]interface{}); ok {
+		runContext.Logger.Info("All conditions failed, executing else_actions", "count", len(elseActions))
+		executionError = a.executeNestedActions(ctx, elseActions, runContext)
+		return executionError
+	}
+
+	runContext.Logger.Info("No conditions met and no else actions defined")
+	return executionError
+}
+
+func (a *ApiIfElseAction) evaluateApiCondition(variablePath, conditionType string, expectedValue interface{}, runContext *automation.RunContext) (bool, error) {
+	// Resolve the variable value using enhanced resolution
+	actualValue, err := a.resolveRuntimeVariable(variablePath, runContext)
+	if err != nil {
+		return false, fmt.Errorf("failed to resolve variable '%s': %w", variablePath, err)
+	}
+
+	runContext.Logger.Debug("Evaluating condition", 
+		"variable_path", variablePath,
+		"actual_value", actualValue,
+		"expected_value", expectedValue,
+		"condition_type", conditionType)
+
+	switch conditionType {
+	case "equals":
+		return fmt.Sprintf("%v", actualValue) == fmt.Sprintf("%v", expectedValue), nil
+	case "not_equals":
+		return fmt.Sprintf("%v", actualValue) != fmt.Sprintf("%v", expectedValue), nil
+	case "contains":
+		actualStr := fmt.Sprintf("%v", actualValue)
+		expectedStr := fmt.Sprintf("%v", expectedValue)
+		return strings.Contains(actualStr, expectedStr), nil
+	case "not_contains":
+		actualStr := fmt.Sprintf("%v", actualValue)
+		expectedStr := fmt.Sprintf("%v", expectedValue)
+		return !strings.Contains(actualStr, expectedStr), nil
+	case "is_null":
+		return actualValue == nil, nil
+	case "is_not_null":
+		return actualValue != nil, nil
+	case "is_true":
+		if boolVal, ok := actualValue.(bool); ok {
+			return boolVal, nil
+		}
+		return fmt.Sprintf("%v", actualValue) == "true", nil
+	case "is_false":
+		if boolVal, ok := actualValue.(bool); ok {
+			return !boolVal, nil
+		}
+		return fmt.Sprintf("%v", actualValue) == "false", nil
+	case "greater_than":
+		return a.compareNumbers(actualValue, expectedValue, ">")
+	case "less_than":
+		return a.compareNumbers(actualValue, expectedValue, "<")
+	case "greater_than_or_equal":
+		return a.compareNumbers(actualValue, expectedValue, ">=")
+	case "less_than_or_equal":
+		return a.compareNumbers(actualValue, expectedValue, "<=")
+	default:
+		return false, fmt.Errorf("unsupported condition type: %s", conditionType)
+	}
+}
+
+func (a *ApiIfElseAction) compareNumbers(actual, expected interface{}, operator string) (bool, error) {
+	actualFloat, err1 := a.toFloat64(actual)
+	expectedFloat, err2 := a.toFloat64(expected)
+	
+	if err1 != nil || err2 != nil {
+		return false, fmt.Errorf("cannot compare non-numeric values")
+	}
+
+	switch operator {
+	case ">":
+		return actualFloat > expectedFloat, nil
+	case "<":
+		return actualFloat < expectedFloat, nil
+	case ">=":
+		return actualFloat >= expectedFloat, nil
+	case "<=":
+		return actualFloat <= expectedFloat, nil
+	default:
+		return false, fmt.Errorf("unsupported numeric operator: %s", operator)
+	}
+}
+
+func (a *ApiIfElseAction) toFloat64(value interface{}) (float64, error) {
+	switch v := value.(type) {
+	case float64:
+		return v, nil
+	case float32:
+		return float64(v), nil
+	case int:
+		return float64(v), nil
+	case int64:
+		return float64(v), nil
+	case string:
+		return strconv.ParseFloat(v, 64)
+	default:
+		return 0, fmt.Errorf("cannot convert %T to float64", value)
+	}
+}
+
+func (a *ApiIfElseAction) resolveRuntimeVariable(variablePath string, runContext *automation.RunContext) (interface{}, error) {
+	if !strings.HasPrefix(variablePath, "runtime.") {
+		return nil, fmt.Errorf("variable path must start with 'runtime.'")
+	}
+
+	// Remove "runtime." prefix
+	path := strings.TrimPrefix(variablePath, "runtime.")
+	pathParts := strings.Split(path, ".")
+	
+	if len(pathParts) == 0 {
+		return nil, fmt.Errorf("empty variable path")
+	}
+
+	// Get the base variable
+	baseVarName := pathParts[0]
+	var baseValue interface{}
+	var exists bool
+
+	// Check runtime vars first, then global vars
+	if baseValue, exists = runContext.VariableContext.RuntimeVars[baseVarName]; !exists {
+		if baseValue, exists = runContext.VariableContext.GlobalVars[baseVarName]; !exists {
+			return nil, fmt.Errorf("runtime variable '%s' not found", baseVarName)
+		}
+	}
+
+	// If only base variable requested, return it
+	if len(pathParts) == 1 {
+		return baseValue, nil
+	}
+
+	// Resolve nested path
+	return a.resolveNestedPath(baseValue, pathParts[1:])
+}
+
+func (a *ApiIfElseAction) resolveNestedPath(base interface{}, pathParts []string) (interface{}, error) {
+	current := base
+
+	for i, part := range pathParts {
+		if current == nil {
+			return nil, fmt.Errorf("null value encountered at path segment '%s'", part)
+		}
+
+		// Handle array indices (e.g., "options[0]")
+		if strings.Contains(part, "[") && strings.Contains(part, "]") {
+			arrayName := part[:strings.Index(part, "[")]
+			indexStr := part[strings.Index(part, "[")+1 : strings.Index(part, "]")]
+
+			// Get the array from current object
+			var arrayValue interface{}
+			if arrayName == "" {
+				// Direct array access like [0]
+				arrayValue = current
+			} else {
+				// Named array access like options[0]
+				if currentMap, ok := current.(map[string]interface{}); ok {
+					var exists bool
+					arrayValue, exists = currentMap[arrayName]
+					if !exists {
+						return nil, fmt.Errorf("array '%s' not found", arrayName)
+					}
+				} else {
+					return nil, fmt.Errorf("cannot access property '%s' on non-object", arrayName)
+				}
+			}
+
+			arraySlice, ok := arrayValue.([]interface{})
+			if !ok {
+				return nil, fmt.Errorf("'%s' is not an array", arrayName)
+			}
+
+			index, err := strconv.Atoi(indexStr)
+			if err != nil {
+				return nil, fmt.Errorf("invalid array index '%s'", indexStr)
+			}
+
+			if index < 0 || index >= len(arraySlice) {
+				return nil, fmt.Errorf("array index %d out of bounds for array '%s'", index, arrayName)
+			}
+
+			current = arraySlice[index]
+		} else {
+			// Regular object property access
+			if currentMap, ok := current.(map[string]interface{}); ok {
+				value, exists := currentMap[part]
+				if !exists {
+					return nil, fmt.Errorf("property '%s' not found", part)
+				}
+				current = value
+			} else {
+				return nil, fmt.Errorf("cannot access property '%s' on non-object", part)
+			}
+		}
+	}
+
+	return current, nil
+}
+
+func (a *ApiIfElseAction) executeNestedActions(ctx context.Context, actions []interface{}, runContext *automation.RunContext) error {
+	for i, actionInterface := range actions {
+		actionMap, ok := actionInterface.(map[string]interface{})
+		if !ok {
+			runContext.Logger.Warn("Invalid nested action format", "index", i)
+			continue
+		}
+
+		actionType, ok := actionMap["action_type"].(string)
+		if !ok || actionType == "" {
+			runContext.Logger.Warn("Missing action_type in nested action", "index", i)
+			continue
+		}
+
+		actionConfig, ok := actionMap["action_config"].(map[string]interface{})
+		if !ok {
+			actionConfig = make(map[string]interface{})
+		}
+
+		// Resolve variables in nested action config
+		if runContext.Runner != nil {
+			resolvedActionConfig, err := runContext.Runner.ResolveVariablesInConfig(actionConfig, runContext.VariableContext, runContext.AutomationConfig)
+			if err != nil {
+				runContext.Logger.Error("Failed to resolve variables in nested action config", "action_type", actionType, "error", err)
+				return fmt.Errorf("failed to resolve variables in nested action '%s': %w", actionType, err)
+			}
+			actionConfig = resolvedActionConfig
+		}
+
+		runContext.Logger.Info("Executing nested action", "index", i, "action_type", actionType)
+
+		// Store original action context
+		originalActionID := runContext.ActionID
+		originalParentActionID := runContext.ParentActionID
+
+		// Set nested action context
+		nestedActionID, _ := actionMap["id"].(string)
+		if nestedActionID == "" {
+			nestedActionID = fmt.Sprintf("%s-nested-%d", runContext.ActionID, i)
+		}
+		runContext.ParentActionID = runContext.ActionID
+		runContext.ActionID = nestedActionID
+
+		// Get the plugin action
+		pluginAction, err := automation.GetAction(actionType)
+		if err != nil {
+			runContext.Logger.Error("Failed to get nested action", "action_type", actionType, "error", err)
+			// Restore original context
+			runContext.ActionID = originalActionID
+			runContext.ParentActionID = originalParentActionID
+			return fmt.Errorf("failed to get nested action '%s': %w", actionType, err)
+		}
+
+		// Execute the nested action
+		err = pluginAction.Execute(ctx, actionConfig, runContext)
+		if err != nil {
+			runContext.Logger.Error("Nested action failed", "action_type", actionType, "error", err)
+			// Restore original context
+			runContext.ActionID = originalActionID
+			runContext.ParentActionID = originalParentActionID
+			return fmt.Errorf("nested action '%s' failed: %w", actionType, err)
+		}
+
+		// Restore original action context
+		runContext.ActionID = originalActionID
+		runContext.ParentActionID = originalParentActionID
+
+		runContext.Logger.Info("Nested action completed", "action_type", actionType)
+	}
+
+	return nil
+}
+
+// executeFinalActions executes the final actions that should run regardless of condition outcomes
+func (a *ApiIfElseAction) executeFinalActions(ctx context.Context, actionConfig map[string]interface{}, runContext *automation.RunContext) error {
+	finalActions, ok := actionConfig["final_actions"].([]interface{})
+	if !ok || len(finalActions) == 0 {
+		runContext.Logger.Info("No final actions to execute")
+		return nil
+	}
+
+	runContext.Logger.Info("Executing final actions", "count", len(finalActions))
+	return a.executeNestedActions(ctx, finalActions, runContext)
 }

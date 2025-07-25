@@ -56,3 +56,29 @@ type ApiResponseData struct {
 	ExtractedVars  map[string]interface{} `json:"extracted_vars"`
 	Error          string                 `json:"error,omitempty"`
 }
+
+// ApiIfElseConfig represents configuration for conditional API logic
+type ApiIfElseConfig struct {
+	VariablePath     string                 `json:"variable_path"`      // e.g., "runtime.lastResponse.successCode"
+	ConditionType    string                 `json:"condition_type"`     // "equals", "not_equals", "greater_than", etc.
+	ExpectedValue    interface{}            `json:"expected_value"`     // Value to compare against
+	IfActions        []NestedAction         `json:"if_actions"`         // Actions to execute if condition is true
+	ElseIfConditions []ApiElseIfCondition   `json:"else_if_conditions"` // Alternative conditions
+	ElseActions      []NestedAction         `json:"else_actions"`       // Actions to execute if no conditions match
+	FinalActions     []NestedAction         `json:"final_actions"`      // Actions that always execute
+}
+
+// ApiElseIfCondition represents an else-if condition block
+type ApiElseIfCondition struct {
+	VariablePath  string         `json:"variable_path"`
+	ConditionType string         `json:"condition_type"`
+	ExpectedValue interface{}    `json:"expected_value"`
+	Actions       []NestedAction `json:"actions"`
+}
+
+// NestedAction represents an action that can be nested within conditional blocks
+type NestedAction struct {
+	ID           string                 `json:"id"`
+	ActionType   string                 `json:"action_type"`
+	ActionConfig map[string]interface{} `json:"action_config"`
+}
