@@ -209,6 +209,8 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 		ProjectID:    automation.ProjectID,
 		AutomationID: automation.ID,
 		StaticVars:   make(map[string]string),
+		RuntimeVars:  make(map[string]interface{}),
+		GlobalVars:   make(map[string]interface{}),
 	}
 
 	// Build static variables map
@@ -447,8 +449,13 @@ func (r *Runner) ResolveVariablesInString(input string, varContext *VariableCont
 
 		// Handle environment variables
 		switch varName {
+		case "runtime":
+			// This shouldn't happen as runtime variables should be accessed as {{runtime.varname}}
+			return varName
 		case "loopIndex":
 			return strconv.Itoa(varContext.LoopIndex)
+		case "localLoopIndex": // Add this case
+			return strconv.Itoa(varContext.LocalLoopIndex)
 		case "localLoopIndex":
 			return strconv.Itoa(varContext.LocalLoopIndex)
 		case "timestamp":
@@ -461,6 +468,20 @@ func (r *Runner) ResolveVariablesInString(input string, varContext *VariableCont
 			return varContext.ProjectID
 		case "automationId":
 			return varContext.AutomationID
+		}
+
+		// Handle runtime variables ({{runtime.varname}})
+		if strings.HasPrefix(varName, "runtime.") {
+			runtimeVarName := strings.TrimPrefix(varName, "runtime.")
+			if value, exists := varContext.RuntimeVars[runtimeVarName]; exists {
+				return fmt.Sprintf("%v", value)
+			}
+			if value, exists := varContext.GlobalVars[runtimeVarName]; exists {
+				return fmt.Sprintf("%v", value)
+			}
+			// Return empty string if runtime variable not found
+			slog.Warn("Runtime variable not found", "variable", runtimeVarName)
+			return ""
 		}
 
 		// Handle faker variables
