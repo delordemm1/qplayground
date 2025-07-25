@@ -21,6 +21,7 @@ func init() {
 	automation.RegisterAction("api:delete", func() automation.PluginAction { return &ApiDeleteAction{} })
 	automation.RegisterAction("api:if_else", func() automation.PluginAction { return &ApiIfElseAction{} })
 	automation.RegisterAction("api:runtime_loop_until", func() automation.PluginAction { return &ApiRuntimeLoopUntilAction{} })
+	automation.RegisterAction("api:log", func() automation.PluginAction { return &ApiLogAction{} })
 }
 
 // Helper function to send success event for API actions
@@ -979,9 +980,9 @@ func (a *ApiRuntimeLoopUntilAction) Execute(ctx context.Context, actionConfig ma
 		if err != nil {
 			runContext.Logger.Warn("Failed to evaluate runtime variable condition", "error", err)
 		} else if conditionMet {
-			runContext.Logger.Info("Runtime variable condition met, exiting loop", 
-				"variable_path", variablePath, 
-				"condition_type", conditionType, 
+			runContext.Logger.Info("Runtime variable condition met, exiting loop",
+				"variable_path", variablePath,
+				"condition_type", conditionType,
 				"expected_value", expectedValue,
 				"loops_completed", loopCount)
 			break
