@@ -98,6 +98,8 @@ type VariableContext struct {
 	ProjectID      string
 	AutomationID   string
 	StaticVars     map[string]string
+	RuntimeVars    map[string]interface{} // Variables set during execution (local to current loop)
+	GlobalVars     map[string]interface{} // Variables set during execution (global across all loops)
 }
 
 // Variable represents a configuration variable

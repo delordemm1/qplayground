@@ -22,6 +22,7 @@ import (
 	// Import plugin packages so their init() functions run and register actions
 	_ "github.com/delordemm1/qplayground/internal/plugins/playwright"
 	_ "github.com/delordemm1/qplayground/internal/plugins/r2"
+	_ "github.com/delordemm1/qplayground/internal/plugins/api"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"

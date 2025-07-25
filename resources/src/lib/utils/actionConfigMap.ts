@@ -23,6 +23,11 @@ import R2DeleteConfig from "../components/ActionConfigs/R2DeleteConfig.svelte";
 import PlaywrightIfElseConfig from "../components/ActionConfigs/PlaywrightIfElseConfig.svelte";
 import PlaywrightLogConfig from "../components/ActionConfigs/PlaywrightLogConfig.svelte";
 import PlaywrightLoopUntilConfig from "../components/ActionConfigs/PlaywrightLoopUntilConfig.svelte";
+import ApiGetConfig from "../components/ActionConfigs/ApiGetConfig.svelte";
+import ApiPostConfig from "../components/ActionConfigs/ApiPostConfig.svelte";
+import ApiPutConfig from "../components/ActionConfigs/ApiPutConfig.svelte";
+import ApiPatchConfig from "../components/ActionConfigs/ApiPatchConfig.svelte";
+import ApiDeleteConfig from "../components/ActionConfigs/ApiDeleteConfig.svelte";
 
 // List of supported action types
 export const actionTypes = [
@@ -52,6 +57,11 @@ export const actionTypes = [
   "playwright:loop_until",
   "r2:upload",
   "r2:delete",
+  "api:get",
+  "api:post",
+  "api:put",
+  "api:patch",
+  "api:delete",
 ];
 
 // List of action types that can be used in nested contexts (excluding if_else to prevent infinite nesting)
@@ -85,6 +95,11 @@ export const actionConfigComponents: Record<string, any> = {
   "playwright:if_else": PlaywrightIfElseConfig,
   "playwright:log": PlaywrightLogConfig,
   "playwright:loop_until": PlaywrightLoopUntilConfig,
+  "api:get": ApiGetConfig,
+  "api:post": ApiPostConfig,
+  "api:put": ApiPutConfig,
+  "api:patch": ApiPatchConfig,
+  "api:delete": ApiDeleteConfig,
 };
 
 // Validation function for action configurations
@@ -148,6 +163,23 @@ export function validateActionConfig(
       break;
     case "r2:delete":
       if (!config.key) errors.push("Object key is required");
+      break;
+    case "api:get":
+    case "api:post":
+    case "api:put":
+    case "api:patch":
+    case "api:delete":
+      if (!config.url) errors.push("URL is required");
+      if (config.timeout && config.timeout <= 0) errors.push("Timeout must be positive");
+      if (config.auth && config.auth.type === "api_key" && !config.auth.header) {
+        errors.push("Header name is required for API key authentication");
+      }
+      if (config.after_hooks) {
+        for (const hook of config.after_hooks) {
+          if (!hook.path) errors.push("JSON path is required for all after hooks");
+          if (!hook.save_as) errors.push("Save as variable name is required for all after hooks");
+        }
+      }
       break;
     case "playwright:if_else":
       if (!config.condition_type) errors.push("Condition type is required");
