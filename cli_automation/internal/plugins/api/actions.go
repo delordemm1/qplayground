@@ -20,6 +20,7 @@ func init() {
 	automation.RegisterAction("api:patch", func() automation.PluginAction { return &ApiPatchAction{} })
 	automation.RegisterAction("api:delete", func() automation.PluginAction { return &ApiDeleteAction{} })
 	automation.RegisterAction("api:if_else", func() automation.PluginAction { return &ApiIfElseAction{} })
+	automation.RegisterAction("api:runtime_loop_until", func() automation.PluginAction { return &ApiRuntimeLoopUntilAction{} })
 }
 
 // Helper function to send success event for API actions

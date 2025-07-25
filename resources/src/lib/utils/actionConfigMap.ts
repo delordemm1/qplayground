@@ -29,6 +29,7 @@ import ApiPutConfig from "../components/ActionConfigs/ApiPutConfig.svelte";
 import ApiPatchConfig from "../components/ActionConfigs/ApiPatchConfig.svelte";
 import ApiDeleteConfig from "../components/ActionConfigs/ApiDeleteConfig.svelte";
 import ApiIfElseConfig from "../components/ActionConfigs/ApiIfElseConfig.svelte";
+import ApiRuntimeLoopUntilConfig from "../components/ActionConfigs/ApiRuntimeLoopUntilConfig.svelte";
 
 // List of supported action types
 export const actionTypes = [
@@ -64,13 +65,15 @@ export const actionTypes = [
   "api:patch",
   "api:delete",
   "api:if_else",
+  "api:runtime_loop_until",
 ];
 
 // List of action types that can be used in nested contexts (excluding if_else to prevent infinite nesting)
 export const nestedActionTypes = actionTypes.filter(type => 
   type !== "playwright:loop_until" && 
   type !== "playwright:if_else" && 
-  type !== "api:if_else"
+  type !== "api:if_else" &&
+  type !== "api:runtime_loop_until"
 );
 
 // Map action types to their respective config components
@@ -107,6 +110,7 @@ export const actionConfigComponents: Record<string, any> = {
   "api:patch": ApiPatchConfig,
   "api:delete": ApiDeleteConfig,
   "api:if_else": ApiIfElseConfig,
+  "api:runtime_loop_until": ApiRuntimeLoopUntilConfig,
 };
 
 // Validation function for action configurations
@@ -239,6 +243,37 @@ export function validateActionConfig(
         for (const action of config.final_actions) {
           if (!action.action_type) {
             errors.push("All FINAL actions must have an action type");
+            break;
+          }
+        }
+      }
+      break;
+    case "api:runtime_loop_until":
+      if (!config.variable_path) errors.push("Runtime variable path is required");
+      if (!config.condition_type) errors.push("Condition type is required");
+      
+      // Expected value is not required for certain condition types
+      const requiresExpectedValueLoop = !["is_null", "is_not_null", "is_true", "is_false"].includes(config.condition_type);
+      if (requiresExpectedValueLoop && config.expected_value === undefined) {
+        errors.push("Expected value is required for this condition type");
+      }
+      
+      // At least one force stop mechanism is required
+      if (!config.max_loops && !config.timeout_ms) {
+        errors.push("Either max loops or timeout must be specified to prevent infinite loops");
+      }
+      if (config.max_loops && config.max_loops <= 0) {
+        errors.push("Max loops must be a positive number");
+      }
+      if (config.timeout_ms && config.timeout_ms <= 0) {
+        errors.push("Timeout must be a positive number");
+      }
+      
+      // Validate nested actions have action_type
+      if (config.loop_actions) {
+        for (const action of config.loop_actions) {
+          if (!action.action_type) {
+            errors.push("All loop actions must have an action type");
             break;
           }
         }
