@@ -11,9 +11,14 @@ import (
 func InitLogger() {
 	w := os.Stderr
 	var log slog.Level
-	if ENV_LOG_LEVEL == "info" {
+	switch ENV_LOG_LEVEL {
+	case "error":
+		log = slog.LevelError
+	case "warn":
+		log = slog.LevelWarn
+	case "info":
 		log = slog.LevelInfo
-	} else {
+	default:
 		log = slog.LevelDebug
 	}
 	slog.SetDefault(slog.New(
