@@ -179,6 +179,7 @@ type AutomationAction struct {
 	UpdatedAt        time.Time
 }
 
+
 // AutomationRun represents an execution of an automation
 type AutomationRun struct {
 	ID              string
