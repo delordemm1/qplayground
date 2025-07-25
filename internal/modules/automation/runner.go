@@ -279,7 +279,7 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 
 		// Parse step configuration and check for skip conditions
 		shouldSkipStep := false
-		
+
 		if step.ConfigJSON != "" {
 			var stepConfigMap map[string]interface{}
 			if err := json.Unmarshal([]byte(step.ConfigJSON), &stepConfigMap); err != nil {
@@ -291,36 +291,36 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 					if prob, ok := stepConfigMap["probability"].(float64); ok {
 						probability = prob
 					}
-					
+
 					shouldSkip := evaluateLoopIndexCondition(skipCondition, loopIndex, probability)
 					if shouldSkip {
 						shouldSkipStep = true
-						runContext.Logger.Info("Skipping step due to skip condition", 
-							"step_name", step.Name, 
-							"condition", skipCondition, 
+						runContext.Logger.Info("Skipping step due to skip condition",
+							"step_name", step.Name,
+							"condition", skipCondition,
 							"loop_index", loopIndex)
 					}
 				}
-				
+
 				// Check for run_only_condition
 				if runOnlyCondition, ok := stepConfigMap["run_only_condition"].(string); ok && runOnlyCondition != "" {
 					probability := 0.5 // Default probability
 					if prob, ok := stepConfigMap["probability"].(float64); ok {
 						probability = prob
 					}
-					
+
 					shouldRun := evaluateLoopIndexCondition(runOnlyCondition, loopIndex, probability)
 					if !shouldRun {
 						shouldSkipStep = true
-						runContext.Logger.Info("Skipping step due to run_only condition not met", 
-							"step_name", step.Name, 
-							"condition", runOnlyCondition, 
+						runContext.Logger.Info("Skipping step due to run_only condition not met",
+							"step_name", step.Name,
+							"condition", runOnlyCondition,
 							"loop_index", loopIndex)
 					}
 				}
 			}
 		}
-		
+
 		// Skip this step if conditions indicate so
 		if shouldSkipStep {
 			continue
@@ -594,6 +594,12 @@ func (r *Runner) ResolveVariablesInString(input string, varContext *VariableCont
 			return r.generateFakerValue(fakerMethod)
 		}
 
+		// Handle function variables
+		if strings.HasPrefix(varName, "function.") {
+			fakerMethod := strings.TrimPrefix(varName, "function.")
+			return r.generateFunctionValue(fakerMethod)
+		}
+
 		// Handle static variables
 		if value, exists := varContext.StaticVars[varName]; exists {
 			return value
@@ -665,6 +671,7 @@ func isPrime(n int) bool {
 	}
 	return true
 }
+
 // generateFakerValue generates a fake value based on the faker method
 func (r *Runner) generateFakerValue(method string) string {
 	gofakeit.Seed(time.Now().UnixNano()) // Ensure randomness
@@ -697,6 +704,19 @@ func (r *Runner) generateFakerValue(method string) string {
 	default:
 		slog.Warn("Unknown faker method", "method", method)
 		return fmt.Sprintf("{{faker.%s}}", method)
+	}
+}
+
+// generateFunctionValue generates a fake value based on custom functions
+func (r *Runner) generateFunctionValue(method string) string {
+	gofakeit.Seed(time.Now().UnixNano()) // Ensure randomness
+
+	switch method {
+	case "randomNumber.6":
+		return strconv.Itoa(gofakeit.Number(111111, 999999))
+	default:
+		slog.Warn("Unknown function method", "method", method)
+		return fmt.Sprintf("{{function.%s}}", method)
 	}
 }
 
