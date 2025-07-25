@@ -12,7 +12,7 @@
     DownloadOutline,
     TableColumnOutline,
     UserOutline,
-    ChevronDownSolid
+    CaretDownOutline
   } from "flowbite-svelte-icons";
   import { Dropdown, DropdownItem } from "flowbite-svelte";
 
@@ -542,7 +542,7 @@
   });
 
   // Import the enhanced calculation function
-  import { calculateDurationStats, calculatePercentile } from "$lib/utils/date";
+  import { calculateDurationStats } from "$lib/utils/date";
   import { Button } from "flowbite-svelte";
   // Filter output files to get only images for the modal
   const imageFiles = $derived.by(() => {
@@ -1101,7 +1101,7 @@
         >
           <TableColumnOutline class="-ml-1 mr-2 h-5 w-5" />
           Export CSV
-          <ChevronDownSolid class="ml-2 h-4 w-4" />
+          <CaretDownOutline class="ml-2 h-4 w-4" />
         </button>
         <Dropdown triggeredBy="#csv-export-dropdown" class="w-56">
           <DropdownItem onclick={exportUserStepDetailCSV}>
