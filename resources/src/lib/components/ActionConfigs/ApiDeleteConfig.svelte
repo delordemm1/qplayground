@@ -287,7 +287,7 @@
               </div>
             </div>
             <p class="text-xs text-gray-500 mt-2">
-              Extract <code>{hook.path || "JSON.path"}</code> and save as runtime variable <code>{`{{runtime.${hook.save_as || "var_name"}}`}</code>
+              Extract <code>{hook.path || "JSON.path"}</code> and save as runtime variable <code>{`{{runtime.${hook.save_as || "var_name"}}}`}</code>
             </p>
           </div>
         {/each}
