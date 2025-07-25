@@ -82,14 +82,3 @@ type NestedAction struct {
 	ActionType   string                 `json:"action_type"`
 	ActionConfig map[string]interface{} `json:"action_config"`
 }
-
-// ApiLoopUntilConfig represents configuration for looping until a condition is met
-type ApiLoopUntilConfig struct {
-	VariablePath    string         `json:"variable_path"`    // Path to the runtime variable to check
-	ConditionType   string         `json:"condition_type"`   // "equals", "not_equals", "greater_than", etc.
-	ExpectedValue   interface{}    `json:"expected_value"`   // Value to compare against
-	MaxLoops        int            `json:"max_loops"`        // Maximum number of iterations
-	TimeoutMs       int            `json:"timeout_ms"`       // Maximum time to wait (in milliseconds)
-	FailOnForceStop bool           `json:"fail_on_force_stop"` // Whether to fail the automation if force stop is triggered
-	LoopActions     []NestedAction `json:"loop_actions"`     // Actions to execute in each loop iteration
-}

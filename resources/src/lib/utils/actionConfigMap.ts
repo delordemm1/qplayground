@@ -62,7 +62,6 @@ export const actionTypes = [
   "api:post",
   "api:put",
   "api:patch",
-  "api:loop_until",
   "api:delete",
   "api:if_else",
 ];
@@ -106,7 +105,6 @@ export const actionConfigComponents: Record<string, any> = {
   "api:post": ApiPostConfig,
   "api:put": ApiPutConfig,
   "api:patch": ApiPatchConfig,
-  "api:loop_until": ApiLoopUntilConfig,
   "api:delete": ApiDeleteConfig,
   "api:if_else": ApiIfElseConfig,
 };
@@ -308,33 +306,6 @@ export function validateActionConfig(
       if (!config.message) errors.push("Log message is required");
       break;
     case "playwright:loop_until":
-      // At least one force stop mechanism is required
-      if (!config.max_loops && !config.timeout_ms) {
-        errors.push("Either max loops or timeout must be specified to prevent infinite loops");
-      }
-      if (config.max_loops && config.max_loops <= 0) {
-        errors.push("Max loops must be a positive number");
-      }
-      if (config.timeout_ms && config.timeout_ms <= 0) {
-        errors.push("Timeout must be a positive number");
-      }
-      // If selector is provided, condition_type is required
-      if (config.selector && !config.condition_type) {
-        errors.push("Condition type is required when selector is provided");
-      }
-      // Validate nested actions have action_type
-      if (config.loop_actions) {
-        for (const action of config.loop_actions) {
-          if (!action.action_type) {
-            errors.push("All loop actions must have an action type");
-            break;
-          }
-        }
-      }
-      break;
-    case "api:loop_until":
-      if (!config.variable_path) errors.push("Runtime variable path is required");
-      if (!config.condition_type) errors.push("Condition type is required");
       // At least one force stop mechanism is required
       if (!config.max_loops && !config.timeout_ms) {
         errors.push("Either max loops or timeout must be specified to prevent infinite loops");
