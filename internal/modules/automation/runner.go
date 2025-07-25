@@ -535,6 +535,28 @@ func (r *Runner) ResolveVariablesInConfig(config map[string]any, varContext *Var
 				return nil, err
 			}
 			resolved[key] = nestedResolved
+		case []interface{}:
+			// Handle arrays that might contain objects with variables
+			resolvedArray := make([]interface{}, len(v))
+			for i, item := range v {
+				switch itemVal := item.(type) {
+				case string:
+					resolvedItem, err := r.ResolveVariablesInString(itemVal, varContext, automationConfig)
+					if err != nil {
+						return nil, fmt.Errorf("failed to resolve variables in array item %d: %w", i, err)
+					}
+					resolvedArray[i] = resolvedItem
+				case map[string]any:
+					resolvedItem, err := r.ResolveVariablesInConfig(itemVal, varContext, automationConfig)
+					if err != nil {
+						return nil, fmt.Errorf("failed to resolve variables in array item %d: %w", i, err)
+					}
+					resolvedArray[i] = resolvedItem
+				default:
+					resolvedArray[i] = item
+				}
+			}
+			resolved[key] = resolvedArray
 		default:
 			// For non-string values, keep as-is
 			resolved[key] = value
@@ -576,16 +598,13 @@ func (r *Runner) ResolveVariablesInString(input string, varContext *VariableCont
 
 		// Handle runtime variables ({{runtime.varname}})
 		if strings.HasPrefix(varName, "runtime.") {
-			runtimeVarName := strings.TrimPrefix(varName, "runtime.")
-			if value, exists := varContext.RuntimeVars[runtimeVarName]; exists {
-				return fmt.Sprintf("%v", value)
+			// Enhanced runtime variable resolution with nested path support
+			resolvedValue, err := r.resolveRuntimeVariable(varName, varContext)
+			if err != nil {
+				slog.Warn("Failed to resolve runtime variable", "variable", varName, "error", err)
+				return ""
 			}
-			if value, exists := varContext.GlobalVars[runtimeVarName]; exists {
-				return fmt.Sprintf("%v", value)
-			}
-			// Return empty string if runtime variable not found
-			slog.Warn("Runtime variable not found", "variable", runtimeVarName)
-			return ""
+			return fmt.Sprintf("%v", resolvedValue)
 		}
 
 		// Handle faker variables
@@ -635,6 +654,105 @@ func (r *Runner) ResolveVariablesInString(input string, varContext *VariableCont
 	})
 
 	return result, nil
+}
+
+// resolveRuntimeVariable resolves runtime variables with support for nested paths
+func (r *Runner) resolveRuntimeVariable(variablePath string, varContext *VariableContext) (interface{}, error) {
+	if !strings.HasPrefix(variablePath, "runtime.") {
+		return nil, fmt.Errorf("variable path must start with 'runtime.'")
+	}
+
+	// Remove "runtime." prefix
+	path := strings.TrimPrefix(variablePath, "runtime.")
+	pathParts := strings.Split(path, ".")
+	
+	if len(pathParts) == 0 {
+		return nil, fmt.Errorf("empty variable path")
+	}
+
+	// Get the base variable
+	baseVarName := pathParts[0]
+	var baseValue interface{}
+	var exists bool
+
+	// Check runtime vars first, then global vars
+	if baseValue, exists = varContext.RuntimeVars[baseVarName]; !exists {
+		if baseValue, exists = varContext.GlobalVars[baseVarName]; !exists {
+			return nil, fmt.Errorf("runtime variable '%s' not found", baseVarName)
+		}
+	}
+
+	// If only base variable requested, return it
+	if len(pathParts) == 1 {
+		return baseValue, nil
+	}
+
+	// Resolve nested path
+	return r.resolveNestedPath(baseValue, pathParts[1:])
+}
+
+// resolveNestedPath traverses nested objects and arrays to resolve complex paths
+func (r *Runner) resolveNestedPath(base interface{}, pathParts []string) (interface{}, error) {
+	current := base
+
+	for _, part := range pathParts {
+		if current == nil {
+			return nil, fmt.Errorf("null value encountered at path segment '%s'", part)
+		}
+
+		// Handle array indices (e.g., "options[0]")
+		if strings.Contains(part, "[") && strings.Contains(part, "]") {
+			arrayName := part[:strings.Index(part, "[")]
+			indexStr := part[strings.Index(part, "[")+1 : strings.Index(part, "]")]
+
+			// Get the array from current object
+			var arrayValue interface{}
+			if arrayName == "" {
+				// Direct array access like [0]
+				arrayValue = current
+			} else {
+				// Named array access like options[0]
+				if currentMap, ok := current.(map[string]interface{}); ok {
+					var exists bool
+					arrayValue, exists = currentMap[arrayName]
+					if !exists {
+						return nil, fmt.Errorf("array '%s' not found", arrayName)
+					}
+				} else {
+					return nil, fmt.Errorf("cannot access property '%s' on non-object", arrayName)
+				}
+			}
+
+			arraySlice, ok := arrayValue.([]interface{})
+			if !ok {
+				return nil, fmt.Errorf("'%s' is not an array", arrayName)
+			}
+
+			index, err := strconv.Atoi(indexStr)
+			if err != nil {
+				return nil, fmt.Errorf("invalid array index '%s'", indexStr)
+			}
+
+			if index < 0 || index >= len(arraySlice) {
+				return nil, fmt.Errorf("array index %d out of bounds for array '%s'", index, arrayName)
+			}
+
+			current = arraySlice[index]
+		} else {
+			// Regular object property access
+			if currentMap, ok := current.(map[string]interface{}); ok {
+				value, exists := currentMap[part]
+				if !exists {
+					return nil, fmt.Errorf("property '%s' not found", part)
+				}
+				current = value
+			} else {
+				return nil, fmt.Errorf("cannot access property '%s' on non-object", part)
+			}
+		}
+	}
+
+	return current, nil
 }
 
 // evaluateLoopIndexCondition evaluates loop index based conditions
