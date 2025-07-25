@@ -108,13 +108,13 @@
     <Label for="api-url" class="mb-2">URL *</Label>
     <Input
       id="api-url"
-      type="url"
+      type="text"
       bind:value={config.url}
       placeholder="https://api.example.com/users"
       required
     />
     <p class="text-xs text-gray-500 mt-1">
-      Supports variables: {{`{runtime.baseUrl}`}}, {{`{faker.uuid}`}}, etc.
+      {"Supports variables: {{`{runtime.baseUrl}`}}, {{`{faker.uuid}`}}, etc."}
     </p>
   </div>
 
@@ -204,7 +204,7 @@
                         config.auth.type === "api_key" ? "{{runtime.api_key}}" : "Custom auth value"}
           />
           <p class="text-xs text-gray-500 mt-1">
-            Supports runtime variables like {{`{runtime.access_token}`}}
+            {"Supports runtime variables like {{runtime.access_token}}"}
           </p>
         </div>
 
@@ -287,7 +287,7 @@
               </div>
             </div>
             <p class="text-xs text-gray-500 mt-2">
-              Extract <code>{hook.path || "JSON.path"}</code> and save as runtime variable <code>{{`{runtime.${hook.save_as || "var_name"}}`}}</code>
+              Extract <code>{hook.path || "JSON.path"}</code> and save as runtime variable <code>{`{{runtime.${hook.save_as || "var_name"}}`}</code>
             </p>
           </div>
         {/each}
@@ -295,7 +295,6 @@
     {/if}
   </div>
 </div>
-</script>
 
 <style>
   code {

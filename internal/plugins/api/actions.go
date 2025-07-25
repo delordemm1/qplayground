@@ -1,13 +1,11 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -83,7 +81,7 @@ type BaseApiAction struct{}
 
 func (b *BaseApiAction) executeApiRequest(ctx context.Context, method string, config ApiActionConfigBase, runContext *automation.RunContext) error {
 	startTime := time.Now()
-	
+
 	// Validate required fields
 	if config.URL == "" {
 		return fmt.Errorf("%s action requires a 'url' string in config", method)
@@ -229,9 +227,9 @@ func (b *BaseApiAction) executeApiRequest(ctx context.Context, method string, co
 			}
 
 			responseData.ExtractedVars[hook.SaveAs] = extractedValue
-			runContext.Logger.Info("Extracted runtime variable", 
-				"path", hook.Path, 
-				"save_as", hook.SaveAs, 
+			runContext.Logger.Info("Extracted runtime variable",
+				"path", hook.Path,
+				"save_as", hook.SaveAs,
 				"value", extractedValue,
 				"scope", hook.Scope)
 		}
@@ -311,7 +309,7 @@ func (b *BaseApiAction) extractJSONPath(data map[string]interface{}, path string
 			// Extract array name and index
 			arrayName := part[:strings.Index(part, "[")]
 			indexStr := part[strings.Index(part, "[")+1 : strings.Index(part, "]")]
-			
+
 			arrayValue, exists := current[arrayName]
 			if !exists {
 				return nil, fmt.Errorf("array '%s' not found", arrayName)
