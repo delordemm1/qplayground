@@ -39,22 +39,22 @@ func (s *SSEManager) Shutdown() {
 }
 
 // RunProgressMessage represents a progress update for an automation run
-type RunProgressMessage struct {
-	Type        string                 `json:"type"` // "status", "log", "step", "action", "error", "complete"
-	RunID       string                 `json:"runId"`
-	Status      string                 `json:"status,omitempty"`
-	StepName    string                 `json:"stepName,omitempty"`
-	ActionType  string                 `json:"actionType,omitempty"`
-	Message     string                 `json:"message,omitempty"`
-	Error       string                 `json:"error,omitempty"`
-	Progress    int                    `json:"progress,omitempty"` // 0-100
-	TotalSteps  int                    `json:"totalSteps,omitempty"`
-	CurrentStep int                    `json:"currentStep,omitempty"`
-	Duration    int64                  `json:"duration,omitempty"` // milliseconds
-	OutputFile  string                 `json:"outputFile,omitempty"`
-	Timestamp   time.Time              `json:"timestamp"`
-	Data        map[string]interface{} `json:"data,omitempty"`
-}
+// type RunProgressMessage struct {
+// 	Type        string                 `json:"type"` // "status", "log", "step", "action", "error", "complete"
+// 	RunID       string                 `json:"runId"`
+// 	Status      string                 `json:"status,omitempty"`
+// 	StepName    string                 `json:"stepName,omitempty"`
+// 	ActionType  string                 `json:"actionType,omitempty"`
+// 	Message     string                 `json:"message,omitempty"`
+// 	Error       string                 `json:"error,omitempty"`
+// 	Progress    int                    `json:"progress,omitempty"` // 0-100
+// 	TotalSteps  int                    `json:"totalSteps,omitempty"`
+// 	CurrentStep int                    `json:"currentStep,omitempty"`
+// 	Duration    int64                  `json:"duration,omitempty"` // milliseconds
+// 	OutputFile  string                 `json:"outputFile,omitempty"`
+// 	Timestamp   time.Time              `json:"timestamp"`
+// 	Data        map[string]interface{} `json:"data,omitempty"`
+// }
 
 // SendRunProgress sends a progress update for a specific run
 func (s *SSEManager) SendRunProgress(projectID, automationID, runID string, message RunProgressMessage) error {

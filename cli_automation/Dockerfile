@@ -1,44 +1,53 @@
-# Use Playwright Go base image which includes browsers and dependencies
-FROM mcr.microsoft.com/playwright/go:v1.44.0-jammy AS base
+# =========================================================================
+# Stage 1: Backend Binary Builder (Ubuntu-based)
+#
+# This stage uses an Ubuntu-based Go image to compile the CLI app.
+# =========================================================================
+FROM golang:1.25-rc-bookworm AS builder
 
-# Builder stage
-FROM golang:1.25-rc-alpine AS builder
+# Install dependencies using apt-get for Ubuntu
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    pkg-config \
+    zlib1g-dev \
+    gcc \
+    # Clean up the apt cache to reduce layer size
+    && rm -rf /var/lib/apt/lists/*
 
-# Install build dependencies
-RUN apk add --no-cache git build-base
-
-# Set working directory
+# Set the working directory for the backend build
 WORKDIR /app
 
-# Copy go mod files
+# Copy Go module files to leverage Docker layer caching
 COPY go.mod go.sum ./
-
-# Download dependencies
 RUN go mod download
 
-# Copy source code
+# Copy the entire application source code
 COPY . .
 
-# Build the CLI binary
+# Build the Go application
 RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /app/cli ./cmd/main.go
 
-# Final stage
-FROM mcr.microsoft.com/playwright/go:v1.44.0-jammy
+# =========================================================================
+# Stage 2: Final Production Image with Playwright
+#
+# This stage uses the official Playwright image based on Ubuntu 24.04 (Noble).
+# =========================================================================
+FROM mcr.microsoft.com/playwright:v1.52.0-noble
 
-# Create app user
-RUN groupadd -r appgroup && useradd -r -g appgroup appuser
+# Create a non-root system user and group for enhanced security
+# RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
 
-# Set working directory
+# Set the working directory inside the final container
 WORKDIR /app
 
-# Copy the compiled binary
-COPY --from=builder /app/cli /app/cli
+# Copy the compiled Go binary from the builder stage
+COPY --from=builder /app/cli .
 
-# Create output directory
-RUN mkdir -p /app/output && chown -R appuser:appgroup /app
+# Ensure the non-root user owns all the application files
+# RUN chown -R appuser:appgroup /app
 
-# Switch to non-root user
-USER appuser
+# Switch to the non-root user
+# USER appuser
 
-# Set entrypoint
+# The command to run when the container starts
 ENTRYPOINT ["/app/cli"]

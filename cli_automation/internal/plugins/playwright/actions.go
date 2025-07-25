@@ -43,18 +43,18 @@ func sendSuccessEvent(runContext *automation.RunContext, actionType, message str
 	if runContext.EventCh != nil {
 		select {
 		case runContext.EventCh <- automation.RunEvent{
-			Type:             automation.RunEventTypeLog,
-			Timestamp:        time.Now(),
-			StepName:         runContext.StepName,
-			StepID:           runContext.StepID,
-			ActionID:         runContext.ActionID,
-			ActionName:       runContext.ActionName,
-			ParentActionID:   runContext.ParentActionID,
-			ActionType:       actionType,
-			Message:          message,
-			Duration:         duration.Milliseconds(),
-			LoopIndex:        runContext.LoopIndex,
-			LocalLoopIndex:   runContext.VariableContext.LocalLoopIndex,
+			Type:           automation.RunEventTypeLog,
+			Timestamp:      time.Now(),
+			StepName:       runContext.StepName,
+			StepID:         runContext.StepID,
+			ActionID:       runContext.ActionID,
+			ActionName:     runContext.ActionName,
+			ParentActionID: runContext.ParentActionID,
+			ActionType:     actionType,
+			Message:        message,
+			Duration:       duration.Milliseconds(),
+			LoopIndex:      runContext.LoopIndex,
+			LocalLoopIndex: runContext.VariableContext.LocalLoopIndex,
 		}:
 		default:
 			// Channel is full, skip this event to avoid blocking
@@ -67,18 +67,18 @@ func sendErrorEvent(runContext *automation.RunContext, actionType, errorMsg stri
 	if runContext.EventCh != nil {
 		select {
 		case runContext.EventCh <- automation.RunEvent{
-			Type:             automation.RunEventTypeError,
-			Timestamp:        time.Now(),
-			StepName:         runContext.StepName,
-			StepID:           runContext.StepID,
-			ActionID:         runContext.ActionID,
-			ActionName:       runContext.ActionName,
-			ParentActionID:   runContext.ParentActionID,
-			ActionType:       actionType,
-			Error:            errorMsg,
-			Duration:         duration.Milliseconds(),
-			LoopIndex:        runContext.LoopIndex,
-			LocalLoopIndex:   runContext.VariableContext.LocalLoopIndex,
+			Type:           automation.RunEventTypeError,
+			Timestamp:      time.Now(),
+			StepName:       runContext.StepName,
+			StepID:         runContext.StepID,
+			ActionID:       runContext.ActionID,
+			ActionName:     runContext.ActionName,
+			ParentActionID: runContext.ParentActionID,
+			ActionType:     actionType,
+			Error:          errorMsg,
+			Duration:       duration.Milliseconds(),
+			LoopIndex:      runContext.LoopIndex,
+			LocalLoopIndex: runContext.VariableContext.LocalLoopIndex,
 		}:
 		default:
 			// Channel is full, skip this event to avoid blocking
@@ -505,6 +505,7 @@ func (a *ScreenshotAction) Execute(ctx context.Context, actionConfig map[string]
 			Timestamp:      time.Now(),
 			StepID:         runContext.StepID,
 			ActionID:       runContext.ActionID,
+			ActionName:     runContext.ActionName,
 			ParentActionID: runContext.ParentActionID,
 			StepName:       runContext.StepName,
 			ActionType:     "playwright:screenshot",
@@ -1173,7 +1174,6 @@ func (a *LoopUntilAction) Execute(ctx context.Context, actionConfig map[string]a
 				break
 			}
 		}
-				ActionName:     runContext.ActionName,
 
 		// Execute loop actions
 		for actionIndex, actionData := range loopActions {

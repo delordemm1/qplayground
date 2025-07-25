@@ -5,7 +5,13 @@
   import ImageViewerModal from "$lib/components/ImageViewerModal.svelte";
   import RunPerformanceChart from "$lib/components/RunPerformanceChart.svelte";
   import UserExplorerModal from "$lib/components/UserExplorerModal.svelte";
-  import { ChevronDownOutline, ChevronRightOutline, DownloadOutline, TableColumnOutline } from "flowbite-svelte-icons";
+  import {
+    ChevronDownOutline,
+    ChevronRightOutline,
+    DownloadOutline,
+    TableColumnOutline,
+    UserOutline
+  } from "flowbite-svelte-icons";
 
   type Project = {
     ID: string;
@@ -40,7 +46,7 @@
   const projectId = $derived($page.props.params.projectId);
   const automationId = $derived($page.props.params.automationId);
   const runId = $derived($page.props.params.runId);
-  
+
   let isCancelling = $state(false);
   let liveStatus = $state(run.Status);
   let liveProgress = $state(0);
@@ -48,54 +54,54 @@
   let liveLogs = $state<any[]>([]);
   let liveOutputFiles = $state<string[]>([]);
   let eventSource: EventSource | null = null;
-  
+
   // Image viewer modal state
   let showImageViewerModal = $state(false);
   let currentImageIndex = $state(0);
   let imageFilesForModal = $state<string[]>([]);
-  
+
   // Expanded state for steps and actions
   let expandedSteps = $state<Set<string>>(new Set());
   let expandedFailureActions = $state<Set<string>>(new Set());
-  
+
   // State for step image viewer
   let showStepImageViewerModal = $state(false);
   let stepImageFiles = $state<string[]>([]);
-  
+
   // User Explorer Modal state
   let showUserExplorerModal = $state(false);
-  
+
   // Live step summaries from SSE
   let liveStepSummaries = $state<Map<string, any>>(new Map());
-  
+
   // Initialize SSE connection for real-time updates
   $effect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       connectToSSE();
     }
-    
+
     return () => {
       if (eventSource) {
         eventSource.close();
       }
     };
   });
-  
+
   function connectToSSE() {
     const sseUrl = `/projects/${projectId}/automations/${automationId}/runs/${runId}/events`;
     eventSource = new EventSource(sseUrl);
-    
+
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         handleSSEMessage(data);
       } catch (error) {
-        console.error('Failed to parse SSE message:', error);
+        console.error("Failed to parse SSE message:", error);
       }
     };
-    
+
     eventSource.onerror = (error) => {
-      console.error('SSE connection error:', error);
+      console.error("SSE connection error:", error);
       // Attempt to reconnect after 5 seconds
       setTimeout(() => {
         if (eventSource?.readyState === EventSource.CLOSED) {
@@ -104,12 +110,16 @@
       }, 5000);
     };
   }
-  
+
   function handleSSEMessage(data: any) {
     switch (data.type) {
-      case 'status':
+      case "status":
         liveStatus = data.status;
-        if (data.status === 'cancelled' || data.status === 'completed' || data.status === 'failed') {
+        if (
+          data.status === "cancelled" ||
+          data.status === "completed" ||
+          data.status === "failed"
+        ) {
           // Close SSE connection for final states
           if (eventSource) {
             eventSource.close();
@@ -117,13 +127,13 @@
           }
         }
         break;
-        
-      case 'step':
+
+      case "step":
         currentStep = data.stepName;
         liveProgress = data.progress || 0;
         break;
-        
-      case 'step_summary':
+
+      case "step_summary":
         // Update live step summaries for dashboard
         liveStepSummaries.set(data.stepId, {
           stepId: data.stepId,
@@ -137,43 +147,49 @@
         });
         liveStepSummaries = new Map(liveStepSummaries);
         break;
-        
-      case 'log':
-        liveLogs = [...liveLogs, {
-          timestamp: data.timestamp,
-          stepName: data.stepName,
-          stepId: data.stepId,
-          actionId: data.actionId,
-          actionName: data.actionName,
-          actionType: data.actionType,
-          message: data.message,
-          duration: data.duration,
-          loopIndex: data.loopIndex,
-          status: 'success'
-        }];
+
+      case "log":
+        liveLogs = [
+          ...liveLogs,
+          {
+            timestamp: data.timestamp,
+            stepName: data.stepName,
+            stepId: data.stepId,
+            actionId: data.actionId,
+            actionName: data.actionName,
+            actionType: data.actionType,
+            message: data.message,
+            duration: data.duration,
+            loopIndex: data.loopIndex,
+            status: "success",
+          },
+        ];
         break;
-        
-      case 'error':
-        liveLogs = [...liveLogs, {
-          timestamp: data.timestamp,
-          stepName: data.stepName,
-          stepId: data.stepId,
-          actionId: data.actionId,
-          actionName: data.actionName,
-          actionType: data.actionType,
-          error: data.error,
-          loopIndex: data.loopIndex,
-          status: 'failed'
-        }];
+
+      case "error":
+        liveLogs = [
+          ...liveLogs,
+          {
+            timestamp: data.timestamp,
+            stepName: data.stepName,
+            stepId: data.stepId,
+            actionId: data.actionId,
+            actionName: data.actionName,
+            actionType: data.actionType,
+            error: data.error,
+            loopIndex: data.loopIndex,
+            status: "failed",
+          },
+        ];
         break;
-        
-      case 'output':
+
+      case "output":
         if (data.outputFile && !liveOutputFiles.includes(data.outputFile)) {
           liveOutputFiles = [...liveOutputFiles, data.outputFile];
         }
         break;
-        
-      case 'complete':
+
+      case "complete":
         liveStatus = data.status;
         if (data.data?.outputFiles) {
           liveOutputFiles = data.data.outputFiles;
@@ -186,10 +202,10 @@
         break;
     }
   }
-  
+
   async function handleCancelRun() {
     if (isCancelling) return;
-    
+
     isCancelling = true;
     try {
       const response = await fetch(
@@ -241,25 +257,25 @@
   // Organize data by steps and actions for detailed view
   const enhancedReportData = $derived.by(() => {
     const stepMap = new Map();
-    
+
     // Process logs to build step and action structure
-    parsedLogs.forEach(log => {
+    parsedLogs.forEach((log) => {
       const stepId = log.step_id;
       const actionId = log.action_id;
       const actionName = log.action_name;
       const loopIndex = log.loop_index || 0;
-      
+
       if (!stepId) return;
-      
+
       // Initialize step if not exists
       if (!stepMap.has(stepId)) {
         stepMap.set(stepId, {
           id: stepId,
-          name: log.step_name || 'Unknown Step',
+          name: log.step_name || "Unknown Step",
           aggregatedActions: new Map(),
           rawActions: new Map(), // Keep original actions for drill-down
           totalDuration: 0,
-          status: 'success',
+          status: "success",
           startTime: log.timestamp,
           endTime: log.timestamp,
           logs: [],
@@ -271,19 +287,19 @@
           totalExecutions: 0,
         });
       }
-      
+
       const step = stepMap.get(stepId);
       step.endTime = log.timestamp;
       step.logs.push(log);
       step.concurrentUsers.add(loopIndex);
       step.loopIndexes.add(loopIndex);
       step.totalExecutions++;
-      
-      if (log.status === 'failed') {
-        step.status = 'failed';
+
+      if (log.status === "failed") {
+        step.status = "failed";
         step.totalFailures++;
       }
-      
+
       // Process action if actionId exists
       if (actionId) {
         // Store raw action data for drill-down
@@ -293,54 +309,54 @@
             id: actionId,
             name: actionName,
             loopIndex: loopIndex,
-            type: log.action_type || 'Unknown Action',
+            type: log.action_type || "Unknown Action",
             parentActionId: log.parent_action_id,
             duration: log.duration_ms || 0,
-            status: log.status || 'success',
+            status: log.status || "success",
             error: log.error || null,
             logs: [],
-            outputFiles: []
+            outputFiles: [],
           });
         }
-        
+
         const rawAction = step.rawActions.get(rawActionKey);
         rawAction.logs.push(log);
-        
+
         // Aggregate actions by action ID (unique action definition)
         const aggregateKey = actionId;
-        
+
         if (!step.aggregatedActions.has(aggregateKey)) {
           step.aggregatedActions.set(aggregateKey, {
             id: actionId,
             name: actionName,
-            type: log.action_type || 'Unknown Action',
+            type: log.action_type || "Unknown Action",
             executions: 0,
             successCount: 0,
             failureCount: 0,
             durations: [],
             stats: { avg: 0, min: 0, max: 0, p50: 0, p95: 0, count: 0 },
-            failedExecutions: []
+            failedExecutions: [],
           });
         }
-        
+
         const aggregatedAction = step.aggregatedActions.get(aggregateKey);
         aggregatedAction.executions++;
         aggregatedAction.durations.push(log.duration_ms || 0);
-        
-        if (log.status === 'failed') {
+
+        if (log.status === "failed") {
           aggregatedAction.failureCount++;
           aggregatedAction.failedExecutions.push({
             loopIndex: loopIndex,
-            errorMessage: log.error || 'Unknown error',
-            outputFiles: log.output_file ? [log.output_file] : []
+            errorMessage: log.error || "Unknown error",
+            outputFiles: log.output_file ? [log.output_file] : [],
           });
         } else {
           aggregatedAction.successCount++;
         }
-        
+
         const action = step.rawActions.get(rawActionKey);
         action.logs.push(log);
-        
+
         if (log.output_file) {
           action.outputFiles.push(log.output_file);
           step.totalOutputFiles++; // Increment step's total output files
@@ -351,26 +367,30 @@
         }
       }
     });
-    
+
     // Calculate step durations, convert Sets to arrays, and compute aggregated action stats
-    stepMap.forEach(step => {
+    stepMap.forEach((step) => {
       if (step.startTime && step.endTime) {
-        step.totalDuration = new Date(step.endTime).getTime() - new Date(step.startTime).getTime();
+        step.totalDuration =
+          new Date(step.endTime).getTime() - new Date(step.startTime).getTime();
       }
-      step.concurrentUsers = Array.from(step.concurrentUsers).sort((a, b) => a - b);
+      step.concurrentUsers = Array.from(step.concurrentUsers).sort(
+        (a, b) => a - b
+      );
       step.loopIndexes = Array.from(step.loopIndexes).sort((a, b) => a - b);
-      
+
       // Calculate statistics for each aggregated action
-      step.aggregatedActions.forEach(action => {
+      step.aggregatedActions.forEach((action) => {
         action.stats = calculateDurationStats(action.durations);
       });
     });
-    
-    return Array.from(stepMap.values()).sort((a, b) => 
-      new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+
+    return Array.from(stepMap.values()).sort(
+      (a, b) =>
+        new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
     );
   });
-  
+
   // Enhanced performance metrics with KPIs
   const enhancedPerformanceMetrics = $derived.by(() => {
     const stepMetrics = new Map();
@@ -379,109 +399,129 @@
     let totalActionExecutions = 0;
     let totalActionFailures = 0;
     let allDurations: number[] = [];
-    
-    parsedLogs.forEach(log => {
-      const stepName = log.step_name || 'Unknown Step';
+
+    parsedLogs.forEach((log) => {
+      const stepName = log.step_name || "Unknown Step";
       const loopIndex = log.loop_index || 0;
       const duration = log.duration_ms || 0;
-      const status = log.status || 'success';
-      
+      const status = log.status || "success";
+
       totalUsers.add(loopIndex);
       if (duration > 0) allDurations.push(duration);
-      
+
       // Count action executions for accurate success rate
       if (log.action_id) {
         totalActionExecutions++;
-        if (status === 'failed') totalActionFailures++;
+        if (status === "failed") totalActionFailures++;
       }
-      
+
       // Step-level metrics
       if (!stepMetrics.has(stepName)) {
         stepMetrics.set(stepName, {
           name: stepName,
           durations: [],
           failures: 0,
-          totalRuns: 0
+          totalRuns: 0,
         });
       }
-      
+
       const stepMetric = stepMetrics.get(stepName);
       stepMetric.durations.push(duration);
       stepMetric.totalRuns++;
-      if (status === 'failed') {
+      if (status === "failed") {
         stepMetric.failures++;
       }
-      
+
       // Run-level metrics (by loop index)
       if (!runMetrics.has(loopIndex)) {
         runMetrics.set(loopIndex, {
           loopIndex,
           steps: new Map(),
           totalDuration: 0,
-          status: 'success'
+          status: "success",
         });
       }
-      
+
       const runMetric = runMetrics.get(loopIndex);
       if (!runMetric.steps.has(stepName)) {
-        runMetric.steps.set(stepName, { duration: 0, status: 'success' });
+        runMetric.steps.set(stepName, { duration: 0, status: "success" });
       }
-      
+
       const runStepMetric = runMetric.steps.get(stepName);
       runStepMetric.duration += duration;
-      if (status === 'failed') {
-        runStepMetric.status = 'failed';
-        runMetric.status = 'failed';
+      if (status === "failed") {
+        runStepMetric.status = "failed";
+        runMetric.status = "failed";
       }
-      
+
       runMetric.totalDuration += duration;
     });
-    
+
     // Calculate averages and prepare chart data
-    const stepAverages = Array.from(stepMetrics.values()).map(metric => ({
+    const stepAverages = Array.from(stepMetrics.values()).map((metric) => ({
       name: metric.name,
-      averageDuration: metric.durations.reduce((sum, d) => sum + d, 0) / metric.durations.length,
+      averageDuration:
+        metric.durations.reduce((sum, d) => sum + d, 0) /
+        metric.durations.length,
       failureRate: (metric.failures / metric.totalRuns) * 100,
-      totalRuns: metric.totalRuns
+      totalRuns: metric.totalRuns,
     }));
-    
-    const runData = Array.from(runMetrics.values()).sort((a, b) => a.loopIndex - b.loopIndex);
-    
+
+    const runData = Array.from(runMetrics.values()).sort(
+      (a, b) => a.loopIndex - b.loopIndex
+    );
+
     // Calculate KPIs
     const totalUserCount = totalUsers.size;
     // More accurate success rate based on action executions
-    const successRate = totalActionExecutions > 0 ? ((totalActionExecutions - totalActionFailures) / totalActionExecutions) * 100 : 100;
+    const successRate =
+      totalActionExecutions > 0
+        ? ((totalActionExecutions - totalActionFailures) /
+            totalActionExecutions) *
+          100
+        : 100;
     const overallFailureRate = 100 - successRate;
-    const avgResponseTime = allDurations.length > 0 ? allDurations.reduce((sum, d) => sum + d, 0) / allDurations.length : 0;
+    const avgResponseTime =
+      allDurations.length > 0
+        ? allDurations.reduce((sum, d) => sum + d, 0) / allDurations.length
+        : 0;
     const p95ResponseTime = calculatePercentile(allDurations, 95);
-    
+
     // Generate automated insights
     const insights: string[] = [];
-    
+
     // High failure rate detection
-    stepAverages.forEach(step => {
+    stepAverages.forEach((step) => {
       if (step.failureRate > 10) {
-        insights.push(`⚠️ High Failure Rate: Step "${step.name}" failed for ${step.failureRate.toFixed(1)}% of users.`);
+        insights.push(
+          `⚠️ High Failure Rate: Step "${step.name}" failed for ${step.failureRate.toFixed(1)}% of users.`
+        );
       }
     });
-    
+
     // Performance bottleneck detection
-    stepAverages.forEach(step => {
+    stepAverages.forEach((step) => {
       if (step.averageDuration > avgResponseTime * 2) {
-        insights.push(`🐌 Performance Bottleneck: Step "${step.name}" is ${((step.averageDuration / avgResponseTime) * 100).toFixed(0)}% slower than average.`);
+        insights.push(
+          `🐌 Performance Bottleneck: Step "${step.name}" is ${((step.averageDuration / avgResponseTime) * 100).toFixed(0)}% slower than average.`
+        );
       }
     });
-    
+
     // P95 vs Average detection
     const overallP95 = calculatePercentile(allDurations, 95);
     if (overallP95 > avgResponseTime * 3) {
-      insights.push(`📊 High Variance: P95 response time (${formatDuration(overallP95)}) is significantly higher than average (${formatDuration(avgResponseTime)}).`);
+      insights.push(
+        `📊 High Variance: P95 response time (${formatDuration(overallP95)}) is significantly higher than average (${formatDuration(avgResponseTime)}).`
+      );
     }
-    
+
     if (insights.length === 0) {
-      insights.push('✅ No significant issues detected. Performance looks healthy!');
+      insights.push(
+        "✅ No significant issues detected. Performance looks healthy!"
+      );
     }
-    
+
     return {
       // KPIs
       totalUsers: totalUserCount,
@@ -494,15 +534,18 @@
       stepAverages,
       runData,
       totalRuns: runMetrics.size,
-      overallFailureRate: overallFailureRate
+      overallFailureRate: overallFailureRate,
     };
   });
-  
+
   // Import the enhanced calculation function
-  import { calculateDurationStats, calculatePercentile } from '$lib/utils/date';
+  import { calculateDurationStats, calculatePercentile } from "$lib/utils/date";
+  import { Button } from "flowbite-svelte";
   // Filter output files to get only images for the modal
   const imageFiles = $derived.by(() => {
-    return parsedOutputFiles.filter(fileUrl => getFileType(fileUrl) === "image");
+    return parsedOutputFiles.filter(
+      (fileUrl) => getFileType(fileUrl) === "image"
+    );
   });
 
   // Update imageFilesForModal when imageFiles changes
@@ -580,7 +623,7 @@
         return "file";
     }
   }
-  
+
   // Toggle functions for expand/collapse
   function toggleStep(stepId: string) {
     if (expandedSteps.has(stepId)) {
@@ -604,27 +647,27 @@
   function exportToCSV() {
     try {
       const csvRows = [];
-      
+
       // CSV Headers
       csvRows.push([
-        'Step ID',
-        'Step Name', 
-        'Step Duration (ms)',
-        'Step Status',
-        'Action ID',
-        'Parent Action ID',
-        'Action Type',
-        'Action Duration (ms)',
-        'Action Status',
-        'Error Message',
-        'Output Files',
-        'Loop Index',
-        'Local Loop Index',
-        'Timestamp'
+        "Step ID",
+        "Step Name",
+        "Step Duration (ms)",
+        "Step Status",
+        "Action ID",
+        "Parent Action ID",
+        "Action Type",
+        "Action Duration (ms)",
+        "Action Status",
+        "Error Message",
+        "Output Files",
+        "Loop Index",
+        "Local Loop Index",
+        "Timestamp",
       ]);
 
       // Process each step and action
-      enhancedReportData.forEach(step => {
+      enhancedReportData.forEach((step) => {
         if (step.rawActions.size === 0) {
           // Step with no actions
           csvRows.push([
@@ -632,58 +675,60 @@
             step.name,
             step.totalDuration,
             step.status,
-            '',
-            '',
-            '',
-            '',
-            '',
-            '',
-            '',
-            '',
-            '',
-            step.startTime
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            step.startTime,
           ]);
         } else {
           // Step with actions
-          Array.from(step.rawActions.values()).forEach(action => {
+          Array.from(step.rawActions.values()).forEach((action) => {
             csvRows.push([
               step.id,
               step.name,
               step.totalDuration,
               step.status,
               action.id,
-              action.parentActionId || '',
+              action.parentActionId || "",
               action.type,
               action.duration,
               action.status,
-              action.error || '',
-              action.outputFiles.join('; '),
+              action.error || "",
+              action.outputFiles.join("; "),
               action.loopIndex,
-              '', // Local loop index would need to be tracked separately
-              step.startTime
+              "", // Local loop index would need to be tracked separately
+              step.startTime,
             ]);
           });
         }
       });
 
       // Convert to CSV string
-      const csvContent = csvRows.map(row => 
-        row.map(field => `"${String(field).replace(/"/g, '""')}"`).join(',')
-      ).join('\n');
+      const csvContent = csvRows
+        .map((row) =>
+          row.map((field) => `"${String(field).replace(/"/g, '""')}"`).join(",")
+        )
+        .join("\n");
 
       // Download CSV
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
       link.download = `automation_report_${runId}.csv`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
-      showSuccessToast('Report exported to CSV successfully');
+
+      showSuccessToast("Report exported to CSV successfully");
     } catch (error) {
-      console.error('Failed to export CSV:', error);
-      showErrorToast('Failed to export CSV report');
+      console.error("Failed to export CSV:", error);
+      showErrorToast("Failed to export CSV report");
     }
   }
 
@@ -695,17 +740,17 @@
           status: run.Status,
           startTime: run.StartTime,
           endTime: run.EndTime,
-          errorMessage: run.ErrorMessage
+          errorMessage: run.ErrorMessage,
         },
         automation: {
           id: automation.ID,
-          name: automation.Name
+          name: automation.Name,
         },
         project: {
           id: project.ID,
-          name: project.Name
+          name: project.Name,
         },
-        steps: enhancedReportData.map(step => ({
+        steps: enhancedReportData.map((step) => ({
           id: step.id,
           name: step.name,
           totalDuration: step.totalDuration,
@@ -714,7 +759,7 @@
           endTime: step.endTime,
           concurrentUsers: step.concurrentUsers,
           aggregatedActions: Array.from(step.aggregatedActions.values()),
-          rawActions: Array.from(step.rawActions.values()).map(action => ({
+          rawActions: Array.from(step.rawActions.values()).map((action) => ({
             id: action.id,
             parentActionId: action.parentActionId,
             type: action.type,
@@ -723,42 +768,54 @@
             error: action.error,
             loopIndex: action.loopIndex,
             outputFiles: action.outputFiles,
-            logs: action.logs
+            logs: action.logs,
           })),
-          logs: step.logs
+          logs: step.logs,
         })),
         performanceMetrics: enhancedPerformanceMetrics,
         summary: {
           totalSteps: enhancedReportData.length,
-          totalActions: enhancedReportData.reduce((sum, step) => sum + step.rawActions.size, 0),
-          totalDuration: run.StartTime && run.EndTime ? 
-            new Date(run.EndTime).getTime() - new Date(run.StartTime).getTime() : 0,
-          totalConcurrentUsers: Math.max(...enhancedReportData.map(step => step.concurrentUsers.length), 0),
-          outputFiles: parsedOutputFiles
-        }
+          totalActions: enhancedReportData.reduce(
+            (sum, step) => sum + step.rawActions.size,
+            0
+          ),
+          totalDuration:
+            run.StartTime && run.EndTime
+              ? new Date(run.EndTime).getTime() -
+                new Date(run.StartTime).getTime()
+              : 0,
+          totalConcurrentUsers: Math.max(
+            ...enhancedReportData.map((step) => step.concurrentUsers.length),
+            0
+          ),
+          outputFiles: parsedOutputFiles,
+        },
       };
 
       const jsonContent = JSON.stringify(reportJson, null, 2);
-      const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8;' });
-      const link = document.createElement('a');
+      const blob = new Blob([jsonContent], {
+        type: "application/json;charset=utf-8;",
+      });
+      const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
       link.download = `automation_report_${runId}.json`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
-      showSuccessToast('Report exported to JSON successfully');
+
+      showSuccessToast("Report exported to JSON successfully");
     } catch (error) {
-      console.error('Failed to export JSON:', error);
-      showErrorToast('Failed to export JSON report');
+      console.error("Failed to export JSON:", error);
+      showErrorToast("Failed to export JSON report");
     }
   }
-  
+
   function exportToHTML() {
     try {
       // Get the current page content
-      const reportContent = document.querySelector('.report-container')?.innerHTML || '';
-      
+      const reportContent =
+        document.querySelector(".report-container")?.innerHTML || "";
+
       // Create a complete HTML document
       const htmlContent = `
 <!DOCTYPE html>
@@ -872,25 +929,27 @@
 </html>`;
 
       // Create and download the HTML file
-      const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8;' });
-      const link = document.createElement('a');
+      const blob = new Blob([htmlContent], {
+        type: "text/html;charset=utf-8;",
+      });
+      const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
       link.download = `automation_report_${runId}.html`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
-      showSuccessToast('Report exported to HTML successfully');
+
+      showSuccessToast("Report exported to HTML successfully");
     } catch (error) {
-      console.error('Failed to export HTML:', error);
-      showErrorToast('Failed to export HTML report');
+      console.error("Failed to export HTML:", error);
+      showErrorToast("Failed to export HTML report");
     }
   }
-  
+
   // Auto-scroll logs to bottom when new entries are added
   $effect(() => {
     if (liveLogs.length > 0) {
-      const logsContainer = document.getElementById('logs-container');
+      const logsContainer = document.getElementById("logs-container");
       if (logsContainer) {
         setTimeout(() => {
           logsContainer.scrollTop = logsContainer.scrollHeight;
@@ -945,8 +1004,18 @@
         onclick={exportToHTML}
         class="ml-3 inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
       >
-        <svg class="-ml-1 mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        <svg
+          class="-ml-1 mr-2 h-5 w-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+          />
         </svg>
         Export HTML
       </button>
@@ -995,7 +1064,9 @@
           Cancel Run
         </button>
       {:else if liveStatus === "queued"}
-        <span class="ml-3 inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-500 bg-gray-100">
+        <span
+          class="ml-3 inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-500 bg-gray-100"
+        >
           <svg
             class="-ml-1 mr-2 h-5 w-5"
             fill="none"
@@ -1017,40 +1088,66 @@
 
   <div class="report-container">
     <!-- High-Level Summary & Triage Section -->
-    <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6 mb-6">
-      <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Executive Summary</h3>
-      
+    <div
+      class="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6 mb-6"
+    >
+      <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
+        Executive Summary
+      </h3>
+
       <!-- Key Performance Indicators -->
-      <dl class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-x-4 gap-y-6 mb-6">
+      <dl
+        class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-x-4 gap-y-6 mb-6"
+      >
         <div class="text-center">
           <dt class="text-sm font-medium text-gray-500">Total Users</dt>
-          <dd class="mt-1 text-3xl font-bold text-blue-600">{enhancedPerformanceMetrics.totalUsers}</dd>
+          <dd class="mt-1 text-3xl font-bold text-blue-600">
+            {enhancedPerformanceMetrics.totalUsers}
+          </dd>
         </div>
         <div class="text-center">
           <dt class="text-sm font-medium text-gray-500">Success Rate</dt>
-          <dd class="mt-1 text-3xl font-bold {enhancedPerformanceMetrics.successRate >= 95 ? 'text-green-600' : enhancedPerformanceMetrics.successRate >= 90 ? 'text-yellow-600' : 'text-red-600'}">
+          <dd
+            class="mt-1 text-3xl font-bold {enhancedPerformanceMetrics.successRate >=
+            95
+              ? 'text-green-600'
+              : enhancedPerformanceMetrics.successRate >= 90
+                ? 'text-yellow-600'
+                : 'text-red-600'}"
+          >
             {enhancedPerformanceMetrics.successRate.toFixed(1)}%
           </dd>
         </div>
         <div class="text-center">
           <dt class="text-sm font-medium text-gray-500">Avg Response Time</dt>
-          <dd class="mt-1 text-3xl font-bold text-gray-900">{formatDuration(enhancedPerformanceMetrics.avgResponseTime)}</dd>
+          <dd class="mt-1 text-3xl font-bold text-gray-900">
+            {formatDuration(enhancedPerformanceMetrics.avgResponseTime)}
+          </dd>
         </div>
         <div class="text-center">
           <dt class="text-sm font-medium text-gray-500">P95 Response Time</dt>
-          <dd class="mt-1 text-3xl font-bold text-gray-900">{formatDuration(enhancedPerformanceMetrics.p95ResponseTime)}</dd>
+          <dd class="mt-1 text-3xl font-bold text-gray-900">
+            {formatDuration(enhancedPerformanceMetrics.p95ResponseTime)}
+          </dd>
         </div>
         <div class="text-center">
           <dt class="text-sm font-medium text-gray-500">Total Errors</dt>
-          <dd class="mt-1 text-3xl font-bold {enhancedPerformanceMetrics.totalErrors === 0 ? 'text-green-600' : 'text-red-600'}">
+          <dd
+            class="mt-1 text-3xl font-bold {enhancedPerformanceMetrics.totalErrors ===
+            0
+              ? 'text-green-600'
+              : 'text-red-600'}"
+          >
             {enhancedPerformanceMetrics.totalErrors}
           </dd>
         </div>
       </dl>
-      
+
       <!-- Automated Insights -->
       <div class="bg-white border border-gray-200 rounded-lg p-4">
-        <h4 class="text-md font-semibold text-gray-800 mb-3">🔍 Automated Insights</h4>
+        <h4 class="text-md font-semibold text-gray-800 mb-3">
+          🔍 Automated Insights
+        </h4>
         <div class="space-y-2">
           {#each enhancedPerformanceMetrics.insights as insight}
             <p class="text-sm text-gray-700">{insight}</p>
@@ -1061,13 +1158,20 @@
 
     <!-- Original Run Summary (Simplified) -->
     <div class="bg-white shadow overflow-hidden sm:rounded-lg p-6 mb-6">
-      <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Run Details</h3>
-      <dl class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-6">
+      <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
+        Run Details
+      </h3>
+      <dl
+        class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-6"
+      >
         <div>
           <dt class="text-sm font-medium text-gray-500">Total Duration</dt>
           <dd class="mt-1 text-2xl font-semibold text-gray-900">
             {#if run.StartTime && run.EndTime}
-              {formatDuration(new Date(run.EndTime).getTime() - new Date(run.StartTime).getTime())}
+              {formatDuration(
+                new Date(run.EndTime).getTime() -
+                  new Date(run.StartTime).getTime()
+              )}
             {:else}
               N/A
             {/if}
@@ -1075,17 +1179,24 @@
         </div>
         <div>
           <dt class="text-sm font-medium text-gray-500">Total Steps</dt>
-          <dd class="mt-1 text-2xl font-semibold text-gray-900">{enhancedReportData.length}</dd>
+          <dd class="mt-1 text-2xl font-semibold text-gray-900">
+            {enhancedReportData.length}
+          </dd>
         </div>
         <div>
           <dt class="text-sm font-medium text-gray-500">Total Actions</dt>
           <dd class="mt-1 text-2xl font-semibold text-gray-900">
-            {enhancedReportData.reduce((sum, step) => sum + step.rawActions.size, 0)}
+            {enhancedReportData.reduce(
+              (sum, step) => sum + step.rawActions.size,
+              0
+            )}
           </dd>
         </div>
         <div>
           <dt class="text-sm font-medium text-gray-500">Output Files</dt>
-          <dd class="mt-1 text-2xl font-semibold text-gray-900">{parsedOutputFiles.length}</dd>
+          <dd class="mt-1 text-2xl font-semibold text-gray-900">
+            {parsedOutputFiles.length}
+          </dd>
         </div>
       </dl>
     </div>
@@ -1093,115 +1204,152 @@
     <!-- Performance Visualization -->
     {#if enhancedPerformanceMetrics.totalRuns > 1}
       <div class="bg-white shadow overflow-hidden sm:rounded-lg p-6 mb-6">
-        <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Performance Analysis</h3>
-        
+        <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
+          Performance Analysis
+        </h3>
+
         <!-- Charts -->
-        <RunPerformanceChart reportData={enhancedReportData} performanceMetrics={enhancedPerformanceMetrics} />
+        <RunPerformanceChart
+          reportData={enhancedReportData}
+          performanceMetrics={enhancedPerformanceMetrics}
+        />
       </div>
     {/if}
-  <!-- Run Details -->
-  <div class="bg-white shadow overflow-hidden sm:rounded-lg p-6 mb-6">
-    <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Details</h3>
-    
-    {#if liveStatus === 'running' && currentStep}
-      <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-md">
-        <div class="flex items-center justify-between">
-          <div>
-            <h4 class="text-sm font-medium text-blue-800">Currently Executing</h4>
-            <p class="text-sm text-blue-600">{currentStep}</p>
-          </div>
-          {#if liveProgress > 0}
-            <div class="flex items-center">
-              <div class="w-32 bg-blue-200 rounded-full h-2 mr-3">
-                <div 
-                  class="bg-blue-600 h-2 rounded-full transition-all duration-300" 
-                  style="width: {liveProgress}%"
-                ></div>
-              </div>
-              <span class="text-sm font-medium text-blue-800">{liveProgress}%</span>
+    <!-- Run Details -->
+    <div class="bg-white shadow overflow-hidden sm:rounded-lg p-6 mb-6">
+      <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Details</h3>
+
+      {#if liveStatus === "running" && currentStep}
+        <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-md">
+          <div class="flex items-center justify-between">
+            <div>
+              <h4 class="text-sm font-medium text-blue-800">
+                Currently Executing
+              </h4>
+              <p class="text-sm text-blue-600">{currentStep}</p>
             </div>
-          {/if}
-        </div>
-      </div>
-    {/if}
-    
-    <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-8">
-      <div class="sm:col-span-1">
-        <dt class="text-sm font-medium text-gray-500">Status</dt>
-        <dd class="mt-1">
-          <span
-            class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {getStatusBadgeClass(liveStatus)}"
-          >
-            {liveStatus}
-            {#if liveStatus === 'running' && liveProgress > 0}
-              <span class="ml-2 text-xs">({liveProgress}%)</span>
+            {#if liveProgress > 0}
+              <div class="flex items-center">
+                <div class="w-32 bg-blue-200 rounded-full h-2 mr-3">
+                  <div
+                    class="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                    style="width: {liveProgress}%"
+                  ></div>
+                </div>
+                <span class="text-sm font-medium text-blue-800"
+                  >{liveProgress}%</span
+                >
+              </div>
             {/if}
-          </span>
-        </dd>
-      </div>
-      <div class="sm:col-span-1">
-        <dt class="text-sm font-medium text-gray-500">Started At</dt>
-        <dd class="mt-1 text-sm text-gray-900">
-          {run.StartTime ? formatDate(run.StartTime) : "Not started"}
-        </dd>
-      </div>
-      <div class="sm:col-span-1">
-        <dt class="text-sm font-medium text-gray-500">Ended At</dt>
-        <dd class="mt-1 text-sm text-gray-900">
-          {run.EndTime
-            ? formatDate(run.EndTime)
-            : liveStatus === "running"
-              ? "Still running..."
-              : "N/A"}
-        </dd>
-      </div>
-      <div class="sm:col-span-1">
-        <dt class="text-sm font-medium text-gray-500">Duration</dt>
-        <dd class="mt-1 text-sm text-gray-900">
-          {#if run.StartTime && run.EndTime}
-            {(
-              (new Date(run.EndTime).getTime() -
-                new Date(run.StartTime).getTime()) /
-              1000
-            ).toFixed(2)} seconds
-          {:else}
-            N/A
-          {/if}
-        </dd>
-      </div>
-      {#if run.ErrorMessage}
-        <div class="sm:col-span-2">
-          <dt class="text-sm font-medium text-red-500">Error Message</dt>
-          <dd class="mt-1 text-sm text-red-900">{run.ErrorMessage}</dd>
+          </div>
         </div>
       {/if}
-    </dl>
-  </div>
+
+      <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-8">
+        <div class="sm:col-span-1">
+          <dt class="text-sm font-medium text-gray-500">Status</dt>
+          <dd class="mt-1">
+            <span
+              class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {getStatusBadgeClass(
+                liveStatus
+              )}"
+            >
+              {liveStatus}
+              {#if liveStatus === "running" && liveProgress > 0}
+                <span class="ml-2 text-xs">({liveProgress}%)</span>
+              {/if}
+            </span>
+          </dd>
+        </div>
+        <div class="sm:col-span-1">
+          <dt class="text-sm font-medium text-gray-500">Started At</dt>
+          <dd class="mt-1 text-sm text-gray-900">
+            {run.StartTime ? formatDate(run.StartTime) : "Not started"}
+          </dd>
+        </div>
+        <div class="sm:col-span-1">
+          <dt class="text-sm font-medium text-gray-500">Ended At</dt>
+          <dd class="mt-1 text-sm text-gray-900">
+            {run.EndTime
+              ? formatDate(run.EndTime)
+              : liveStatus === "running"
+                ? "Still running..."
+                : "N/A"}
+          </dd>
+        </div>
+        <div class="sm:col-span-1">
+          <dt class="text-sm font-medium text-gray-500">Duration</dt>
+          <dd class="mt-1 text-sm text-gray-900">
+            {#if run.StartTime && run.EndTime}
+              {(
+                (new Date(run.EndTime).getTime() -
+                  new Date(run.StartTime).getTime()) /
+                1000
+              ).toFixed(2)} seconds
+            {:else}
+              N/A
+            {/if}
+          </dd>
+        </div>
+        {#if run.ErrorMessage}
+          <div class="sm:col-span-2">
+            <dt class="text-sm font-medium text-red-500">Error Message</dt>
+            <dd class="mt-1 text-sm text-red-900">{run.ErrorMessage}</dd>
+          </div>
+        {/if}
+      </dl>
+    </div>
 
     <!-- Detailed Step Report -->
     <div class="bg-white shadow overflow-hidden sm:rounded-lg p-6">
       <div class="flex items-center justify-between mb-4">
-        <h3 class="text-lg leading-6 font-medium text-gray-900">Live Step Dashboard</h3>
-        <Button onclick={() => showUserExplorerModal = true}>
+        <h3 class="text-lg leading-6 font-medium text-gray-900">
+          Live Step Dashboard
+        </h3>
+        <Button onclick={() => (showUserExplorerModal = true)}>
           <UserOutline class="w-4 h-4 mr-2" />
           Explore Users
         </Button>
       </div>
-      
+
       {#if enhancedReportData.length === 0}
-        <p class="text-sm text-gray-500">No step data available for this run.</p>
+        <p class="text-sm text-gray-500">
+          No step data available for this run.
+        </p>
       {:else}
         <div class="space-y-3">
           {#each enhancedReportData as step, stepIndex (step.id)}
             {@const liveSummary = liveStepSummaries.get(step.id)}
-            {@const completedCount = liveSummary?.completedCount || step.concurrentUsers.length}
+            {@const completedCount =
+              liveSummary?.completedCount || step.concurrentUsers.length}
             {@const inProgressCount = liveSummary?.inProgressCount || 0}
-            {@const failedCount = liveSummary?.failedCount || step.totalFailures}
-            {@const totalUsersForStep = liveSummary?.totalUsersForStep || step.concurrentUsers.length}
-            {@const avgDurationMs = liveSummary?.averageDurationMs || (step.totalDuration / Math.max(step.concurrentUsers.length, 1))}
-            {@const filesCount = liveSummary?.filesCount || step.totalOutputFiles}
-            
-            <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+            {@const failedCount =
+              liveSummary?.failedCount || step.totalFailures}
+            {@const totalUsersForStep =
+              liveSummary?.totalUsersForStep || step.concurrentUsers.length}
+            {@const avgDurationMs =
+              liveSummary?.averageDurationMs ||
+              step.totalDuration / Math.max(step.concurrentUsers.length, 1)}
+            {@const filesCount =
+              liveSummary?.filesCount || step.totalOutputFiles}
+            {@const completedPercent =
+              totalUsersForStep > 0
+                ? (completedCount / totalUsersForStep) * 100
+                : 0}
+            {@const inProgressPercent =
+              totalUsersForStep > 0
+                ? (inProgressCount / totalUsersForStep) * 100
+                : 0}
+            {@const failedPercent =
+              totalUsersForStep > 0
+                ? (failedCount / totalUsersForStep) * 100
+                : 0}
+            {@const pendingPercent =
+              100 - completedPercent - inProgressPercent - failedPercent}
+
+            <div
+              class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+            >
               <!-- Mission Control Row -->
               <div class="grid grid-cols-12 gap-4 items-center">
                 <!-- Step Name & Status -->
@@ -1217,157 +1365,187 @@
                     {:else}
                       <span class="text-gray-600">Pending</span>
                     {/if}
-                  </div>
-                </div>
-
-                <!-- User Progress Bar -->
-                <div class="col-span-4">
-                  <div class="w-full bg-gray-200 rounded-full h-6 relative overflow-hidden">
-                    {@const completedPercent = totalUsersForStep > 0 ? (completedCount / totalUsersForStep) * 100 : 0}
-                    {@const inProgressPercent = totalUsersForStep > 0 ? (inProgressCount / totalUsersForStep) * 100 : 0}
-                    {@const failedPercent = totalUsersForStep > 0 ? (failedCount / totalUsersForStep) * 100 : 0}
-                    {@const pendingPercent = 100 - completedPercent - inProgressPercent - failedPercent}
-                    
-                    <!-- Completed (Green) -->
-                    <div 
-                      class="absolute left-0 top-0 h-full bg-green-500 transition-all duration-300"
-                      style="width: {completedPercent}%"
-                    ></div>
-                    
-                    <!-- In Progress (Blue) -->
-                    <div 
-                      class="absolute top-0 h-full bg-blue-500 transition-all duration-300"
-                      style="left: {completedPercent}%; width: {inProgressPercent}%"
-                    ></div>
-                    
-                    <!-- Failed (Red) -->
-                    <div 
-                      class="absolute top-0 h-full bg-red-500 transition-all duration-300"
-                      style="left: {completedPercent + inProgressPercent}%; width: {failedPercent}%"
-                    ></div>
-                    
-                    <!-- Progress Text Overlay -->
-                    <div class="absolute inset-0 flex items-center justify-center">
-                      <span class="text-xs font-medium text-white drop-shadow">
-                        {completedPercent.toFixed(0)}% ✅ | {inProgressPercent.toFixed(0)}% 🏃 | {failedPercent.toFixed(0)}% ❌
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Key Metrics -->
-                <div class="col-span-3 text-center">
-                  <div class="text-sm font-medium text-gray-900">
-                    Users: {completedCount}/{totalUsersForStep}
-                  </div>
-                  <div class="text-xs text-gray-500">
-                    Avg Time: {formatDuration(avgDurationMs)}
-                  </div>
-                </div>
-
-                <!-- Files Button -->
-                <div class="col-span-2 text-right">
-                  <Button 
-                    size="sm" 
-                    color={filesCount > 0 ? "primary" : "alternative"}
-                    disabled={filesCount === 0}
-                    onclick={() => showUserExplorerModal = true}
-                  >
-                    View {filesCount} files
-                  </Button>
+                  </p>
                 </div>
               </div>
 
-              <!-- Expandable Details -->
-              <div class="mt-4">
-                <button
-                  onclick={() => toggleStep(step.id)}
-                  class="flex items-center text-sm text-gray-600 hover:text-gray-900"
+              <!-- User Progress Bar -->
+              <div class="col-span-4">
+                <div
+                  class="w-full bg-gray-200 rounded-full h-6 relative overflow-hidden"
                 >
-                  {#if expandedSteps.has(step.id)}
-                    <ChevronDownOutline class="h-4 w-4 mr-1" />
-                    Hide Details
-                  {:else}
-                    <ChevronRightOutline class="h-4 w-4 mr-1" />
-                    Show Details ({step.aggregatedActions.size} actions)
-                  {/if}
-                </button>
+                  <!-- Completed (Green) -->
+                  <div
+                    class="absolute left-0 top-0 h-full bg-green-500 transition-all duration-300"
+                    style="width: {completedPercent}%"
+                  ></div>
 
-                {#if expandedSteps.has(step.id)}
-                  <div class="mt-4 space-y-3">
-                    <!-- Aggregated Actions View -->
-                    {#each Array.from(step.aggregatedActions.entries()) as [actionKey, action] (actionKey)}
-                      <div class="bg-gray-50 border border-gray-200 rounded-md p-3">
-                        <div class="flex items-center justify-between">
-                          <div>
-                            <h6 class="text-sm font-medium text-gray-900">
-                              ▶ {action.name || action.type}
-                              {#if action.name}
-                                <span class="text-xs text-gray-500">({action.type})</span>
-                              {/if}
-                            </h6>
-                            <div class="flex items-center space-x-4 text-xs text-gray-600 mt-1">
-                              <span>Executions: {((action.successCount / action.executions) * 100).toFixed(0)}% ({action.successCount}/{action.executions}) Success</span>
-                              <span>Duration: Avg: {formatDuration(action.stats.avg)} | P95: {formatDuration(action.stats.p95)}</span>
-                            </div>
-                          </div>
-                          {#if action.failureCount > 0}
-                            <button
-                              onclick={() => toggleFailureAction(actionKey)}
-                              class="text-sm font-medium text-red-600 hover:text-red-800 underline"
-                            >
-                              {action.failureCount} Failure{action.failureCount > 1 ? 's' : ''}
-                            </button>
-                          {/if}
-                        </div>
-                        
-                        <!-- Failure Details (Drill-down on demand) -->
-                        {#if action.failureCount > 0 && expandedFailureActions.has(actionKey)}
-                          <div class="border-t border-gray-300 pt-3 mt-3">
-                            <h6 class="text-xs font-semibold text-red-700 mb-2">Failure Details:</h6>
-                            <div class="space-y-2">
-                              {#each action.failedExecutions as failure}
-                                <div class="bg-red-50 border border-red-200 rounded p-3">
-                                  <div class="flex items-start justify-between">
-                                    <div>
-                                      <p class="text-sm font-medium text-red-800">User {failure.loopIndex}</p>
-                                      <p class="text-xs text-red-700 mt-1">❌ {failure.errorMessage}</p>
-                                    </div>
-                                    <div class="flex space-x-2">
-                                      {#if failure.outputFiles.length > 0}
-                                        {#each failure.outputFiles as fileUrl}
-                                          {#if getFileType(fileUrl) === "image"}
-                                            <button
-                                              onclick={() => openImageViewer(fileUrl)}
-                                              class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded hover:bg-blue-200"
-                                            >
-                                              View Screenshot
-                                            </button>
-                                          {:else}
-                                            <a
-                                              href={fileUrl}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              class="text-xs bg-gray-100 text-gray-800 px-2 py-1 rounded hover:bg-gray-200"
-                                            >
-                                              View File
-                                            </a>
-                                          {/if}
-                                        {/each}
-                                      {/if}
-                                    </div>
-                                  </div>
-                                </div>
-                              {/each}
-                            </div>
-                          </div>
-                        {/if}
-                      </div>
-                    {/each}
+                  <!-- In Progress (Blue) -->
+                  <div
+                    class="absolute top-0 h-full bg-blue-500 transition-all duration-300"
+                    style="left: {completedPercent}%; width: {inProgressPercent}%"
+                  ></div>
+
+                  <!-- Failed (Red) -->
+                  <div
+                    class="absolute top-0 h-full bg-red-500 transition-all duration-300"
+                    style="left: {completedPercent +
+                      inProgressPercent}%; width: {failedPercent}%"
+                  ></div>
+
+                  <!-- Progress Text Overlay -->
+                  <div
+                    class="absolute inset-0 flex items-center justify-center"
+                  >
+                    <span class="text-xs font-medium text-white drop-shadow">
+                      {completedPercent.toFixed(0)}% ✅ | {inProgressPercent.toFixed(
+                        0
+                      )}% 🏃 | {failedPercent.toFixed(0)}% ❌
+                    </span>
                   </div>
-                {/if}
+                </div>
+              </div>
+
+              <!-- Key Metrics -->
+              <div class="col-span-3 text-center">
+                <div class="text-sm font-medium text-gray-900">
+                  Users: {completedCount}/{totalUsersForStep}
+                </div>
+                <div class="text-xs text-gray-500">
+                  Avg Time: {formatDuration(avgDurationMs)}
+                </div>
+              </div>
+
+              <!-- Files Button -->
+              <div class="col-span-2 text-right">
+                <Button
+                  size="sm"
+                  color={filesCount > 0 ? "primary" : "alternative"}
+                  disabled={filesCount === 0}
+                  onclick={() => (showUserExplorerModal = true)}
+                >
+                  View {filesCount} files
+                </Button>
               </div>
             </div>
+
+            <!-- Expandable Details -->
+            <div class="mt-4">
+              <button
+                onclick={() => toggleStep(step.id)}
+                class="flex items-center text-sm text-gray-600 hover:text-gray-900"
+              >
+                {#if expandedSteps.has(step.id)}
+                  <ChevronDownOutline class="h-4 w-4 mr-1" />
+                  Hide Details
+                {:else}
+                  <ChevronRightOutline class="h-4 w-4 mr-1" />
+                  Show Details ({step.aggregatedActions.size} actions)
+                {/if}
+              </button>
+
+              {#if expandedSteps.has(step.id)}
+                <div class="mt-4 space-y-3">
+                  <!-- Aggregated Actions View -->
+                  {#each Array.from(step.aggregatedActions.entries()) as [actionKey, action] (actionKey)}
+                    <div
+                      class="bg-gray-50 border border-gray-200 rounded-md p-3"
+                    >
+                      <div class="flex items-center justify-between">
+                        <div>
+                          <h6 class="text-sm font-medium text-gray-900">
+                            ▶ {action.name || action.type}
+                            {#if action.name}
+                              <span class="text-xs text-gray-500"
+                                >({action.type})</span
+                              >
+                            {/if}
+                          </h6>
+                          <div
+                            class="flex items-center space-x-4 text-xs text-gray-600 mt-1"
+                          >
+                            <span
+                              >Executions: {(
+                                (action.successCount / action.executions) *
+                                100
+                              ).toFixed(0)}% ({action.successCount}/{action.executions})
+                              Success</span
+                            >
+                            <span
+                              >Duration: Avg: {formatDuration(action.stats.avg)}
+                              | P95: {formatDuration(action.stats.p95)}</span
+                            >
+                          </div>
+                        </div>
+                        {#if action.failureCount > 0}
+                          <button
+                            onclick={() => toggleFailureAction(actionKey)}
+                            class="text-sm font-medium text-red-600 hover:text-red-800 underline"
+                          >
+                            {action.failureCount} Failure{action.failureCount >
+                            1
+                              ? "s"
+                              : ""}
+                          </button>
+                        {/if}
+                      </div>
+
+                      <!-- Failure Details (Drill-down on demand) -->
+                      {#if action.failureCount > 0 && expandedFailureActions.has(actionKey)}
+                        <div class="border-t border-gray-300 pt-3 mt-3">
+                          <h6 class="text-xs font-semibold text-red-700 mb-2">
+                            Failure Details:
+                          </h6>
+                          <div class="space-y-2">
+                            {#each action.failedExecutions as failure}
+                              <div
+                                class="bg-red-50 border border-red-200 rounded p-3"
+                              >
+                                <div class="flex items-start justify-between">
+                                  <div>
+                                    <p class="text-sm font-medium text-red-800">
+                                      User {failure.loopIndex}
+                                    </p>
+                                    <p class="text-xs text-red-700 mt-1">
+                                      ❌ {failure.errorMessage}
+                                    </p>
+                                  </div>
+                                  <div class="flex space-x-2">
+                                    {#if failure.outputFiles.length > 0}
+                                      {#each failure.outputFiles as fileUrl}
+                                        {#if getFileType(fileUrl) === "image"}
+                                          <button
+                                            onclick={() =>
+                                              openImageViewer(fileUrl)}
+                                            class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded hover:bg-blue-200"
+                                          >
+                                            View Screenshot
+                                          </button>
+                                        {:else}
+                                          <a
+                                            href={fileUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="text-xs bg-gray-100 text-gray-800 px-2 py-1 rounded hover:bg-gray-200"
+                                          >
+                                            View File
+                                          </a>
+                                        {/if}
+                                      {/each}
+                                    {/if}
+                                  </div>
+                                </div>
+                              </div>
+                            {/each}
+                          </div>
+                        </div>
+                      {/if}
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+            <!-- </div> -->
           {/each}
         </div>
       {/if}
@@ -1380,7 +1558,7 @@
   bind:open={showImageViewerModal}
   imageUrls={imageFilesForModal}
   startIndex={currentImageIndex}
-  onClose={() => showImageViewerModal = false}
+  onClose={() => (showImageViewerModal = false)}
 />
 
 <!-- Step Image Viewer Modal -->
@@ -1388,14 +1566,14 @@
   bind:open={showStepImageViewerModal}
   imageUrls={stepImageFiles}
   startIndex={0}
-  onClose={() => showStepImageViewerModal = false}
+  onClose={() => (showStepImageViewerModal = false)}
 />
 
 <!-- User Explorer Modal -->
 <UserExplorerModal
   bind:open={showUserExplorerModal}
-  {reportData}
-  onClose={() => showUserExplorerModal = false}
+  reportData={enhancedReportData}
+  onClose={() => (showUserExplorerModal = false)}
 />
 
 <style>

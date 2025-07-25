@@ -52,6 +52,7 @@ type RunContext struct {
 	StepName          string            // Current step name for context
 	StepID            string            // Current step ID for context
 	ActionID          string            // Current action ID for context
+	ActionName        string            // Current action name for context
 	ParentActionID    string            // Parent action ID for context
 	LoopIndex         int               // Current loop index for multi-run context
 	Runner            *Runner           // Reference to runner for variable resolution
@@ -280,7 +281,7 @@ type AutomationService interface {
 	DeleteStep(ctx context.Context, id string) error
 
 	// Action management
-	CreateAction(ctx context.Context, stepID, actionType, actionConfigJSON string, actionOrder int) (*AutomationAction, error)
+	CreateAction(ctx context.Context, stepID, name, actionType, actionConfigJSON string, actionOrder int) (*AutomationAction, error)
 	GetActionsByStep(ctx context.Context, stepID string) ([]*AutomationAction, error)
 	UpdateAction(ctx context.Context, action *AutomationAction) error
 	DeleteAction(ctx context.Context, id string) error

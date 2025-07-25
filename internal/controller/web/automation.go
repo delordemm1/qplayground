@@ -421,8 +421,8 @@ func (h *AutomationHandler) DeleteAutomation(w http.ResponseWriter, r *http.Requ
 }
 
 type CreateStepRequest struct {
-	Name      string `json:"name" validate:"required,min=1,max=255"`
-	StepOrder int    `json:"step_order" validate:"min=0"`
+	Name       string `json:"name" validate:"required,min=1,max=255"`
+	StepOrder  int    `json:"step_order" validate:"min=0"`
 	ConfigJSON string `json:"config_json"`
 }
 
@@ -797,7 +797,6 @@ func (h *AutomationHandler) CreateAction(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	action, err := h.automationService.CreateAction(r.Context(), stepID, req.ActionType, req.ActionConfigJSON, req.ActionOrder)
 	action, err := h.automationService.CreateAction(r.Context(), stepID, req.Name, req.ActionType, req.ActionConfigJSON, req.ActionOrder)
 	if err != nil {
 		platform.SetFlashError(r.Context(), h.sessionManager, "Failed to create action")

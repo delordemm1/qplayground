@@ -9,12 +9,12 @@ import (
 )
 
 func UtilGenerateUUID() string {
-	uuid, err := uuid.NewV7()
+	id, err := uuid.NewV7()
 	if err != nil {
 		// Fallback to random UUID if V7 fails
-		uuid = uuid.New()
+		id = uuid.New()
 	}
-	return uuid.String()
+	return id.String()
 }
 
 func UtilGenerateRandomState(length int) (string, error) {

@@ -74,12 +74,12 @@ func (r *Runner) RunAutomation(ctx context.Context, automation *Automation, run 
 			panic(rec) // Re-throw panic
 		}
 
-		if err != nil {
-			run.Status = "failed"
-			run.ErrorMessage = err.Error()
-		} else {
-			run.Status = "completed"
-		}
+		// if err != nil {
+		// 	run.Status = "failed"
+		// 	run.ErrorMessage = err.Error()
+		// } else {
+		// 	run.Status = "completed"
+		// }
 
 		// Generate final report
 		r.generateFinalReport(automation, run, &automationConfig)
@@ -156,7 +156,7 @@ func (r *Runner) RunAutomation(ctx context.Context, automation *Automation, run 
 	<-eventProcessorDone
 
 	if executionError != nil {
-		err = executionError
+		err := executionError
 		return err
 	}
 
@@ -169,7 +169,7 @@ func (r *Runner) RunAutomation(ctx context.Context, automation *Automation, run 
 }
 
 // executeSingleRun executes a single run of the automation
-func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, automationConfig *AutomationConfig, run *AutomationRun, loopIndex int, eventCh chan<- RunEvent) error {
+func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, automationConfig *AutomationConfig, run *AutomationRun, loopIndex int, eventCh chan RunEvent) error {
 	// Initialize Playwright for this run
 	pw, err := playwright.Run()
 	if err != nil {
@@ -232,7 +232,9 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 	}
 
 	totalSteps := len(automation.Steps)
+	_ = totalSteps
 	for stepIndex, step := range automation.Steps {
+		_ = stepIndex
 		// Check for cancellation before each step
 		select {
 		case <-ctx.Done():

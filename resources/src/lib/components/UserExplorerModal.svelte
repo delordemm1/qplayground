@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Modal, Button, Input } from "flowbite-svelte";
-  import { SearchOutline, UserOutline, CheckCircleOutline, XCircleOutline, ClockOutline } from "flowbite-svelte-icons";
+  import { SearchOutline, UserOutline, CheckCircleOutline, CloseCircleOutline, ClockOutline } from "flowbite-svelte-icons";
   import ImageViewerModal from "./ImageViewerModal.svelte";
   import { formatDuration } from "$lib/utils/date";
 
@@ -135,7 +135,7 @@
       case "success":
         return CheckCircleOutline;
       case "failed":
-        return XCircleOutline;
+        return CloseCircleOutline;
       case "skipped":
         return "⏭️";
       case "in_progress":
@@ -261,7 +261,7 @@
                     {#if step.status === "success"}
                       <CheckCircleOutline class="h-5 w-5" />
                     {:else if step.status === "failed"}
-                      <XCircleOutline class="h-5 w-5" />
+                      <CloseCircleOutline class="h-5 w-5" />
                     {:else if step.status === "skipped"}
                       <span class="text-sm">⏭️</span>
                     {:else}
