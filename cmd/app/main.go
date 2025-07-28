@@ -65,8 +65,8 @@ func main() {
 
 	// STORAGE Dependencies
 	var objectStorage storage.ObjectStorage
-	var err error
-	
+	// var err error
+
 	switch platform.ENV_STORAGE_PROVIDER {
 	case "gcp":
 		objectStorage, err = storage.NewGcpStorage()
@@ -75,7 +75,7 @@ func main() {
 	default:
 		objectStorage, err = storage.NewR2Storage()
 	}
-	
+
 	if err != nil {
 		log.Fatalf("Failed to initialize %s storage: %v", platform.ENV_STORAGE_PROVIDER, err)
 	}

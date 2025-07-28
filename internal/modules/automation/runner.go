@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/brianvoe/gofakeit/v7"
-	cliAutomation "github.com/delordemm1/qplayground/cli_automation/internal/automation"
 	"github.com/delordemm1/qplayground/internal/modules/notification"
 	"github.com/delordemm1/qplayground/internal/modules/storage"
 	"github.com/playwright-community/playwright-go"
@@ -666,7 +665,7 @@ func (r *Runner) resolveRuntimeVariable(variablePath string, varContext *Variabl
 	// Remove "runtime." prefix
 	path := strings.TrimPrefix(variablePath, "runtime.")
 	pathParts := strings.Split(path, ".")
-	
+
 	if len(pathParts) == 0 {
 		return nil, fmt.Errorf("empty variable path")
 	}
