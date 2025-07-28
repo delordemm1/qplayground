@@ -456,6 +456,10 @@ func (a *ApiGetAction) Execute(ctx context.Context, actionConfig map[string]inte
 	return a.executeApiRequest(ctx, "GET", config, runContext)
 }
 
+func (a *ApiGetAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	return false, fmt.Errorf("api:get cannot be used as a condition")
+}
+
 // ApiPostAction implements HTTP POST requests
 type ApiPostAction struct {
 	BaseApiAction
@@ -468,6 +472,10 @@ func (a *ApiPostAction) Execute(ctx context.Context, actionConfig map[string]int
 	}
 
 	return a.executeApiRequest(ctx, "POST", config, runContext)
+}
+
+func (a *ApiPostAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	return false, fmt.Errorf("api:post cannot be used as a condition")
 }
 
 // ApiPutAction implements HTTP PUT requests
@@ -484,6 +492,10 @@ func (a *ApiPutAction) Execute(ctx context.Context, actionConfig map[string]inte
 	return a.executeApiRequest(ctx, "PUT", config, runContext)
 }
 
+func (a *ApiPutAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	return false, fmt.Errorf("api:put cannot be used as a condition")
+}
+
 // ApiPatchAction implements HTTP PATCH requests
 type ApiPatchAction struct {
 	BaseApiAction
@@ -498,6 +510,10 @@ func (a *ApiPatchAction) Execute(ctx context.Context, actionConfig map[string]in
 	return a.executeApiRequest(ctx, "PATCH", config, runContext)
 }
 
+func (a *ApiPatchAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	return false, fmt.Errorf("api:patch cannot be used as a condition")
+}
+
 // ApiDeleteAction implements HTTP DELETE requests
 type ApiDeleteAction struct {
 	BaseApiAction
@@ -510,6 +526,10 @@ func (a *ApiDeleteAction) Execute(ctx context.Context, actionConfig map[string]i
 	}
 
 	return a.executeApiRequest(ctx, "DELETE", config, runContext)
+}
+
+func (a *ApiDeleteAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	return false, fmt.Errorf("api:delete cannot be used as a condition")
 }
 
 // ApiIfElseAction implements conditional logic based on runtime variables
@@ -616,6 +636,10 @@ func (a *ApiIfElseAction) Execute(ctx context.Context, actionConfig map[string]i
 
 	runContext.Logger.Info("No conditions met and no else actions defined")
 	return executionError
+}
+
+func (a *ApiIfElseAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	return false, fmt.Errorf("api:if_else cannot be used as a condition")
 }
 
 func (a *ApiIfElseAction) evaluateApiCondition(variablePath, conditionType string, expectedValue interface{}, runContext *automation.RunContext) (bool, error) {
@@ -1098,6 +1122,10 @@ func (a *ApiRuntimeLoopUntilAction) Execute(ctx context.Context, actionConfig ma
 	return executionError
 }
 
+func (a *ApiRuntimeLoopUntilAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	return false, fmt.Errorf("api:runtime_loop_until cannot be used as a condition")
+}
+
 func (a *ApiRuntimeLoopUntilAction) evaluateRuntimeVariableCondition(variablePath, conditionType string, expectedValue interface{}, runContext *automation.RunContext) (bool, error) {
 	// Resolve the runtime variable value
 	actualValue, err := a.resolveRuntimeVariable(variablePath, runContext)
@@ -1345,4 +1373,8 @@ func (a *ApiLogAction) Execute(ctx context.Context, actionConfig map[string]inte
 	}
 
 	return nil
+}
+
+func (a *ApiLogAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	return false, fmt.Errorf("api:log cannot be used as a condition")
 }
