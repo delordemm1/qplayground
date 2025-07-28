@@ -18,6 +18,7 @@ import (
 	"github.com/delordemm1/qplayground/internal/platform"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/playwright-community/playwright-go"
 
 	// Import plugin packages so their init() functions run and register actions
 	_ "github.com/delordemm1/qplayground/internal/plugins/api"
@@ -31,6 +32,9 @@ import (
 )
 
 func main() {
+	if err := playwright.Install(); err != nil {
+		log.Fatalf("Could not install playwright: %v", err)
+	}
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal("Error loading .env file")
