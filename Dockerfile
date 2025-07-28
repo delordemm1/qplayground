@@ -29,7 +29,7 @@ RUN bun run build
 # This stage uses a Go image to compile the backend application into a
 # single, statically-linked executable.
 # =========================================================================
-FROM golang:1.25-rc-bookworm AS builder
+FROM golang:1.25-rc-bookworm AS backend-builder
 
 # Install dependencies using apt-get for Ubuntu
 RUN apt-get update && apt-get install -y --no-install-recommends \
