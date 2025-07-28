@@ -192,7 +192,7 @@ func (s *Scheduler) startRun(ctx context.Context, projectID string, run *Automat
 		}()
 
 		// Execute the automation
-		err := s.runner.RunAutomation(runCtx, projectID, run)
+		detailedReportURL, userJourneyReportURL, err := s.runner.RunAutomation(runCtx, projectID, run)
 
 		// Update final status
 		endTime := time.Now()
@@ -204,6 +204,8 @@ func (s *Scheduler) startRun(ctx context.Context, projectID string, run *Automat
 			slog.Error("Automation run failed", "run_id", run.ID, "error", err)
 		} else {
 			run.Status = "completed"
+			run.DetailedReportURL = detailedReportURL
+			run.UserJourneyReportURL = userJourneyReportURL
 			slog.Info("Automation run completed", "run_id", run.ID)
 		}
 

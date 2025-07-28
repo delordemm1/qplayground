@@ -580,8 +580,6 @@ func (s *automationService) TriggerRun(ctx context.Context, automationID string)
 		slog.Warn("Failed to set pending status in cache", "run_id", run.ID, "error", err)
 	}
 
-	// TODO: Trigger actual automation execution in background
-	// For now, just create the run record
 	slog.Info("Run triggered", "runID", run.ID, "automationID", automationID)
 	return run, nil
 }
