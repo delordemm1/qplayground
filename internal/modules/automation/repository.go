@@ -420,7 +420,7 @@ func (r *automationRepository) CreateRun(ctx context.Context, run *AutomationRun
 }
 
 func (r *automationRepository) GetRunByID(ctx context.Context, id string) (*AutomationRun, error) {
-	query, args, err := r.sq.Select("id", "automation_id", "status", "start_time", "end_time", "logs_json", "output_files_json", "error_message", "created_at", "updated_at").
+	query, args, err := r.sq.Select("id", "automation_id", "status", "start_time", "end_time", "logs_json", "output_files_json", "error_message", "created_at", "updated_at", "user_journey_report_url", "detailed_report_url").
 		From("automation_runs").
 		Where(sq.Eq{"id": id}).
 		ToSql()
@@ -430,9 +430,10 @@ func (r *automationRepository) GetRunByID(ctx context.Context, id string) (*Auto
 
 	var run AutomationRun
 	var createdAt, updatedAt, startTime, endTime pgtype.Timestamp
-	var logsJSON, outputFilesJSON, errorMessage pgtype.Text
+	var logsJSON, outputFilesJSON, errorMessage, userJourneyReportURL, detailedReportURL pgtype.Text
 	err = r.db.QueryRow(ctx, query, args...).Scan(
-		&run.ID, &run.AutomationID, &run.Status, &startTime, &endTime, &logsJSON, &outputFilesJSON, &errorMessage, &createdAt, &updatedAt,
+		&run.ID, &run.AutomationID, &run.Status, &startTime, &endTime, &logsJSON, &outputFilesJSON, &errorMessage, &createdAt, &updatedAt, &userJourneyReportURL,
+		&detailedReportURL,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -455,6 +456,12 @@ func (r *automationRepository) GetRunByID(ctx context.Context, id string) (*Auto
 	}
 	if errorMessage.Valid {
 		run.ErrorMessage = errorMessage.String
+	}
+	if userJourneyReportURL.Valid {
+		run.UserJourneyReportURL = userJourneyReportURL.String
+	}
+	if detailedReportURL.Valid {
+		run.DetailedReportURL = detailedReportURL.String
 	}
 	run.CreatedAt = createdAt.Time
 	run.UpdatedAt = updatedAt.Time

@@ -1178,17 +1178,17 @@
         </svg>
         Export HTML
       </button> -->
+      <div class="relative">
       <!-- HTML Report Download Dropdown -->
-      <Dropdown class="inline-flex">
-        <Button
-          slot="trigger"
-          color="alternative"
-          class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-        >
-          <DownloadOutline class="-ml-1 mr-2 h-5 w-5" />
-          Download HTML Report
-          <ChevronDownOutline class="ml-2 h-4 w-4" />
-        </Button>
+      <button
+        id="html-download-dropdown"
+        class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+      >
+        <TableColumnOutline class="-ml-1 mr-2 h-5 w-5" />
+        Export HTML
+        <CaretDownOutline class="ml-2 h-4 w-4" />
+      </button>
+      <Dropdown class="inline-flex" triggeredBy="#html-download-dropdown">
         <DropdownItem
           onclick={downloadDetailedReport}
           disabled={!run.DetailedReportURL}
@@ -1202,6 +1202,7 @@
           User Journey Report
         </DropdownItem>
       </Dropdown>
+      </div>
       <a
         href="/projects/{projectId}/automations/{automationId}/runs"
         class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
