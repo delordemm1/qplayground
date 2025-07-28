@@ -156,7 +156,9 @@ type StepConfig struct {
 type Automation struct {
 	ID          string
 	ProjectID   string
+	ProjectName string
 	Name        string
+	AutomationSlug string
 	Description string
 	ConfigJSON  string // JSON string containing variables, run settings, templates
 	CreatedAt   time.Time

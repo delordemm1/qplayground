@@ -62,6 +62,10 @@ func (s *automationService) GetAutomationByID(ctx context.Context, id string) (*
 		return nil, fmt.Errorf("failed to get automation: %w", err)
 	}
 
+	// TODO: Set ProjectName from project service if needed
+	// For now, we'll use a placeholder
+	automation.ProjectName = "Project" // This should be fetched from project service
+
 	return automation, nil
 }
 

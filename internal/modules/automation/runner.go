@@ -80,7 +80,7 @@ func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *Autom
 			run.Status = "failed"
 			run.ErrorMessage = fmt.Sprintf("panic: %v", rec)
 			r.automationRepo.UpdateRun(ctx, run)
-			err = fmt.Errorf("panic: %v", rec)
+			detailedReportURL, userJourneyReportURL, err = "", "", fmt.Errorf("panic: %v", rec)
 			panic(rec) // Re-throw panic
 		}
 
@@ -93,7 +93,12 @@ func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *Autom
 
 		// Generate reports after automation completion
 		if err == nil {
-			detailedURL, userJourneyURL, reportErr := GenerateReports(automation, run, &automationConfig, "", fmt.Sprintf("%s/%s/run-%s", automation.ProjectID, automation.AutomationSlug, run.ID), r.storageService)
+			// Generate automation slug from name
+			automationSlug := strings.ToLower(strings.ReplaceAll(automation.Name, " ", "-"))
+			automationSlug = regexp.MustCompile(`[^a-z0-9-]`).ReplaceAllString(automationSlug, "")
+			
+			reportsR2Path := fmt.Sprintf("%s/%s/run-%s/reports", automation.ProjectID, automationSlug, run.ID)
+			detailedURL, userJourneyURL, reportErr := GenerateReports(automation, run, &automationConfig, "", reportsR2Path, r.storageService)
 			if reportErr != nil {
 				slog.Error("Failed to generate reports", "error", reportErr)
 				// Don't fail the entire automation for report generation errors
@@ -247,6 +252,7 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 	// Create variable context for this run
 	varContext := &VariableContext{
 		LoopIndex:    loopIndex,
+		LocalLoopIndex: 0, // Will be updated by nested loops
 		Timestamp:    time.Now().Format("20060102-150405"),
 		RunID:        run.ID,
 		UserID:       "", // TODO: Get from context if available
