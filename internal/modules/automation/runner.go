@@ -37,12 +37,28 @@ func NewRunner(automationRepo AutomationRepository, storageService storage.Stora
 }
 
 // RunAutomation executes a given automation.
-func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *AutomationRun) error {
+func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *AutomationRun) (detailedReportURL, userJourneyReportURL string, err error) {
 	// 1. Fetch Automation details from DB
 	automation, err := r.automationRepo.GetAutomationByID(ctx, run.AutomationID)
 	if err != nil {
-		return fmt.Errorf("failed to get automation: %w", err)
+		return "", "", fmt.Errorf("failed to get automation: %w", err)
 	}
+
+	// Get project information for report paths
+	project, err := r.getProjectInfo(ctx, automation.ProjectID)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to get project info: %w", err)
+	}
+	automation.ProjectName = project.Name
+	
+	// Generate automation slug from name
+	automationSlug := strings.ToLower(strings.ReplaceAll(automation.Name, " ", "-"))
+	automationSlug = regexp.MustCompile(`[^a-z0-9-]`).ReplaceAllString(automationSlug, "")
+	automation.AutomationSlug = automationSlug
+
+	// Construct R2 paths
+	baseR2Path := fmt.Sprintf("%s/%s/run-%s", automation.ProjectID, automationSlug, run.ID)
+	reportsR2Path := fmt.Sprintf("%s/reports", baseR2Path)
 
 	// 2. Parse automation configuration
 	var automationConfig AutomationConfig
