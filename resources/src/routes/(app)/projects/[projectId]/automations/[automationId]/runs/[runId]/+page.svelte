@@ -12,7 +12,7 @@
     DownloadOutline,
     TableColumnOutline,
     UserOutline,
-    CaretDownOutline
+    CaretDownOutline,
   } from "flowbite-svelte-icons";
   import { Dropdown, DropdownItem } from "flowbite-svelte";
 
@@ -33,6 +33,8 @@
     EndTime: string;
     LogsJSON: string;
     OutputFilesJSON: string;
+    UserJourneyReportURL: string;
+    DetailedReportURL: string;
     ErrorMessage: string;
     CreatedAt: string;
   };
@@ -653,7 +655,7 @@
       const userRunSummaries = new Map();
 
       // The 'parsedLogs' variable should contain all log entries from your run
-      parsedLogs.forEach(log => {
+      parsedLogs.forEach((log) => {
         const userId = log.loop_index ?? 0;
         const stepName = log.step_name;
 
@@ -662,9 +664,9 @@
         // Initialize the main entry for the user if it doesn't exist
         if (!userRunSummaries.has(userId)) {
           userRunSummaries.set(userId, {
-            overallStatus: 'success',
+            overallStatus: "success",
             overallDuration: 0,
-            steps: new Map()
+            steps: new Map(),
           });
         }
         const userRun = userRunSummaries.get(userId);
@@ -672,7 +674,7 @@
         // Initialize the summary for this specific step if it doesn't exist
         if (!userRun.steps.has(stepName)) {
           userRun.steps.set(stepName, {
-            status: 'success',
+            status: "success",
             duration: 0,
             actionCount: 0,
             errorCount: 0,
@@ -686,9 +688,9 @@
         stepSummary.duration += duration;
         stepSummary.actionCount++;
 
-        if (log.status === 'failed') {
-          userRun.overallStatus = 'failed';
-          stepSummary.status = 'failed';
+        if (log.status === "failed") {
+          userRun.overallStatus = "failed";
+          stepSummary.status = "failed";
           stepSummary.errorCount++;
         }
       });
@@ -696,14 +698,14 @@
       // 2. Define the new, more useful CSV headers
       const csvRows = [];
       csvRows.push([
-        'User ID',
-        'Overall Run Status',
-        'Overall Run Duration (ms)',
-        'Step Name',
-        'Step Status',
-        'Step Duration (ms)',
-        'Actions in Step',
-        'Errors in Step'
+        "User ID",
+        "Overall Run Status",
+        "Overall Run Duration (ms)",
+        "Step Name",
+        "Step Status",
+        "Step Duration (ms)",
+        "Actions in Step",
+        "Errors in Step",
       ]);
 
       // 3. Build the CSV rows from the structured summary
@@ -714,11 +716,11 @@
             userId,
             runData.overallStatus,
             runData.overallDuration,
-            'No Steps Recorded',
+            "No Steps Recorded",
             runData.overallStatus,
             0,
             0,
-            runData.overallStatus === 'failed' ? 1 : 0
+            runData.overallStatus === "failed" ? 1 : 0,
           ]);
         } else {
           runData.steps.forEach((stepData, stepName) => {
@@ -730,7 +732,7 @@
               stepData.status,
               stepData.duration,
               stepData.actionCount,
-              stepData.errorCount
+              stepData.errorCount,
             ]);
           });
         }
@@ -743,18 +745,18 @@
         )
         .join("\n");
 
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
       link.download = `automation_per_user_detail_${runId}.csv`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
-      showSuccessToast('User step detail report exported to CSV successfully');
+
+      showSuccessToast("User step detail report exported to CSV successfully");
     } catch (error) {
-      console.error('Failed to export user step detail CSV:', error);
-      showErrorToast('Failed to export user step detail CSV');
+      console.error("Failed to export user step detail CSV:", error);
+      showErrorToast("Failed to export user step detail CSV");
     }
   }
 
@@ -763,7 +765,7 @@
       // 1. Prepare data by aggregating stats for each unique step name
       const stepAggregates = new Map();
 
-      parsedLogs.forEach(log => {
+      parsedLogs.forEach((log) => {
         const stepName = log.step_name;
         if (!stepName) return;
 
@@ -775,9 +777,9 @@
           });
         }
         const stepData = stepAggregates.get(stepName);
-        
+
         stepData.durations.push(log.duration_ms || 0);
-        if (log.status === 'failed') {
+        if (log.status === "failed") {
           stepData.failureCount++;
         } else {
           stepData.successCount++;
@@ -787,30 +789,37 @@
       // 2. Define headers for the aggregated summary
       const csvRows = [];
       csvRows.push([
-        'Step Name',
-        'Total Executions',
-        'Success Rate (%)',
-        'Failure Count',
-        'Average Duration (ms)',
-        'Min Duration (ms)',
-        'Max Duration (ms)',
-        '95th Percentile Duration (ms)'
+        "Step Name",
+        "Total Executions",
+        "Success Rate (%)",
+        "Failure Count",
+        "Average Duration (ms)",
+        "Min Duration (ms)",
+        "Max Duration (ms)",
+        "95th Percentile Duration (ms)",
       ]);
 
       // 3. Calculate final metrics and build the CSV rows
       stepAggregates.forEach((data, stepName) => {
         const totalExecutions = data.successCount + data.failureCount;
-        const successRate = totalExecutions > 0 ? (data.successCount / totalExecutions) * 100 : 0;
-        
+        const successRate =
+          totalExecutions > 0 ? (data.successCount / totalExecutions) * 100 : 0;
+
         const sortedDurations = [...data.durations].sort((a, b) => a - b);
         const sum = sortedDurations.reduce((a, b) => a + b, 0);
         const avg = totalExecutions > 0 ? sum / totalExecutions : 0;
         const min = sortedDurations.length > 0 ? sortedDurations[0] : 0;
-        const max = sortedDurations.length > 0 ? sortedDurations[sortedDurations.length - 1] : 0;
-        
+        const max =
+          sortedDurations.length > 0
+            ? sortedDurations[sortedDurations.length - 1]
+            : 0;
+
         // Calculate P95
-        const p95 = sortedDurations.length > 0 ? calculatePercentile(sortedDurations, 95) : 0;
-        
+        const p95 =
+          sortedDurations.length > 0
+            ? calculatePercentile(sortedDurations, 95)
+            : 0;
+
         csvRows.push([
           stepName,
           totalExecutions,
@@ -819,12 +828,16 @@
           avg.toFixed(2),
           min,
           max,
-          p95.toFixed(2)
+          p95.toFixed(2),
         ]);
       });
 
       // 4. Generate and download the CSV
-      const csvContent = csvRows.map(row => row.map(field => `"${String(field).replace(/"/g, '""')}"`).join(",")).join("\n");
+      const csvContent = csvRows
+        .map((row) =>
+          row.map((field) => `"${String(field).replace(/"/g, '""')}"`).join(",")
+        )
+        .join("\n");
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
@@ -832,7 +845,7 @@
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
+
       showSuccessToast("Aggregated summary exported to CSV successfully");
     } catch (error) {
       console.error("Failed to export aggregated CSV:", error);
@@ -1053,6 +1066,23 @@
       showErrorToast("Failed to export HTML report");
     }
   }
+  function downloadDetailedReport() {
+    if (run.DetailedReportURL) {
+      window.open(run.DetailedReportURL, "_blank");
+      showSuccessToast("Opening detailed report...");
+    } else {
+      showErrorToast("Detailed report not available");
+    }
+  }
+
+  function downloadUserJourneyReport() {
+    if (run.UserJourneyReportURL) {
+      window.open(run.UserJourneyReportURL, "_blank");
+      showSuccessToast("Opening user journey report...");
+    } else {
+      showErrorToast("User journey report not available");
+    }
+  }
 
   // Auto-scroll logs to bottom when new entries are added
   $effect(() => {
@@ -1107,13 +1137,17 @@
           <DropdownItem onclick={exportUserStepDetailCSV}>
             <div class="flex flex-col">
               <span class="font-medium">User Step Detail</span>
-              <span class="text-xs text-gray-500">Per-user step execution details</span>
+              <span class="text-xs text-gray-500"
+                >Per-user step execution details</span
+              >
             </div>
           </DropdownItem>
           <DropdownItem onclick={exportAggregatedSummaryCSV}>
             <div class="flex flex-col">
               <span class="font-medium">Aggregated Summary</span>
-              <span class="text-xs text-gray-500">Step performance statistics</span>
+              <span class="text-xs text-gray-500"
+                >Step performance statistics</span
+              >
             </div>
           </DropdownItem>
         </Dropdown>
@@ -1125,7 +1159,7 @@
         <DownloadOutline class="-ml-1 mr-2 h-5 w-5" />
         Export JSON
       </button>
-      <button
+      <!-- <button
         onclick={exportToHTML}
         class="ml-3 inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
       >
@@ -1143,7 +1177,31 @@
           />
         </svg>
         Export HTML
-      </button>
+      </button> -->
+      <!-- HTML Report Download Dropdown -->
+      <Dropdown class="inline-flex">
+        <Button
+          slot="trigger"
+          color="alternative"
+          class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+        >
+          <DownloadOutline class="-ml-1 mr-2 h-5 w-5" />
+          Download HTML Report
+          <ChevronDownOutline class="ml-2 h-4 w-4" />
+        </Button>
+        <DropdownItem
+          onclick={downloadDetailedReport}
+          disabled={!run.DetailedReportURL}
+        >
+          Detailed Report
+        </DropdownItem>
+        <DropdownItem
+          onclick={downloadUserJourneyReport}
+          disabled={!run.UserJourneyReportURL}
+        >
+          User Journey Report
+        </DropdownItem>
+      </Dropdown>
       <a
         href="/projects/{projectId}/automations/{automationId}/runs"
         class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
@@ -1289,14 +1347,30 @@
         </h3>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           {#if run.DetailedReportURL}
-            <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+            <div
+              class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+            >
               <div class="flex items-center mb-3">
-                <svg class="h-8 w-8 text-blue-600 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                <svg
+                  class="h-8 w-8 text-blue-600 mr-3"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                  />
                 </svg>
                 <div>
-                  <h4 class="text-lg font-medium text-gray-900">Detailed Report</h4>
-                  <p class="text-sm text-gray-500">Comprehensive analysis with charts and metrics</p>
+                  <h4 class="text-lg font-medium text-gray-900">
+                    Detailed Report
+                  </h4>
+                  <p class="text-sm text-gray-500">
+                    Comprehensive analysis with charts and metrics
+                  </p>
                 </div>
               </div>
               <a
@@ -1305,23 +1379,49 @@
                 rel="noopener noreferrer"
                 class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 w-full justify-center"
               >
-                <svg class="-ml-1 mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                <svg
+                  class="-ml-1 mr-2 h-5 w-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                  />
                 </svg>
                 Open Detailed Report
               </a>
             </div>
           {/if}
-          
+
           {#if run.UserJourneyReportURL}
-            <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+            <div
+              class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+            >
               <div class="flex items-center mb-3">
-                <svg class="h-8 w-8 text-green-600 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                <svg
+                  class="h-8 w-8 text-green-600 mr-3"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                  />
                 </svg>
                 <div>
-                  <h4 class="text-lg font-medium text-gray-900">User Journey Report</h4>
-                  <p class="text-sm text-gray-500">Interactive user journey analysis with filtering</p>
+                  <h4 class="text-lg font-medium text-gray-900">
+                    User Journey Report
+                  </h4>
+                  <p class="text-sm text-gray-500">
+                    Interactive user journey analysis with filtering
+                  </p>
                 </div>
               </div>
               <a
@@ -1330,8 +1430,18 @@
                 rel="noopener noreferrer"
                 class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 w-full justify-center"
               >
-                <svg class="-ml-1 mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                <svg
+                  class="-ml-1 mr-2 h-5 w-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                  />
                 </svg>
                 Open User Journey Report
               </a>
