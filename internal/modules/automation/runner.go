@@ -37,18 +37,18 @@ func NewRunner(automationRepo AutomationRepository, storageService storage.Stora
 }
 
 // RunAutomation executes a given automation.
-func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *AutomationRun) error {
+func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *AutomationRun) (detailedReportURL, userJourneyReportURL string, err error) {
 	// 1. Fetch Automation details from DB
 	automation, err := r.automationRepo.GetAutomationByID(ctx, run.AutomationID)
 	if err != nil {
-		return fmt.Errorf("failed to get automation: %w", err)
+		return "", "", fmt.Errorf("failed to get automation: %w", err)
 	}
 
 	// 2. Parse automation configuration
 	var automationConfig AutomationConfig
 	if automation.ConfigJSON != "" {
 		if err := json.Unmarshal([]byte(automation.ConfigJSON), &automationConfig); err != nil {
-			return fmt.Errorf("failed to parse automation config: %w", err)
+			return "", "", fmt.Errorf("failed to parse automation config: %w", err)
 		}
 	} else {
 		// Use default configuration if none provided
@@ -80,6 +80,7 @@ func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *Autom
 			run.Status = "failed"
 			run.ErrorMessage = fmt.Sprintf("panic: %v", rec)
 			r.automationRepo.UpdateRun(ctx, run)
+			err = fmt.Errorf("panic: %v", rec)
 			panic(rec) // Re-throw panic
 		}
 
@@ -88,6 +89,20 @@ func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *Autom
 			run.ErrorMessage = err.Error()
 		} else {
 			run.Status = "completed"
+		}
+
+		// Generate reports after automation completion
+		if err == nil {
+			detailedURL, userJourneyURL, reportErr := GenerateReports(automation, run, &automationConfig, "", fmt.Sprintf("%s/%s/run-%s", automation.ProjectID, automation.AutomationSlug, run.ID), r.storageService)
+			if reportErr != nil {
+				slog.Error("Failed to generate reports", "error", reportErr)
+				// Don't fail the entire automation for report generation errors
+			} else {
+				detailedReportURL = detailedURL
+				userJourneyReportURL = userJourneyURL
+				run.DetailedReportURL = detailedReportURL
+				run.UserJourneyReportURL = userJourneyReportURL
+			}
 		}
 
 		r.automationRepo.UpdateRun(ctx, run)
@@ -172,7 +187,7 @@ func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *Autom
 		err = executionError
 		// Send error notifications
 		go r.sendNotifications(context.Background(), automation, run, &automationConfig)
-		return err
+		return "", "", err
 	}
 
 	slog.Info("Automation completed successfully",
@@ -193,7 +208,7 @@ func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *Autom
 	// Send completion notifications
 	go r.sendNotifications(context.Background(), automation, run, &automationConfig)
 
-	return nil
+	return detailedReportURL, userJourneyReportURL, nil
 }
 
 // executeSingleRun executes a single run of the automation
