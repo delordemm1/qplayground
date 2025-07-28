@@ -281,7 +281,7 @@
               type="number"
               bind:value={config.multirun.count}
               min={1}
-              max={100}
+              max={1000}
             />
           </div>
           <div>

@@ -96,7 +96,7 @@ func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *Autom
 			// Generate automation slug from name
 			automationSlug := strings.ToLower(strings.ReplaceAll(automation.Name, " ", "-"))
 			automationSlug = regexp.MustCompile(`[^a-z0-9-]`).ReplaceAllString(automationSlug, "")
-			
+
 			reportsR2Path := fmt.Sprintf("%s/%s/run-%s/reports", automation.ProjectID, automationSlug, run.ID)
 			detailedURL, userJourneyURL, reportErr := GenerateReports(automation, run, &automationConfig, "", reportsR2Path, r.storageService)
 			if reportErr != nil {
@@ -251,16 +251,16 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 
 	// Create variable context for this run
 	varContext := &VariableContext{
-		LoopIndex:    loopIndex,
+		LoopIndex:      loopIndex,
 		LocalLoopIndex: 0, // Will be updated by nested loops
-		Timestamp:    time.Now().Format("20060102-150405"),
-		RunID:        run.ID,
-		UserID:       "", // TODO: Get from context if available
-		ProjectID:    automation.ProjectID,
-		AutomationID: automation.ID,
-		StaticVars:   make(map[string]string),
-		RuntimeVars:  make(map[string]interface{}),
-		GlobalVars:   make(map[string]interface{}),
+		Timestamp:      time.Now().Format("20060102-150405"),
+		RunID:          run.ID,
+		UserID:         "", // TODO: Get from context if available
+		ProjectID:      automation.ProjectID,
+		AutomationID:   automation.ID,
+		StaticVars:     make(map[string]string),
+		RuntimeVars:    make(map[string]interface{}),
+		GlobalVars:     make(map[string]interface{}),
 	}
 
 	// Build static variables map

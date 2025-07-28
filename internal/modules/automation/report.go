@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -73,10 +72,10 @@ func GenerateReports(automation *Automation, run *AutomationRun, config *Automat
 func generateJSONReport(automation *Automation, run *AutomationRun, logs []map[string]any, outputFiles []string, reportsR2Path string, storageService storage.StorageService) (string, error) {
 	reportData := map[string]interface{}{
 		"run": map[string]interface{}{
-			"id":           run.ID,
-			"status":       run.Status,
-			"start_time":   run.StartTime,
-			"end_time":     run.EndTime,
+			"id":            run.ID,
+			"status":        run.Status,
+			"start_time":    run.StartTime,
+			"end_time":      run.EndTime,
 			"error_message": run.ErrorMessage,
 		},
 		"automation": map[string]interface{}{
@@ -114,7 +113,7 @@ func generateJSONReport(automation *Automation, run *AutomationRun, logs []map[s
 // generateCSVReport generates and uploads a CSV report
 func generateCSVReport(automation *Automation, run *AutomationRun, logs []map[string]any, outputFiles []string, reportsR2Path string, storageService storage.StorageService) (string, error) {
 	var csvRows []string
-	
+
 	// CSV Headers
 	csvRows = append(csvRows, "Timestamp,Step Name,Step ID,Action ID,Action Name,Action Type,Message,Error,Duration (ms),Loop Index,Local Loop Index,Status,Output File")
 
@@ -463,20 +462,20 @@ type StepData struct {
 }
 
 type ActionData struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Type        string `json:"type"`
-	Status      string `json:"status"`
-	Duration    int64  `json:"duration"`
-	Error       string `json:"error,omitempty"`
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Type        string   `json:"type"`
+	Status      string   `json:"status"`
+	Duration    int64    `json:"duration"`
+	Error       string   `json:"error,omitempty"`
 	OutputFiles []string `json:"output_files"`
 }
 
 type PerformanceMetrics struct {
-	TotalRuns        int                    `json:"total_runs"`
-	OverallFailureRate float64             `json:"overall_failure_rate"`
-	StepAverages     []StepPerformance     `json:"step_averages"`
-	RunData          []RunPerformance      `json:"run_data"`
+	TotalRuns          int               `json:"total_runs"`
+	OverallFailureRate float64           `json:"overall_failure_rate"`
+	StepAverages       []StepPerformance `json:"step_averages"`
+	RunData            []RunPerformance  `json:"run_data"`
 }
 
 type StepPerformance struct {
@@ -487,10 +486,10 @@ type StepPerformance struct {
 }
 
 type RunPerformance struct {
-	LoopIndex     int               `json:"loop_index"`
+	LoopIndex     int                   `json:"loop_index"`
 	Steps         map[string]StepMetric `json:"steps"`
-	TotalDuration int64             `json:"total_duration"`
-	Status        string            `json:"status"`
+	TotalDuration int64                 `json:"total_duration"`
+	Status        string                `json:"status"`
 }
 
 type StepMetric struct {
@@ -499,15 +498,15 @@ type StepMetric struct {
 }
 
 type UserReport struct {
-	UserID      int    `json:"userId"`
-	Email       string `json:"email"`
-	Feature     string `json:"feature"`
-	Scenario    string `json:"scenario"`
-	Status      string `json:"status"`
-	Screenshot  string `json:"screenshot"`
-	Error       string `json:"error"`
-	URL         string `json:"url"`
-	Timestamp   string `json:"timestamp"`
+	UserID     int    `json:"userId"`
+	Email      string `json:"email"`
+	Feature    string `json:"feature"`
+	Scenario   string `json:"scenario"`
+	Status     string `json:"status"`
+	Screenshot string `json:"screenshot"`
+	Error      string `json:"error"`
+	URL        string `json:"url"`
+	Timestamp  string `json:"timestamp"`
 }
 
 type UserTiming struct {
@@ -760,12 +759,12 @@ func calculateUserTimings(logs []map[string]any) []UserTiming {
 	var timings []UserTiming
 	for userID, totalDuration := range userDurations {
 		seconds := totalDuration / 1000
-		minutes := seconds / 60
+		minutes := float64(seconds) / 60
 
 		timings = append(timings, UserTiming{
 			UserID:      userID,
 			TimeSeconds: fmt.Sprintf("%.2f", float64(totalDuration)/1000),
-			TimeMinutes: fmt.Sprintf("%.2f", float64(seconds)/60),
+			TimeMinutes: fmt.Sprintf("%.2f", minutes),
 		})
 	}
 
@@ -860,12 +859,24 @@ func generateStepDetailsSection(reportData ReportData) string {
             </div>
             <div class="collapse %s" id="step%d">
                 <div class="step-content">`,
-			i, func() string { if i == 0 { return "true" } else { return "false" } }(),
+			i, func() string {
+				if i == 0 {
+					return "true"
+				} else {
+					return "false"
+				}
+			}(),
 			statusIcon, statusClass,
 			step.Name,
 			len(step.Actions),
 			formatDuration(step.Duration),
-			func() string { if i == 0 { return "show" } else { return "" } }(),
+			func() string {
+				if i == 0 {
+					return "show"
+				} else {
+					return ""
+				}
+			}(),
 			i,
 		))
 
@@ -888,7 +899,13 @@ func generateStepDetailsSection(reportData ReportData) string {
                                 </h6>
                                 <small class="text-muted">%s</small>`,
 				actionStatusIcon, actionStatusClass,
-				func() string { if action.Name != "" { return action.Name } else { return action.Type } }(),
+				func() string {
+					if action.Name != "" {
+						return action.Name
+					} else {
+						return action.Type
+					}
+				}(),
 				action.Type,
 			))
 
@@ -1404,11 +1421,35 @@ func generateSummarySection(groupedReports map[int][]UserReport, userTimings []U
         </div>
     </div>`,
 		totalUsers, totalTests, passedTests,
-		func() int { if totalTests > 0 { return (passedTests * 100) / totalTests } else { return 0 } }(),
-		func() int { if totalTests > 0 { return (passedTests * 100) / totalTests } else { return 0 } }(),
+		func() int {
+			if totalTests > 0 {
+				return (passedTests * 100) / totalTests
+			} else {
+				return 0
+			}
+		}(),
+		func() int {
+			if totalTests > 0 {
+				return (passedTests * 100) / totalTests
+			} else {
+				return 0
+			}
+		}(),
 		failedTests,
-		func() int { if totalTests > 0 { return (failedTests * 100) / totalTests } else { return 0 } }(),
-		func() int { if totalTests > 0 { return (failedTests * 100) / totalTests } else { return 0 } }(),
+		func() int {
+			if totalTests > 0 {
+				return (failedTests * 100) / totalTests
+			} else {
+				return 0
+			}
+		}(),
+		func() int {
+			if totalTests > 0 {
+				return (failedTests * 100) / totalTests
+			} else {
+				return 0
+			}
+		}(),
 		userTimingsTable,
 	)
 }
@@ -1636,8 +1677,20 @@ func generateUserSections(groupedReports map[int][]UserReport) string {
                                     <td class="d-none d-lg-table-cell">%s</td>
                                 </tr>`,
 				report.Feature, report.Status,
-				func() string { if report.Feature != "" { return report.Feature } else { return "N/A" } }(),
-				func() string { if report.Scenario != "" { return report.Scenario } else { return "N/A" } }(),
+				func() string {
+					if report.Feature != "" {
+						return report.Feature
+					} else {
+						return "N/A"
+					}
+				}(),
+				func() string {
+					if report.Scenario != "" {
+						return report.Scenario
+					} else {
+						return "N/A"
+					}
+				}(),
 				statusClass, statusIcon, report.Status,
 				screenshotHTML, errorHTML, timestampHTML,
 			))
@@ -1908,14 +1961,14 @@ func generateUserJourneyScripts(allScreenshots []string, groupedReports map[int]
         }
         
         function showToast(message, type = 'info') {
-            const toastHtml = \`
-                <div class="toast align-items-center text-white bg-\${type} border-0" role="alert" aria-live="assertive" aria-atomic="true">
-                    <div class="d-flex">
-                        <div class="toast-body">\${message}</div>
-                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
-                    </div>
-                </div>
-            \`;
+            const toastHtml = `+"`"+`
+        <div class="toast align-items-center text-white bg-${type} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">${message}</div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        </div>
+    `+"`"+`;
             
             const toastContainer = $('#toastContainer');
             const toastElement = $(toastHtml);
