@@ -54,6 +54,7 @@ type RunContext struct {
 	ActionName        string            // Current action name for context
 	ParentActionID    string            // Parent action ID for context
 	LoopIndex         int               // Current loop index for multi-run context
+	ScreenshotsR2Path string            // Base R2 path for screenshots
 	Runner            *Runner           // Reference to runner for variable resolution
 	VariableContext   *VariableContext  // Variable context for resolution
 	AutomationConfig  *AutomationConfig // Automation config for variable resolution
@@ -148,7 +149,9 @@ type AutomationConfig struct {
 type Automation struct {
 	ID          string
 	ProjectID   string
+	ProjectName string
 	Name        string
+	AutomationSlug string
 	Description string
 	ConfigJSON  string // JSON string containing variables, run settings, templates
 	Steps       []*AutomationStep

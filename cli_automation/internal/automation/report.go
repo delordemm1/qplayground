@@ -13,7 +13,7 @@ import (
 )
 
 // GenerateReports generates HTML, JSON, and CSV reports for an automation run
-func GenerateReports(automation *Automation, run *AutomationRun, config *AutomationConfig, outputBaseDir string) error {
+func GenerateReports(automation *Automation, run *AutomationRun, config *AutomationConfig, outputBaseDir, reportsR2Path string, storageService storage.StorageService) (detailedReportURL, userJourneyReportURL string, err error) {
 	// Create unique directory for this run
 	runTimestamp := time.Now().Format("20060102-150405")
 	runDir := filepath.Join(outputBaseDir, fmt.Sprintf("%s-%s", runTimestamp, run.ID[:8]))
@@ -21,7 +21,7 @@ func GenerateReports(automation *Automation, run *AutomationRun, config *Automat
 
 	// Create directories
 	if err := os.MkdirAll(reportsDir, 0755); err != nil {
-		return fmt.Errorf("failed to create reports directory: %w", err)
+		return "", "", fmt.Errorf("failed to create reports directory: %w", err)
 	}
 
 	// Parse logs and output files
@@ -41,9 +41,20 @@ func GenerateReports(automation *Automation, run *AutomationRun, config *Automat
 		}
 	}
 
-	// Generate HTML report
-	if err := generateHTMLReport(automation, run, config, logs, outputFiles, reportsDir); err != nil {
-		slog.Error("Failed to generate HTML report", "error", err)
+	// Generate detailed HTML report
+	detailedURL, err := generateDetailedHTMLReport(automation, run, config, logs, outputFiles, reportsR2Path, storageService)
+	if err != nil {
+		slog.Error("Failed to generate detailed HTML report", "error", err)
+	} else {
+		detailedReportURL = detailedURL
+	}
+
+	// Generate user journey HTML report
+	userJourneyURL, err := generateUserJourneyHTMLReport(automation, run, logs, outputFiles, reportsR2Path, storageService)
+	if err != nil {
+		slog.Error("Failed to generate user journey HTML report", "error", err)
+	} else {
+		userJourneyReportURL = userJourneyURL
 	}
 
 	// Generate JSON report
@@ -57,7 +68,7 @@ func GenerateReports(automation *Automation, run *AutomationRun, config *Automat
 	}
 
 	slog.Info("Reports generated successfully", "run_id", run.ID, "output_dir", runDir)
-	return nil
+	return detailedReportURL, userJourneyReportURL, nil
 }
 
 // generateHTMLReport creates a comprehensive HTML report

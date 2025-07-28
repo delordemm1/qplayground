@@ -70,11 +70,19 @@ var (
 
 	// Automation Configuration
 	ENV_MAX_CONCURRENT_RUNS = mustHaveEnvInt("MAX_CONCURRENT_RUNS")
+
+	// Storage Configuration
+	ENV_STORAGE_PROVIDER = os.Getenv("STORAGE_PROVIDER") // "r2" or "gcp", defaults to "r2"
 )
 
 func init() {
 	// Set default SMTP_FROM if not provided
 	if ENV_SMTP_FROM == "" {
 		ENV_SMTP_FROM = ENV_SMTP_USERNAME
+	}
+
+	// Set default storage provider if not provided
+	if ENV_STORAGE_PROVIDER == "" {
+		ENV_STORAGE_PROVIDER = "r2"
 	}
 }

@@ -64,12 +64,22 @@ func main() {
 	notificationService := notification.NewMailService()
 
 	// STORAGE Dependencies
-	s3Storage, err := storage.NewR2Storage()
-	// s3Storage, err := storage.NewGcpStorage()
-	if err != nil {
-		log.Fatalf("Failed to initialize R2 storage: %v", err)
+	var objectStorage storage.ObjectStorage
+	var err error
+	
+	switch platform.ENV_STORAGE_PROVIDER {
+	case "gcp":
+		objectStorage, err = storage.NewGcpStorage()
+	case "r2":
+		fallthrough
+	default:
+		objectStorage, err = storage.NewR2Storage()
 	}
-	storageService := storage.NewStorageService(s3Storage)
+	
+	if err != nil {
+		log.Fatalf("Failed to initialize %s storage: %v", platform.ENV_STORAGE_PROVIDER, err)
+	}
+	storageService := storage.NewStorageService(objectStorage)
 
 	// MEDIA Dependencies
 	// imageProcessor := media.NewBimgProcessor()

@@ -35,12 +35,12 @@ func NewRunner(storageService storage.StorageService, notificationService notifi
 }
 
 // RunAutomation executes a given automation.
-func (r *Runner) RunAutomation(ctx context.Context, automation *Automation, run *AutomationRun) error {
+func (r *Runner) RunAutomation(ctx context.Context, automation *Automation, run *AutomationRun) (detailedReportURL, userJourneyReportURL string, err error) {
 	// Parse automation configuration
 	var automationConfig AutomationConfig
 	if automation.ConfigJSON != "" {
 		if err := json.Unmarshal([]byte(automation.ConfigJSON), &automationConfig); err != nil {
-			return fmt.Errorf("failed to parse automation config: %w", err)
+			return "", "", fmt.Errorf("failed to parse automation config: %w", err)
 		}
 	} else {
 		// Use default configuration if none provided
@@ -59,6 +59,16 @@ func (r *Runner) RunAutomation(ctx context.Context, automation *Automation, run 
 		}
 	}
 
+	// Generate automation slug from name
+	automationSlug := strings.ToLower(strings.ReplaceAll(automation.Name, " ", "-"))
+	automationSlug = regexp.MustCompile(`[^a-z0-9-]`).ReplaceAllString(automationSlug, "")
+	automation.AutomationSlug = automationSlug
+
+	// Construct R2 paths
+	baseR2Path := fmt.Sprintf("%s/%s/run-%s", automation.ProjectID, automationSlug, run.ID)
+	screenshotsR2Path := fmt.Sprintf("%s/screenshots", baseR2Path)
+	reportsR2Path := fmt.Sprintf("%s/reports", baseR2Path)
+
 	// Set start time
 	now := time.Now()
 	run.StartTime = &now
@@ -71,14 +81,28 @@ func (r *Runner) RunAutomation(ctx context.Context, automation *Automation, run 
 		if rec := recover(); rec != nil {
 			run.Status = "failed"
 			run.ErrorMessage = fmt.Sprintf("panic: %v", rec)
+			err = fmt.Errorf("panic: %v", rec)
 			panic(rec) // Re-throw panic
 		}
 
 		if run.Status == "" {
 			if run.ErrorMessage != "" {
 				run.Status = "failed"
+				err = fmt.Errorf(run.ErrorMessage)
 			} else {
 				run.Status = "completed"
+			}
+		}
+
+		// Generate reports after automation completion
+		if err == nil {
+			detailedURL, userJourneyURL, reportErr := GenerateReports(automation, run, &automationConfig, r.outputDir, reportsR2Path, r.storageService)
+			if reportErr != nil {
+				slog.Error("Failed to generate reports", "error", reportErr)
+				// Don't fail the entire automation for report generation errors
+			} else {
+				detailedReportURL = detailedURL
+				userJourneyReportURL = userJourneyURL
 			}
 		}
 	}()
@@ -162,7 +186,8 @@ func (r *Runner) RunAutomation(ctx context.Context, automation *Automation, run 
 		run.ErrorMessage = executionError.Error()
 		// Send error notifications
 		go r.sendNotifications(context.Background(), automation, run, &automationConfig)
-		return executionError
+		err = executionError
+		return "", "", err
 	}
 
 	slog.Info("Automation completed successfully",
@@ -173,7 +198,7 @@ func (r *Runner) RunAutomation(ctx context.Context, automation *Automation, run 
 	// Send completion notifications
 	go r.sendNotifications(context.Background(), automation, run, &automationConfig)
 
-	return nil
+	return detailedReportURL, userJourneyReportURL, nil
 }
 
 // executeSingleRun executes a single run of the automation
@@ -238,6 +263,7 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 		Logger:            slog.Default().With("automation_id", automation.ID, "run_id", run.ID, "loop_index", loopIndex),
 		EventCh:           eventCh,
 		LoopIndex:         loopIndex,
+		ScreenshotsR2Path: screenshotsR2Path,
 		Runner:            r,
 		VariableContext:   varContext,
 		AutomationConfig:  automationConfig,

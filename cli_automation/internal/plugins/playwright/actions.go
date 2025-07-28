@@ -471,9 +471,9 @@ func (a *ScreenshotAction) Execute(ctx context.Context, actionConfig map[string]
 	}
 
 	// Always save screenshot to local storage
-	screenshotKey := fmt.Sprintf("screenshots/%s-%d.png", runContext.VariableContext.Timestamp, runContext.LoopIndex)
+	screenshotKey := fmt.Sprintf("%s/%s-%d.png", runContext.ScreenshotsR2Path, runContext.VariableContext.Timestamp, runContext.LoopIndex)
 	if r2Key, ok := actionConfig["r2_key"].(string); ok && r2Key != "" {
-		screenshotKey = r2Key
+		screenshotKey = fmt.Sprintf("%s/%s", runContext.ScreenshotsR2Path, r2Key)
 	}
 
 	// Determine content type
