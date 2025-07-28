@@ -49,6 +49,10 @@ func main() {
 
 	// Convert exported config to internal automation structure
 	automationObj := convertExportedToAutomation(exportedConfig)
+	
+	// Set project name and automation slug for CLI
+	automationObj.ProjectName = "CLI Project"
+	automationObj.AutomationSlug = strings.ToLower(strings.ReplaceAll(automationObj.Name, " ", "-"))
 
 	// Initialize services
 	localStorage := storage.NewLocalFileStorage(*outputDir)
@@ -76,7 +80,7 @@ func main() {
 
 	// Execute automation
 	ctx := context.Background()
-	err = runner.RunAutomation(ctx, automationObj, run)
+	detailedReportURL, userJourneyReportURL, err := runner.RunAutomation(ctx, automationObj, run)
 
 	if err != nil {
 		slog.Error("Automation execution failed", "error", err)
@@ -86,7 +90,9 @@ func main() {
 	slog.Info("Automation execution completed successfully",
 		"run_id", run.ID,
 		"status", run.Status,
-		"output_dir", *outputDir)
+		"output_dir", *outputDir,
+		"detailed_report_url", detailedReportURL,
+		"user_journey_report_url", userJourneyReportURL)
 }
 
 // convertExportedToAutomation converts ExportedAutomationConfig to internal Automation structure

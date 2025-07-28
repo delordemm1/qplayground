@@ -195,6 +195,8 @@ type AutomationRun struct {
 	EndTime         *time.Time
 	LogsJSON        string // JSON string containing execution logs
 	OutputFilesJSON string // JSON string containing file paths/URLs
+	DetailedReportURL    string // URL to the detailed HTML report
+	UserJourneyReportURL string // URL to the user journey HTML report
 	ErrorMessage    string
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
