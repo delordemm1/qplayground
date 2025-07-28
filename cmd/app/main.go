@@ -20,9 +20,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	// Import plugin packages so their init() functions run and register actions
+	_ "github.com/delordemm1/qplayground/internal/plugins/api"
 	_ "github.com/delordemm1/qplayground/internal/plugins/playwright"
 	_ "github.com/delordemm1/qplayground/internal/plugins/r2"
-	_ "github.com/delordemm1/qplayground/internal/plugins/api"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -64,11 +64,12 @@ func main() {
 	notificationService := notification.NewMailService()
 
 	// STORAGE Dependencies
-	r2Storage, err := storage.NewR2Storage()
+	s3Storage, err := storage.NewR2Storage()
+	// s3Storage, err := storage.NewGcpStorage()
 	if err != nil {
 		log.Fatalf("Failed to initialize R2 storage: %v", err)
 	}
-	storageService := storage.NewStorageService(r2Storage)
+	storageService := storage.NewStorageService(s3Storage)
 
 	// MEDIA Dependencies
 	// imageProcessor := media.NewBimgProcessor()

@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Demo: Bootstrap HTML Report with Carousel</title>
+
+    <!-- Bootstrap CSS -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css"
+      rel="stylesheet"
+    />
+
+    <style>
+      body {
+        background-color: #f8f9fa;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      }
+      .main-container {
+        background-color: white;
+        min-height: 100vh;
+        box-shadow: 0 0 20px rgba(0,0,0,0.1);
+      }
+      .demo-image {
+          max-width: 150px;
+          height: auto;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          border-radius: 8px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      }
+      .demo-image:hover {
+          transform: scale(1.05);
+          box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+      }
+
+      /* Modal Styles */
+      .modal {
+        display: none;
+        position: fixed;
+        z-index: 1050;
+        padding-top: 0;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        background-color: rgba(0,0,0,0.9);
+      }
+      .modal-content {
+        margin: auto;
+        display: block;
+        width: 90%;
+        max-width: 1400px;
+        max-height: 90vh;
+        object-fit: contain;
+        border-radius: 12px;
+      }
+      .close {
+        position: absolute;
+        top: 20px;
+        right: 35px;
+        color: #fff;
+        font-size: 48px;
+        font-weight: 300;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        backdrop-filter: blur(10px);
+      }
+      .close:hover, .close:focus {
+        background: rgba(220, 53, 69, 0.8);
+        transform: scale(1.1);
+      }
+      .modal-caption {
+        margin: auto;
+        display: block;
+        width: 80%;
+        max-width: 700px;
+        text-align: center;
+        color: #fff;
+        padding: 20px 0;
+        font-size: 1.1em;
+        background: rgba(0,0,0,0.7);
+        border-radius: 8px;
+        margin-top: 20px;
+        backdrop-filter: blur(10px);
+      }
+
+      /* Enhanced Carousel Styles */
+      .carousel-container {
+        position: relative;
+        width: 100%;
+        max-width: 1400px;
+        margin: 50px auto 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .carousel-nav {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        background: rgba(0,0,0,0.6);
+        color: white;
+        border: none;
+        font-size: 28px;
+        padding: 15px 20px;
+        cursor: pointer;
+        z-index: 1051;
+        border-radius: 50%;
+        transition: all 0.3s ease;
+        width: 60px;
+        height: 60px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        backdrop-filter: blur(10px);
+      }
+
+      .carousel-nav:hover {
+        background: rgba(0, 123, 255, 0.8);
+        transform: translateY(-50%) scale(1.1);
+      }
+
+      .carousel-prev { left: 30px; }
+      .carousel-next { right: 30px; }
+
+        /* position: fixed;
+        bottom: 20px;
+        display: flex;
+        gap: 12px;
+        z-index: 1051;
+        background: rgba(0,0,0,0.5);
+        padding: 10px 20px;
+        border-radius: 25px;
+        backdrop-filter: blur(10px);
+      } */
+
+      .carousel-indicator {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.5);
+        cursor: pointer;
+        transition: all 0.3s ease;
+        border: 2px solid transparent;
+      }
+
+      .carousel-indicator:hover {
+        background: rgba(255,255,255,0.8);
+        transform: scale(1.2);
+      }
+
+      .carousel-indicator.active {
+        background: #007bff;
+        border-color: white;
+        transform: scale(1.3);
+      }
+
+      .carousel-counter {
+        position: absolute;
+        top: 30px;
+        right: 30px;
+        background: rgba(0,0,0,0.7);
+        color: white;
+        padding: 8px 16px;
+        border-radius: 25px;
+        font-size: 16px;
+        font-weight: 600;
+        z-index: 1051;
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255,255,255,0.2);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="main-container">
+      <div class="container-fluid py-4">
+        <div class="text-center mb-5">
+          <h1 class="display-4 fw-bold text-primary">
+            <i class="bi bi-clipboard-data me-3"></i>
+            Bootstrap Enhanced Test Report Demo
+          </h1>
+          <p class="lead text-muted">
+            Comprehensive test results with interactive filtering and carousel
+            viewing
+          </p>
+        </div>
+
+        <!-- Features Section -->
+        <div class="row mb-5">
+          <div class="col-12">
+            <div class="card border-0 shadow-sm">
+              <div class="card-header bg-primary text-white">
+                <h3 class="mb-0">
+                  <i class="bi bi-star-fill me-2"></i>
+                  New Bootstrap Features
+                </h3>
+              </div>
+              <div class="card-body">
+                <div class="row g-4">
+                  <div class="col-md-6">
+                    <div class="d-flex align-items-center mb-2">
+                      <i class="bi bi-check-circle-fill text-success me-2"></i>
+                      <strong>Bootstrap 5.3.0 Integration</strong>
+                    </div>
+                    <p class="text-muted small">
+                      Modern responsive design with utility classes
+                    </p>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="d-flex align-items-center mb-2">
+                      <i class="bi bi-check-circle-fill text-success me-2"></i>
+                      <strong>Bootstrap Icons</strong>
+                    </div>
+                    <p class="text-muted small">1000+ scalable vector icons</p>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="d-flex align-items-center mb-2">
+                      <i class="bi bi-check-circle-fill text-success me-2"></i>
+                      <strong>Enhanced Statistics Cards</strong>
+                    </div>
+                    <p class="text-muted small">
+                      Beautiful stat cards with progress bars
+                    </p>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="d-flex align-items-center mb-2">
+                      <i class="bi bi-check-circle-fill text-success me-2"></i>
+                      <strong>Premium Carousel</strong>
+                    </div>
+                    <p class="text-muted small">
+                      Smooth animations with backdrop blur effects
+                    </p>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="d-flex align-items-center mb-2">
+                      <i class="bi bi-check-circle-fill text-success me-2"></i>
+                      <strong>Toast Notifications</strong>
+                    </div>
+                    <p class="text-muted small">
+                      User feedback with Bootstrap toasts
+                    </p>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="d-flex align-items-center mb-2">
+                      <i class="bi bi-check-circle-fill text-success me-2"></i>
+                      <strong>Responsive Tables</strong>
+                    </div>
+                    <p class="text-muted small">Mobile-friendly table design</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Demo Images Section -->
+        <div class="row mb-5">
+          <div class="col-12">
+            <div class="card border-0 shadow-sm">
+              <div class="card-header bg-info text-white">
+                <h3 class="mb-0">
+                  <i class="bi bi-images me-2"></i>
+                  Interactive Image Carousel Demo
+                </h3>
+              </div>
+              <div class="card-body">
+                <p class="text-muted mb-4">
+                  Click any image below to open the enhanced Bootstrap carousel:
+                </p>
+                <div class="row g-3">
+                  <div class="col-6 col-md-3">
+                    <div class="text-center">
+                      <img
+                        class="demo-image"
+                        src="https://dummyimage.com/300x200/0066cc/ffffff?text=Login+Test"
+                        onclick="openCarousel('https://dummyimage.com/300x200/0066cc/ffffff?text=Login+Test')"
+                        alt="Login Test Screenshot"
+                      />
+                      <p class="small text-muted mt-2">Login Test</p>
+                    </div>
+                  </div>
+                  <div class="col-6 col-md-3">
+                    <div class="text-center">
+                      <img
+                        class="demo-image"
+                        src="https://dummyimage.com/300x200/009900/ffffff?text=Project+Creation"
+                        onclick="openCarousel('https://dummyimage.com/300x200/009900/ffffff?text=Project+Creation')"
+                        alt="Project Creation Screenshot"
+                      />
+                      <p class="small text-muted mt-2">Project Creation</p>
+                    </div>
+                  </div>
+                  <div class="col-6 col-md-3">
+                    <div class="text-center">
+                      <img
+                        class="demo-image"
+                        src="https://dummyimage.com/300x200/cc0000/ffffff?text=Error+State"
+                        onclick="openCarousel('https://dummyimage.com/300x200/cc0000/ffffff?text=Error+State')"
+                        alt="Error State Screenshot"
+                      />
+                      <p class="small text-muted mt-2">Error State</p>
+                    </div>
+                  </div>
+                  <div class="col-6 col-md-3">
+                    <div class="text-center">
+                      <img
+                        class="demo-image"
+                        src="https://dummyimage.com/300x200/ff9900/ffffff?text=Success+State"
+                        onclick="openCarousel('https://dummyimage.com/300x200/ff9900/ffffff?text=Success+State')"
+                        alt="Success State Screenshot"
+                      />
+                      <p class="small text-muted mt-2">Success State</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Instructions Section -->
+        <div class="row">
+          <div class="col-12">
+            <div class="card border-0 shadow-sm">
+              <div class="card-header bg-warning text-dark">
+                <h3 class="mb-0">
+                  <i class="bi bi-info-circle me-2"></i>
+                  How to Use the Enhanced Carousel
+                </h3>
+              </div>
+              <div class="card-body">
+                <div class="row g-3">
+                  <div class="col-md-4">
+                    <div class="d-flex align-items-start">
+                      <i class="bi bi-1-circle-fill text-primary me-3 mt-1"></i>
+                      <div>
+                        <strong>Click Images</strong>
+                        <p class="small text-muted mb-0">
+                          Click any screenshot to open the carousel modal
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-md-4">
+                    <div class="d-flex align-items-start">
+                      <i class="bi bi-2-circle-fill text-primary me-3 mt-1"></i>
+                      <div>
+                        <strong>Navigate</strong>
+                        <p class="small text-muted mb-0">
+                          Use arrow buttons or keyboard keys (← →)
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-md-4">
+                    <div class="d-flex align-items-start">
+                      <i class="bi bi-3-circle-fill text-primary me-3 mt-1"></i>
+                      <div>
+                        <strong>Jump to Image</strong>
+                        <p class="small text-muted mb-0">
+                          Click indicator dots to jump to specific images
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-md-4">
+                    <div class="d-flex align-items-start">
+                      <i class="bi bi-4-circle-fill text-success me-3 mt-1"></i>
+                      <div>
+                        <strong>Close Modal</strong>
+                        <p class="small text-muted mb-0">
+                          Press ESC, click X, or click outside the image
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-md-4">
+                    <div class="d-flex align-items-start">
+                      <i class="bi bi-5-circle-fill text-info me-3 mt-1"></i>
+                      <div>
+                        <strong>View Counter</strong>
+                        <p class="small text-muted mb-0">
+                          See current position and total count in top-right
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-md-4">
+                    <div class="d-flex align-items-start">
+                      <i class="bi bi-6-circle-fill text-warning me-3 mt-1"></i>
+                      <div>
+                        <strong>Tooltips</strong>
+                        <p class="small text-muted mb-0">
+                          Hover over controls for helpful tooltips
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Enhanced Carousel Modal -->
+    <div id="imageModal" class="modal">
+      <span
+        class="close"
+        onclick="closeModal()"
+        data-bs-toggle="tooltip"
+        data-bs-placement="left"
+        title="Close (ESC)"
+      >
+        <i class="bi bi-x-lg"></i>
+      </span>
+      <div class="carousel-container">
+        <img class="modal-content" id="modalImage" alt="Demo Screenshot" />
+        <button
+          class="carousel-nav carousel-prev"
+          id="carouselPrev"
+          data-bs-toggle="tooltip"
+          data-bs-placement="right"
+          title="Previous (←)"
+        >
+          <i class="bi bi-chevron-left"></i>
+        </button>
+        <button
+          class="carousel-nav carousel-next"
+          id="carouselNext"
+          data-bs-toggle="tooltip"
+          data-bs-placement="left"
+          title="Next (→)"
+        >
+          <i class="bi bi-chevron-right"></i>
+        </button>
+        <div class="carousel-counter" id="carouselCounter">
+          <i class="bi bi-images me-1"></i>
+          1 / 4
+        </div>
+        <div class="carousel-indicators">
+          <div class="carousel-indicator active" data-index="0"></div>
+          <div class="carousel-indicator" data-index="1"></div>
+          <div class="carousel-indicator" data-index="2"></div>
+          <div class="carousel-indicator" data-index="3"></div>
+        </div>
+      </div>
+      <div id="caption" class="modal-caption"></div>
+    </div>
+
+    <!-- Toast Container -->
+    <div
+      class="toast-container position-fixed bottom-0 end-0 p-3"
+      id="toastContainer"
+    ></div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+      // Demo images for carousel
+      const allImages = [
+        {
+          src: "https://dummyimage.com/300x200/0066cc/ffffff?text=Login+Test",
+          caption: "Demo: Login Test - User Authentication Flow",
+        },
+        {
+          src: "https://dummyimage.com/300x200/009900/ffffff?text=Project+Creation",
+          caption: "Demo: Project Creation - New Project Setup",
+        },
+        {
+          src: "https://dummyimage.com/300x200/cc0000/ffffff?text=Error+State",
+          caption: "Demo: Error State - Test Failure Screenshot",
+        },
+        {
+          src: "https://dummyimage.com/300x200/ff9900/ffffff?text=Success+State",
+          caption: "Demo: Success State - Test Completion",
+        },
+      ];
+      let currentImageIndex = 0;
+
+      function openCarousel(imageSrc) {
+        // Find the index of the clicked image
+        currentImageIndex = allImages.findIndex((img) => img.src === imageSrc);
+        if (currentImageIndex === -1) currentImageIndex = 0;
+
+        const modal = $("#imageModal");
+        modal.show();
+        updateCarouselImage();
+
+        // Add keyboard navigation
+        $(document).on("keydown.carousel", function (e) {
+          if (e.key === "ArrowLeft") {
+            previousImage();
+          } else if (e.key === "ArrowRight") {
+            nextImage();
+          } else if (e.key === "Escape") {
+            closeModal();
+          }
+        });
+
+        // Show welcome toast
+        showToast("Use arrow keys to navigate, ESC to close!", "info");
+      }
+
+      function updateCarouselImage() {
+        const currentImage = allImages[currentImageIndex];
+        if (currentImage) {
+          $("#modalImage").attr("src", currentImage.src);
+          $("#caption").text(currentImage.caption);
+          $("#carouselCounter").html(
+            '<i class="bi bi-images me-1"></i>' +
+              (currentImageIndex + 1) +
+              " / " +
+              allImages.length
+          );
+
+          // Update indicators
+          $(".carousel-indicator").removeClass("active");
+          $(
+            '.carousel-indicator[data-index="' + currentImageIndex + '"]'
+          ).addClass("active");
+        }
+      }
+
+      function nextImage() {
+        if (allImages.length > 0) {
+          currentImageIndex = (currentImageIndex + 1) % allImages.length;
+          updateCarouselImage();
+        }
+      }
+
+      function previousImage() {
+        if (allImages.length > 0) {
+          currentImageIndex =
+            currentImageIndex === 0
+              ? allImages.length - 1
+              : currentImageIndex - 1;
+          updateCarouselImage();
+        }
+      }
+
+      function goToImage(index) {
+        if (index >= 0 && index < allImages.length) {
+          currentImageIndex = index;
+          updateCarouselImage();
+        }
+      }
+
+      function closeModal() {
+        $("#imageModal").hide();
+        $(document).off("keydown.carousel");
+      }
+
+      function showToast(message, type = "info") {
+        const toastHtml = `
+                <div class="toast align-items-center text-white bg-${type} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                    <div class="d-flex">
+                        <div class="toast-body">${message}</div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                    </div>
+                </div>
+            `;
+
+        const toastContainer = $("#toastContainer");
+        const toastElement = $(toastHtml);
+        toastContainer.append(toastElement);
+
+        const toast = new bootstrap.Toast(toastElement[0]);
+        toast.show();
+
+        // Remove toast after it's hidden
+        toastElement.on("hidden.bs.toast", function () {
+          $(this).remove();
+        });
+      }
+
+      // Close modal when clicking outside the image
+      $(window).on("click", function (event) {
+        if (event.target.id === "imageModal") {
+          closeModal();
+        }
+      });
+
+      $(document).ready(function () {
+        // Initialize carousel navigation
+        $("#carouselPrev").on("click", previousImage);
+        $("#carouselNext").on("click", nextImage);
+
+        // Initialize carousel indicators
+        $(document).on("click", ".carousel-indicator", function () {
+          const index = parseInt($(this).data("index"));
+          goToImage(index);
+        });
+
+        // Initialize tooltips
+        var tooltipTriggerList = [].slice.call(
+          document.querySelectorAll('[data-bs-toggle="tooltip"]')
+        );
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+          return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+
+        // Show welcome message
+        setTimeout(() => {
+          showToast(
+            "Welcome! This demo showcases the new Bootstrap-enhanced test report features.",
+            "success"
+          );
+        }, 1000);
+      });
+    </script>
+  </body>
+</html>

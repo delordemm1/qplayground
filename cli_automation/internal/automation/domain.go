@@ -162,6 +162,7 @@ type AutomationStep struct {
 	AutomationID string
 	Name         string
 	StepOrder    int
+	ConfigJSON   string
 	Actions      []*AutomationAction
 	CreatedAt    time.Time
 	UpdatedAt    time.Time

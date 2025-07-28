@@ -15,7 +15,6 @@ import (
 	"github.com/brianvoe/gofakeit/v7"
 	"github.com/delordemm1/qplayground-cli/internal/notification"
 	"github.com/delordemm1/qplayground-cli/internal/storage"
-	"github.com/delordemm1/qplayground-cli/internal/utils"
 	"github.com/playwright-community/playwright-go"
 )
 

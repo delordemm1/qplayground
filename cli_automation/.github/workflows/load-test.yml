@@ -1,0 +1,43 @@
+name: Load Test with Playwright + Output Report
+
+on:
+  workflow_dispatch:
+  # push:
+  #   branches:
+  #     - ai-coding-test
+
+concurrency:
+  group: ai-coding-load-test
+  cancel-in-progress: true
+
+jobs:
+  simulate-users:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # - name: Set up Node.js
+      #   uses: actions/setup-node@v4
+      #   with:
+      #     node-version: "18"
+
+      - name: Create screenshots directory
+        run: mkdir -p output
+
+      - name: Build Docker image
+        run: docker build -t qplaywright-load-test .
+
+      - name: Run playwright load test
+        run: docker run --rm \                                       
+          -v ./config.json:/app/config.json:ro \
+          -v ./output:/app/output \
+          qplaywright-load-test \
+          --config-path /app/config.json \
+          --output-dir /app/output
+
+      - name: Upload output reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: output-report
+          path: output
