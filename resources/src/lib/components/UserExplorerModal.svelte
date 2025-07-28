@@ -8,6 +8,7 @@
     stepId: string;
     stepName: string;
     status: "success" | "failed" | "skipped" | "in_progress";
+    actionName?: string;
     duration: number;
     error?: string;
     outputFiles: string[];
@@ -66,6 +67,7 @@
           journeyStep = {
             stepId: step.id,
             stepName: step.name,
+            actionName: action.actionName,
             status: "in_progress",
             duration: 0,
             outputFiles: [],
@@ -280,6 +282,11 @@
                       <h4 class="font-medium text-gray-900">{step.stepName}</h4>
                       <span class="text-sm text-gray-500">{formatDuration(step.duration)}</span>
                     </div>
+                    {#if step.actionName}
+                      <p class="text-sm text-gray-600 mb-2">
+                        Action: {step.actionName}
+                      </p>
+                    {/if}
 
                     {#if step.error}
                       <div class="mb-3 p-3 bg-red-50 border border-red-200 rounded-md">

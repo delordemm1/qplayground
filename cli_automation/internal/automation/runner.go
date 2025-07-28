@@ -90,20 +90,18 @@ func (r *Runner) RunAutomation(ctx context.Context, automation *Automation, run 
 				run.Status = "failed"
 				err = fmt.Errorf(run.ErrorMessage)
 			} else {
-				run.Status = "completed"
-			}
-		}
+		// Generate automation slug from name
+		automationSlug := strings.ToLower(strings.ReplaceAll(automation.Name, " ", "-"))
+		automationSlug = regexp.MustCompile(`[^a-z0-9-]`).ReplaceAllString(automationSlug, "")
 
-		// Generate reports after automation completion
-		if err == nil {
-			detailedURL, userJourneyURL, reportErr := GenerateReports(automation, run, &automationConfig, r.outputDir, reportsR2Path, r.storageService)
-			if reportErr != nil {
-				slog.Error("Failed to generate reports", "error", reportErr)
-				// Don't fail the entire automation for report generation errors
-			} else {
-				detailedReportURL = detailedURL
-				userJourneyReportURL = userJourneyURL
-			}
+		reportsR2Path := fmt.Sprintf("%s/%s/run-%s/reports", automation.ProjectID, automationSlug, run.ID)
+		detailedURL, userJourneyURL, reportErr := GenerateReports(automation, run, &automationConfig, r.outputDir, reportsR2Path, r.storageService)
+		if reportErr != nil {
+			slog.Error("Failed to generate reports", "error", reportErr)
+			// Don't fail the entire automation for report generation errors
+		} else {
+			detailedReportURL = detailedURL
+			userJourneyReportURL = userJourneyURL
 		}
 	}()
 

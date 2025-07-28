@@ -5,6 +5,7 @@
   import ImageViewerModal from "$lib/components/ImageViewerModal.svelte";
   import RunPerformanceChart from "$lib/components/RunPerformanceChart.svelte";
   import { ChevronDownOutline, ChevronRightOutline, DownloadOutline, TableColumnOutline } from "flowbite-svelte-icons";
+  import { Dropdown, DropdownItem, Button } from "flowbite-svelte";
 
   type Project = {
     ID: string;
@@ -594,6 +595,24 @@
       showErrorToast('Failed to export HTML report');
     }
   }
+
+  function downloadDetailedReport() {
+    if (run.DetailedReportURL) {
+      window.open(run.DetailedReportURL, '_blank');
+      showSuccessToast('Opening detailed report...');
+    } else {
+      showErrorToast('Detailed report not available');
+    }
+  }
+
+  function downloadUserJourneyReport() {
+    if (run.UserJourneyReportURL) {
+      window.open(run.UserJourneyReportURL, '_blank');
+      showSuccessToast('Opening user journey report...');
+    } else {
+      showErrorToast('User journey report not available');
+    }
+  }
 </script>
 
 <svelte:head>
@@ -633,15 +652,28 @@
         <DownloadOutline class="-ml-1 mr-2 h-5 w-5" />
         Export JSON
       </button>
-      <button
-        onclick={exportToHTML}
-        class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-      >
-        <svg class="-ml-1 mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
-        Export HTML
-      </button>
+      
+      <!-- HTML Report Download Dropdown -->
+      <Dropdown class="inline-flex">
+        <Button slot="trigger" color="alternative" class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+          <DownloadOutline class="-ml-1 mr-2 h-5 w-5" />
+          Download HTML Report
+          <ChevronDownOutline class="ml-2 h-4 w-4" />
+        </Button>
+        <DropdownItem 
+          onclick={downloadDetailedReport}
+          disabled={!run.DetailedReportURL}
+        >
+          Detailed Report
+        </DropdownItem>
+        <DropdownItem 
+          onclick={downloadUserJourneyReport}
+          disabled={!run.UserJourneyReportURL}
+        >
+          User Journey Report
+        </DropdownItem>
+      </Dropdown>
+      
       <a
         href="/projects/{projectId}/automations/{automationId}/runs/{runId}"
         class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
@@ -810,7 +842,7 @@
                               </div>
                               <div>
                                 <h5 class="text-sm font-medium text-gray-900">
-                                  Action {actionIndex + 1}: {action.type}
+                                  Action {actionIndex + 1}: {#if action.name}{action.name} <span class="text-xs text-gray-500">({action.type})</span>{:else}{action.type}{/if}
                                 </h5>
                                 {#if action.error}
                                   <p class="text-xs text-red-600">{action.error}</p>

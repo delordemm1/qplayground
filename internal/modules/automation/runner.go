@@ -92,22 +92,20 @@ func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *Autom
 		}
 
 		// Generate reports after automation completion
-		if err == nil {
-			// Generate automation slug from name
-			automationSlug := strings.ToLower(strings.ReplaceAll(automation.Name, " ", "-"))
-			automationSlug = regexp.MustCompile(`[^a-z0-9-]`).ReplaceAllString(automationSlug, "")
+		// Generate automation slug from name
+		automationSlug := strings.ToLower(strings.ReplaceAll(automation.Name, " ", "-"))
+		automationSlug = regexp.MustCompile(`[^a-z0-9-]`).ReplaceAllString(automationSlug, "")
 
-			reportsR2Path := fmt.Sprintf("%s/%s/run-%s/reports", automation.ProjectID, automationSlug, run.ID)
-			detailedURL, userJourneyURL, reportErr := GenerateReports(automation, run, &automationConfig, "", reportsR2Path, r.storageService)
-			if reportErr != nil {
-				slog.Error("Failed to generate reports", "error", reportErr)
-				// Don't fail the entire automation for report generation errors
-			} else {
-				detailedReportURL = detailedURL
-				userJourneyReportURL = userJourneyURL
-				run.DetailedReportURL = detailedReportURL
-				run.UserJourneyReportURL = userJourneyReportURL
-			}
+		reportsR2Path := fmt.Sprintf("%s/%s/run-%s/reports", automation.ProjectID, automationSlug, run.ID)
+		detailedURL, userJourneyURL, reportErr := GenerateReports(automation, run, &automationConfig, "", reportsR2Path, r.storageService)
+		if reportErr != nil {
+			slog.Error("Failed to generate reports", "error", reportErr)
+			// Don't fail the entire automation for report generation errors
+		} else {
+			detailedReportURL = detailedURL
+			userJourneyReportURL = userJourneyURL
+			run.DetailedReportURL = detailedReportURL
+			run.UserJourneyReportURL = userJourneyReportURL
 		}
 
 		r.automationRepo.UpdateRun(ctx, run)
