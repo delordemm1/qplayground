@@ -279,6 +279,7 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 		Runner:            r,
 		VariableContext:   varContext,
 		AutomationConfig:  automationConfig,
+		LastOutputFiles:   make([]string, 0),
 	}
 
 	// Fetch and execute steps
@@ -360,59 +361,377 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 		if err != nil {
 			return fmt.Errorf("failed to get actions for step %s: %w", step.Name, err)
 		}
-
-		for _, action := range stepActions {
-			// Check for cancellation before each action
-			select {
-			case <-ctx.Done():
-				return fmt.Errorf("automation cancelled")
-			default:
-			}
-
-			// Parse action config
-			actionConfigMap := make(map[string]any)
-			if action.ActionConfigJSON != "" {
-				if jsonErr := json.Unmarshal([]byte(action.ActionConfigJSON), &actionConfigMap); jsonErr != nil {
-					return fmt.Errorf("failed to parse action config JSON for action %s: %w", action.ActionType, jsonErr)
-				}
-			}
-
-			// Resolve variables in action config
-			resolvedActionConfig, resolveErr := r.ResolveVariablesInConfig(actionConfigMap, varContext, automationConfig)
-			if resolveErr != nil {
-				return fmt.Errorf("failed to resolve variables in action config: %w", resolveErr)
-			}
-
-			// Get plugin action
-			pluginAction, getActionErr := GetAction(action.ActionType)
-			if getActionErr != nil {
-				return fmt.Errorf("unregistered plugin action type '%s': %w", action.ActionType, getActionErr)
-			}
-
-			runContext.ActionID = action.ID
-			runContext.ActionName = action.Name
-			runContext.ParentActionID = "" // Reset for top-level actions
-			// Execute action
-			actionErr := pluginAction.Execute(ctx, resolvedActionConfig, runContext)
-
-			if actionErr != nil {
-				runContext.Logger.Error("Action failed",
-					"action_type", action.ActionType,
-					"action_name", action.Name,
-					"error", actionErr,
-					"loop_index", loopIndex)
-
-				return fmt.Errorf("action '%s' failed: %w", action.ActionType, actionErr)
-			}
-
-			runContext.Logger.Info("Action completed",
-				"action_type", action.ActionType,
-				"action_name", action.Name,
-				"loop_index", loopIndex)
+		// Execute step actions using the new helper function
+		err = r.executeActionsList(ctx, stepActions, runContext)
+		if err != nil {
+			return fmt.Errorf("failed to execute actions for step %s: %w", step.Name, err)
 		}
 	}
 
 	return nil
+}
+
+// executeActionsList executes a list of automation actions, handling global action types
+func (r *Runner) executeActionsList(ctx context.Context, actions []*AutomationAction, runContext *RunContext) error {
+	for _, action := range actions {
+		// Check for cancellation before each action
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("automation cancelled")
+		default:
+		}
+
+		// Parse action config
+		actionConfigMap := make(map[string]any)
+		if action.ActionConfigJSON != "" {
+			if jsonErr := json.Unmarshal([]byte(action.ActionConfigJSON), &actionConfigMap); jsonErr != nil {
+				return fmt.Errorf("failed to parse action config JSON for action %s: %w", action.ActionType, jsonErr)
+			}
+		}
+
+		// Resolve variables in action config
+		resolvedActionConfig, resolveErr := r.ResolveVariablesInConfig(actionConfigMap, runContext.VariableContext, runContext.AutomationConfig)
+		if resolveErr != nil {
+			return fmt.Errorf("failed to resolve variables in action config: %w", resolveErr)
+		}
+
+		// Set action context
+		runContext.ActionID = action.ID
+		runContext.ActionName = action.Name
+		runContext.ParentActionID = "" // Reset for top-level actions
+
+		// Handle global action types
+		switch action.ActionType {
+		case "global:group":
+			err := r.executeGlobalGroup(ctx, resolvedActionConfig, runContext)
+			if err != nil {
+				return fmt.Errorf("global:group action failed: %w", err)
+			}
+		case "global:if_else":
+			err := r.executeGlobalIfElse(ctx, resolvedActionConfig, runContext)
+			if err != nil {
+				return fmt.Errorf("global:if_else action failed: %w", err)
+			}
+		case "global:loop":
+			err := r.executeGlobalLoop(ctx, resolvedActionConfig, runContext)
+			if err != nil {
+				return fmt.Errorf("global:loop action failed: %w", err)
+			}
+		default:
+			// Handle regular plugin actions
+			err := r.executePluginAction(ctx, action, resolvedActionConfig, runContext)
+			if err != nil {
+				return fmt.Errorf("action '%s' failed: %w", action.ActionType, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// executePluginAction executes a regular plugin action
+func (r *Runner) executePluginAction(ctx context.Context, action *AutomationAction, resolvedActionConfig map[string]any, runContext *RunContext) error {
+	// Get plugin action
+	pluginAction, getActionErr := GetAction(action.ActionType)
+	if getActionErr != nil {
+		return fmt.Errorf("unregistered plugin action type '%s': %w", action.ActionType, getActionErr)
+	}
+
+	// Execute action
+	actionErr := pluginAction.Execute(ctx, resolvedActionConfig, runContext)
+	if actionErr != nil {
+		runContext.Logger.Error("Action failed",
+			"action_type", action.ActionType,
+			"action_name", action.Name,
+			"error", actionErr,
+			"loop_index", runContext.LoopIndex)
+		return actionErr
+	}
+
+	runContext.Logger.Info("Action completed",
+		"action_type", action.ActionType,
+		"action_name", action.Name,
+		"loop_index", runContext.LoopIndex)
+
+	return nil
+}
+
+// executeGlobalGroup executes a group of actions and saves only the last output file
+func (r *Runner) executeGlobalGroup(ctx context.Context, actionConfig map[string]any, runContext *RunContext) error {
+	// Parse group config
+	configBytes, err := json.Marshal(actionConfig)
+	if err != nil {
+		return fmt.Errorf("failed to marshal group config: %w", err)
+	}
+
+	var groupConfig GlobalGroupConfig
+	if err := json.Unmarshal(configBytes, &groupConfig); err != nil {
+		return fmt.Errorf("failed to parse global group config: %w", err)
+	}
+
+	runContext.Logger.Info("Executing global group", "actions_count", len(groupConfig.Actions))
+
+	// Clear the output files buffer
+	runContext.LastOutputFiles = make([]string, 0)
+
+	// Execute all actions in the group
+	for _, groupAction := range groupConfig.Actions {
+		// Skip nested group actions to prevent infinite recursion
+		if groupAction.ActionType == "global:group" {
+			runContext.Logger.Warn("Skipping nested global:group action to prevent recursion")
+			continue
+		}
+
+		// Convert to pointer for executeActionsList
+		actionPtr := &groupAction
+		err := r.executeActionsList(ctx, []*AutomationAction{actionPtr}, runContext)
+		if err != nil {
+			return fmt.Errorf("failed to execute group action %s: %w", groupAction.ActionType, err)
+		}
+	}
+
+	// Send only the last output file from the group
+	if len(runContext.LastOutputFiles) > 0 {
+		lastFile := runContext.LastOutputFiles[len(runContext.LastOutputFiles)-1]
+		if runContext.EventCh != nil {
+			select {
+			case runContext.EventCh <- RunEvent{
+				Type:           RunEventTypeOutputFile,
+				Timestamp:      time.Now(),
+				StepID:         runContext.StepID,
+				ActionID:       runContext.ActionID,
+				ActionName:     runContext.ActionName,
+				ParentActionID: runContext.ParentActionID,
+				StepName:       runContext.StepName,
+				ActionType:     "global:group",
+				OutputFile:     lastFile,
+				LoopIndex:      runContext.LoopIndex,
+				LocalLoopIndex: runContext.VariableContext.LocalLoopIndex,
+			}:
+			default:
+				// Channel is full, skip this event to avoid blocking
+			}
+		}
+		// Clear the buffer after sending
+		runContext.LastOutputFiles = make([]string, 0)
+	}
+
+	runContext.Logger.Info("Global group completed successfully")
+	return nil
+}
+
+// executeGlobalIfElse executes conditional logic with global actions
+func (r *Runner) executeGlobalIfElse(ctx context.Context, actionConfig map[string]any, runContext *RunContext) error {
+	// Parse if-else config
+	configBytes, err := json.Marshal(actionConfig)
+	if err != nil {
+		return fmt.Errorf("failed to marshal if-else config: %w", err)
+	}
+
+	var ifElseConfig GlobalIfElseConfig
+	if err := json.Unmarshal(configBytes, &ifElseConfig); err != nil {
+		return fmt.Errorf("failed to parse global if-else config: %w", err)
+	}
+
+	runContext.Logger.Info("Executing global if-else", "condition_type", ifElseConfig.ConditionType)
+
+	// Evaluate main condition
+	conditionMet, err := r.evaluateGlobalCondition(ctx, ifElseConfig.ConditionType, ifElseConfig.ConditionConfig, runContext)
+	if err != nil {
+		return fmt.Errorf("failed to evaluate main condition: %w", err)
+	}
+
+	var actionsToExecute []AutomationAction
+
+	if conditionMet {
+		runContext.Logger.Info("Main condition is true, executing if_actions")
+		actionsToExecute = ifElseConfig.IfActions
+	} else {
+		// Check else-if conditions
+		conditionMatched := false
+		for i, elseIfCondition := range ifElseConfig.ElseIfConditions {
+			elseIfConditionMet, err := r.evaluateGlobalCondition(ctx, elseIfCondition.ConditionType, elseIfCondition.ConditionConfig, runContext)
+			if err != nil {
+				runContext.Logger.Warn("Failed to evaluate else-if condition", "index", i, "error", err)
+				continue
+			}
+
+			if elseIfConditionMet {
+				runContext.Logger.Info("Else-if condition is true, executing actions", "index", i)
+				actionsToExecute = elseIfCondition.Actions
+				conditionMatched = true
+				break
+			}
+		}
+
+		// Execute else actions if no conditions matched
+		if !conditionMatched {
+			runContext.Logger.Info("All conditions failed, executing else_actions")
+			actionsToExecute = ifElseConfig.ElseActions
+		}
+	}
+
+	// Execute the selected actions
+	if len(actionsToExecute) > 0 {
+		actionPtrs := make([]*AutomationAction, len(actionsToExecute))
+		for i := range actionsToExecute {
+			actionPtrs[i] = &actionsToExecute[i]
+		}
+		err := r.executeActionsList(ctx, actionPtrs, runContext)
+		if err != nil {
+			return fmt.Errorf("failed to execute conditional actions: %w", err)
+		}
+	}
+
+	// Always execute final actions
+	if len(ifElseConfig.FinalActions) > 0 {
+		runContext.Logger.Info("Executing final actions")
+		finalActionPtrs := make([]*AutomationAction, len(ifElseConfig.FinalActions))
+		for i := range ifElseConfig.FinalActions {
+			finalActionPtrs[i] = &ifElseConfig.FinalActions[i]
+		}
+		err := r.executeActionsList(ctx, finalActionPtrs, runContext)
+		if err != nil {
+			return fmt.Errorf("failed to execute final actions: %w", err)
+		}
+	}
+
+	runContext.Logger.Info("Global if-else completed successfully")
+	return nil
+}
+
+// executeGlobalLoop executes a loop with global actions
+func (r *Runner) executeGlobalLoop(ctx context.Context, actionConfig map[string]any, runContext *RunContext) error {
+	// Parse loop config
+	configBytes, err := json.Marshal(actionConfig)
+	if err != nil {
+		return fmt.Errorf("failed to marshal loop config: %w", err)
+	}
+
+	var loopConfig GlobalLoopConfig
+	if err := json.Unmarshal(configBytes, &loopConfig); err != nil {
+		return fmt.Errorf("failed to parse global loop config: %w", err)
+	}
+
+	runContext.Logger.Info("Executing global loop", "condition_type", loopConfig.ConditionType, "max_loops", loopConfig.MaxLoops, "timeout_ms", loopConfig.TimeoutMs)
+
+	// Validate that at least one force stop condition is provided
+	if loopConfig.MaxLoops <= 0 && loopConfig.TimeoutMs <= 0 {
+		return fmt.Errorf("global:loop requires either max_loops or timeout_ms to prevent infinite loops")
+	}
+
+	// Initialize loop variables
+	loopCount := 0
+	loopStartTime := time.Now()
+	var timeoutDuration time.Duration
+	if loopConfig.TimeoutMs > 0 {
+		timeoutDuration = time.Duration(loopConfig.TimeoutMs) * time.Millisecond
+	}
+
+	for {
+		// Check for context cancellation
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("loop cancelled")
+		default:
+		}
+
+		loopCount++
+		runContext.Logger.Info("Global loop iteration", "count", loopCount)
+
+		// Set the local loop index in the variable context
+		runContext.VariableContext.LocalLoopIndex = loopCount
+
+		// Check loop condition if provided
+		if loopConfig.ConditionType != "" {
+			conditionMet, err := r.evaluateGlobalCondition(ctx, loopConfig.ConditionType, loopConfig.ConditionConfig, runContext)
+			if err != nil {
+				runContext.Logger.Warn("Failed to evaluate loop condition", "error", err)
+			} else if conditionMet {
+				runContext.Logger.Info("Loop condition met, exiting loop", "condition_type", loopConfig.ConditionType, "loops_completed", loopCount)
+				break
+			}
+		}
+
+		// Check force stop conditions
+		forceStop := false
+		forceStopReason := ""
+
+		if loopConfig.MaxLoops > 0 && loopCount >= loopConfig.MaxLoops {
+			forceStop = true
+			forceStopReason = fmt.Sprintf("reached maximum loops (%d)", loopConfig.MaxLoops)
+		}
+
+		if loopConfig.TimeoutMs > 0 && time.Since(loopStartTime) >= timeoutDuration {
+			forceStop = true
+			if forceStopReason != "" {
+				forceStopReason += " and "
+			}
+			forceStopReason += fmt.Sprintf("reached timeout (%dms)", loopConfig.TimeoutMs)
+		}
+
+		if forceStop {
+			message := fmt.Sprintf("Global loop force stopped: %s", forceStopReason)
+			if loopConfig.FailOnForceStop {
+				runContext.Logger.Error("Global loop force stopped", "reason", forceStopReason, "loops_completed", loopCount)
+				return fmt.Errorf(message)
+			} else {
+				runContext.Logger.Warn("Global loop force stopped", "reason", forceStopReason, "loops_completed", loopCount)
+				break
+			}
+		}
+
+		// Execute loop actions
+		if len(loopConfig.LoopActions) > 0 {
+			loopActionPtrs := make([]*AutomationAction, len(loopConfig.LoopActions))
+			for i := range loopConfig.LoopActions {
+				loopActionPtrs[i] = &loopConfig.LoopActions[i]
+			}
+			err := r.executeActionsList(ctx, loopActionPtrs, runContext)
+			if err != nil {
+				return fmt.Errorf("failed to execute loop actions in iteration %d: %w", loopCount, err)
+			}
+		}
+
+		// Small delay to prevent busy-waiting
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	runContext.Logger.Info("Global loop completed successfully", "total_loops", loopCount)
+	return nil
+}
+
+// evaluateGlobalCondition evaluates conditions for global actions
+func (r *Runner) evaluateGlobalCondition(ctx context.Context, conditionType string, conditionConfig map[string]interface{}, runContext *RunContext) (bool, error) {
+	// Handle loop index conditions directly
+	switch conditionType {
+	case "loop_index_is_even":
+		return runContext.VariableContext.LoopIndex%2 == 0, nil
+	case "loop_index_is_odd":
+		return runContext.VariableContext.LoopIndex%2 != 0, nil
+	case "loop_index_is_prime":
+		return isPrime(runContext.VariableContext.LoopIndex), nil
+	case "random":
+		probability := 0.5 // Default probability
+		if prob, ok := conditionConfig["probability"].(float64); ok {
+			probability = prob
+		}
+		return rand.Float64() < probability, nil
+	default:
+		// Handle plugin-defined conditions
+		pluginAction, err := GetAction(conditionType)
+		if err != nil {
+			return false, fmt.Errorf("unknown condition type: %s", conditionType)
+		}
+
+		// Resolve variables in condition config
+		resolvedConditionConfig, err := r.ResolveVariablesInConfig(conditionConfig, runContext.VariableContext, runContext.AutomationConfig)
+		if err != nil {
+			return false, fmt.Errorf("failed to resolve variables in condition config: %w", err)
+		}
+
+		return pluginAction.EvaluateCondition(ctx, resolvedConditionConfig, runContext)
+	}
 }
 
 // processAllEvents handles events from the shared event channel and updates the database periodically

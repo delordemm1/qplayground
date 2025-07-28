@@ -128,6 +128,10 @@ func (a *UploadAction) Execute(ctx context.Context, actionConfig map[string]inte
 	return nil
 }
 
+func (a *UploadAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *RunContext) (bool, error) {
+	return false, fmt.Errorf("r2:upload cannot be used as a condition")
+}
+
 // DeleteAction implements deleting files from R2
 type DeleteAction struct{}
 
@@ -153,6 +157,10 @@ func (a *DeleteAction) Execute(ctx context.Context, actionConfig map[string]inte
 	return nil
 }
 
+func (a *DeleteAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *RunContext) (bool, error) {
+	return false, fmt.Errorf("r2:delete cannot be used as a condition")
+}
+
 // ListAction implements listing files in R2 (placeholder for future implementation)
 type ListAction struct{}
 
@@ -169,4 +177,8 @@ func (a *ListAction) Execute(ctx context.Context, actionConfig map[string]interf
 	duration := time.Since(startTime)
 	sendR2SuccessEvent(runContext, "r2:list", fmt.Sprintf("Successfully listed R2 files with prefix: %s", prefix), duration)
 	return nil
+}
+
+func (a *ListAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *RunContext) (bool, error) {
+	return false, fmt.Errorf("r2:list cannot be used as a condition")
 }

@@ -34,6 +34,9 @@ import ApiLogConfig from "../components/ActionConfigs/ApiLogConfig.svelte";
 
 // List of supported action types
 export const actionTypes = [
+  "global:group",
+  "global:if_else", 
+  "global:loop",
   "playwright:goto",
   "playwright:click",
   "playwright:fill",
@@ -75,11 +78,24 @@ export const nestedActionTypes = actionTypes.filter(type =>
   type !== "playwright:loop_until" && 
   // type !== "playwright:if_else" && 
   // type !== "api:if_else" &&
-  type !== "api:runtime_loop_until"
+  type !== "api:runtime_loop_until" &&
+  type !== "global:group" // Prevent nested groups to avoid recursion
 );
+
+// List of condition types that can be used in global actions
+export const conditionTypes = [
+  "loop_index_is_even",
+  "loop_index_is_odd", 
+  "loop_index_is_prime",
+  "random",
+  "playwright:wait_for_selector", // Can check element visibility/state
+];
 
 // Map action types to their respective config components
 export const actionConfigComponents: Record<string, any> = {
+  "global:group": () => import("../components/ActionConfigs/GlobalGroupConfig.svelte"),
+  "global:if_else": () => import("../components/ActionConfigs/GlobalIfElseConfig.svelte"),
+  "global:loop": () => import("../components/ActionConfigs/GlobalLoopConfig.svelte"),
   "playwright:goto": PlaywrightGotoConfig,
   "playwright:click": PlaywrightClickConfig,
   "playwright:fill": PlaywrightFillConfig,
@@ -116,6 +132,11 @@ export const actionConfigComponents: Record<string, any> = {
   "api:log": ApiLogConfig,
 };
 
+// Map condition types to their respective config components
+export const conditionConfigComponents: Record<string, any> = {
+  "playwright:wait_for_selector": () => import("../components/ConditionConfigs/PlaywrightSelectorConditionConfig.svelte"),
+};
+
 // Validation function for action configurations
 export function validateActionConfig(
   actionType: string,
@@ -124,6 +145,82 @@ export function validateActionConfig(
   const errors: string[] = [];
 
   switch (actionType) {
+    case "global:group":
+      if (!config.actions || !Array.isArray(config.actions)) {
+        errors.push("Actions array is required for global:group");
+      } else if (config.actions.length === 0) {
+        errors.push("At least one action is required for global:group");
+      }
+      // Check for nested groups to prevent recursion
+      if (config.actions.some((action: any) => action.action_type === "global:group")) {
+        errors.push("Nested global:group actions are not allowed to prevent recursion");
+      }
+      break;
+    case "global:if_else":
+      if (!config.condition_type) errors.push("Condition type is required for global:if_else");
+      // Validate nested actions have action_type
+      if (config.if_actions) {
+        for (const action of config.if_actions) {
+          if (!action.action_type) {
+            errors.push("All IF actions must have an action type");
+            break;
+          }
+        }
+      }
+      if (config.else_if_conditions) {
+        for (const condition of config.else_if_conditions) {
+          if (!condition.condition_type) {
+            errors.push("All ELSE IF conditions must have a condition type");
+            break;
+          }
+          if (condition.actions) {
+            for (const action of condition.actions) {
+              if (!action.action_type) {
+                errors.push("All ELSE IF actions must have an action type");
+                break;
+              }
+            }
+          }
+        }
+      }
+      if (config.else_actions) {
+        for (const action of config.else_actions) {
+          if (!action.action_type) {
+            errors.push("All ELSE actions must have an action type");
+            break;
+          }
+        }
+      }
+      if (config.final_actions) {
+        for (const action of config.final_actions) {
+          if (!action.action_type) {
+            errors.push("All FINAL actions must have an action type");
+            break;
+          }
+        }
+      }
+      break;
+    case "global:loop":
+      // At least one force stop mechanism is required
+      if (!config.max_loops && !config.timeout_ms) {
+        errors.push("Either max loops or timeout must be specified to prevent infinite loops");
+      }
+      if (config.max_loops && config.max_loops <= 0) {
+        errors.push("Max loops must be a positive number");
+      }
+      if (config.timeout_ms && config.timeout_ms <= 0) {
+        errors.push("Timeout must be a positive number");
+      }
+      // Validate nested actions have action_type
+      if (config.loop_actions) {
+        for (const action of config.loop_actions) {
+          if (!action.action_type) {
+            errors.push("All loop actions must have an action type");
+            break;
+          }
+        }
+      }
+      break;
     case "playwright:goto":
       if (!config.url) errors.push("URL is required");
       break;

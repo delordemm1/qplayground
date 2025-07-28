@@ -177,6 +177,11 @@ func (a *GotoAction) Execute(ctx context.Context, actionConfig map[string]interf
 	return err
 }
 
+// EvaluateCondition evaluates conditions for Playwright actions
+func (a *GotoAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	return false, fmt.Errorf("playwright:goto cannot be used as a condition")
+}
+
 // ClickAction implements clicking on elements
 type ClickAction struct {
 	BaseAction
@@ -215,6 +220,10 @@ func (a *ClickAction) Execute(ctx context.Context, actionConfig map[string]inter
 	return nil
 }
 
+func (a *ClickAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	return false, fmt.Errorf("playwright:click cannot be used as a condition")
+}
+
 // FillAction implements filling input fields
 type FillAction struct {
 	BaseAction
@@ -248,6 +257,10 @@ func (a *FillAction) Execute(ctx context.Context, actionConfig map[string]interf
 
 	sendSuccessEvent(runContext, "playwright:fill", fmt.Sprintf("Successfully filled element %s with value", selector), duration)
 	return nil
+}
+
+func (a *FillAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	return false, fmt.Errorf("playwright:fill cannot be used as a condition")
 }
 
 // TypeAction implements typing text
@@ -285,6 +298,10 @@ func (a *TypeAction) Execute(ctx context.Context, actionConfig map[string]interf
 	return nil
 }
 
+func (a *TypeAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	return false, fmt.Errorf("playwright:type cannot be used as a condition")
+}
+
 // PressAction implements key presses
 type PressAction struct {
 	BaseAction
@@ -320,6 +337,10 @@ func (a *PressAction) Execute(ctx context.Context, actionConfig map[string]inter
 	return nil
 }
 
+func (a *PressAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	return false, fmt.Errorf("playwright:press cannot be used as a condition")
+}
+
 // CheckAction implements checking checkboxes
 type CheckAction struct {
 	BaseAction
@@ -351,6 +372,10 @@ func (a *CheckAction) Execute(ctx context.Context, actionConfig map[string]inter
 	return nil
 }
 
+func (a *CheckAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	return false, fmt.Errorf("playwright:check cannot be used as a condition")
+}
+
 // UncheckAction implements unchecking checkboxes
 type UncheckAction struct {
 	BaseAction
@@ -380,6 +405,10 @@ func (a *UncheckAction) Execute(ctx context.Context, actionConfig map[string]int
 
 	sendSuccessEvent(runContext, "playwright:uncheck", fmt.Sprintf("Successfully unchecked element %s", selector), duration)
 	return nil
+}
+
+func (a *UncheckAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	return false, fmt.Errorf("playwright:uncheck cannot be used as a condition")
 }
 
 // SelectOptionAction implements selecting options from dropdowns
@@ -429,6 +458,10 @@ func (a *SelectOptionAction) Execute(ctx context.Context, actionConfig map[strin
 	return nil
 }
 
+func (a *SelectOptionAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	return false, fmt.Errorf("playwright:select_option cannot be used as a condition")
+}
+
 // WaitForSelectorAction implements waiting for elements
 type WaitForSelectorAction struct {
 	BaseAction
@@ -464,6 +497,44 @@ func (a *WaitForSelectorAction) Execute(ctx context.Context, actionConfig map[st
 	return nil
 }
 
+// EvaluateCondition for WaitForSelectorAction - can be used to check element state
+func (a *WaitForSelectorAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	selector, ok := conditionConfig["selector"].(string)
+	if !ok || selector == "" {
+		return false, fmt.Errorf("selector is required for playwright:wait_for_selector condition")
+	}
+
+	state, _ := conditionConfig["state"].(string)
+	if state == "" {
+		state = "visible" // Default state
+	}
+
+	timeout, _ := conditionConfig["timeout"].(float64)
+	if timeout <= 0 {
+		timeout = 5000 // Default 5 seconds for condition evaluation
+	}
+
+	runContext.Logger.Debug("Evaluating playwright:wait_for_selector condition", "selector", selector, "state", state)
+
+	// Create a timeout context for the condition evaluation
+	conditionCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Millisecond)
+	defer cancel()
+
+	options := playwright.PageWaitForSelectorOptions{
+		Timeout: playwright.Float(timeout),
+	}
+	waitForState := playwright.WaitForSelectorState(state)
+	options.State = &waitForState
+
+	_, err := runContext.PlaywrightPage.WaitForSelector(selector, options)
+	if err != nil {
+		// If waiting failed, the condition is not met
+		return false, nil
+	}
+
+	return true, nil
+}
+
 // WaitForTimeoutAction implements waiting for a specific duration
 type WaitForTimeoutAction struct{}
 
@@ -481,6 +552,10 @@ func (a *WaitForTimeoutAction) Execute(ctx context.Context, actionConfig map[str
 
 	sendSuccessEvent(runContext, "playwright:wait_for_timeout", fmt.Sprintf("Successfully waited for %v ms", timeout), duration)
 	return nil
+}
+
+func (a *WaitForTimeoutAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	return false, fmt.Errorf("playwright:wait_for_timeout cannot be used as a condition")
 }
 
 // ScreenshotAction implements taking screenshots
@@ -517,41 +592,38 @@ func (a *ScreenshotAction) Execute(ctx context.Context, actionConfig map[string]
 		return fmt.Errorf("failed to take screenshot: %w", err)
 	}
 
-	// Check if we should upload to R2
-	uploadToR2, _ := actionConfig["upload_to_r2"].(bool)
-	if uploadToR2 {
-		r2Key, ok := actionConfig["r2_key"].(string)
-		if !ok || r2Key == "" {
-			errMsg := "playwright:screenshot with upload_to_r2 requires an 'r2_key' string in config"
-			sendErrorEvent(runContext, "playwright:screenshot", errMsg, duration)
-			return fmt.Errorf(errMsg)
+	// Always save screenshot to local storage
+	screenshotKey := fmt.Sprintf("%s/%s-%d.png", runContext.ScreenshotsR2Path, runContext.VariableContext.Timestamp, runContext.LoopIndex)
+	if r2Key, ok := actionConfig["r2_key"].(string); ok && r2Key != "" {
+		screenshotKey = fmt.Sprintf("%s/%s", runContext.ScreenshotsR2Path, r2Key)
+	}
+
+	// Determine content type
+	contentType := "image/png" // Default
+	if format, ok := actionConfig["format"].(string); ok {
+		switch format {
+		case "jpeg":
+			contentType = "image/jpeg"
+		case "png":
+			contentType = "image/png"
 		}
+	}
 
-		// Determine content type
-		contentType := "image/png" // Default
-		if format, ok := actionConfig["format"].(string); ok {
-			switch format {
-			case "jpeg":
-				contentType = "image/jpeg"
-			case "png":
-				contentType = "image/png"
-			}
-		}
+	// Upload to storage (local in CLI mode)
+	reader := bytes.NewReader(screenshotBytes)
+	publicURL, err := runContext.StorageService.UploadFile(ctx, screenshotKey, reader, contentType)
+	if err != nil {
+		sendErrorEvent(runContext, "playwright:screenshot", fmt.Sprintf("failed to save screenshot: %v", err), duration)
+		return fmt.Errorf("failed to save screenshot: %w", err)
+	}
 
-		// Upload to R2
-		reader := bytes.NewReader(screenshotBytes)
-		_, err := runContext.StorageService.UploadFile(ctx, r2Key, reader, contentType)
-		if err != nil {
-			sendErrorEvent(runContext, "playwright:screenshot", fmt.Sprintf("failed to upload screenshot to R2: %v", err), duration)
-			return fmt.Errorf("failed to upload screenshot to R2: %w", err)
-		}
+	runContext.Logger.Info("Screenshot saved", "key", screenshotKey, "size", len(screenshotBytes))
 
-		runContext.Logger.Info("Screenshot uploaded to R2", "key", r2Key, "size", len(screenshotBytes))
-
-		// Get the public URL for the uploaded screenshot
-		publicURL := runContext.StorageService.GetPublicURL(r2Key)
-
-		// Send output file event
+	// Add to output files buffer for group handling
+	if runContext.LastOutputFiles != nil {
+		runContext.LastOutputFiles = append(runContext.LastOutputFiles, publicURL)
+	} else {
+		// Send output file event directly if not in a group
 		if runContext.EventCh != nil {
 			select {
 			case runContext.EventCh <- automation.RunEvent{
@@ -572,13 +644,14 @@ func (a *ScreenshotAction) Execute(ctx context.Context, actionConfig map[string]
 				// Channel is full, skip this event to avoid blocking
 			}
 		}
-
-		sendSuccessEvent(runContext, "playwright:screenshot", fmt.Sprintf("Successfully took screenshot and uploaded to R2: %s", r2Key), duration)
-	} else {
-		sendSuccessEvent(runContext, "playwright:screenshot", "Successfully took screenshot", duration)
 	}
 
+	sendSuccessEvent(runContext, "playwright:screenshot", fmt.Sprintf("Successfully took screenshot: %s", screenshotKey), duration)
 	return nil
+}
+
+func (a *ScreenshotAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	return false, fmt.Errorf("playwright:screenshot cannot be used as a condition")
 }
 
 // EvaluateAction implements executing JavaScript
@@ -603,6 +676,10 @@ func (a *EvaluateAction) Execute(ctx context.Context, actionConfig map[string]in
 
 	sendSuccessEvent(runContext, "playwright:evaluate", "Successfully executed JavaScript expression", duration)
 	return nil
+}
+
+func (a *EvaluateAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	return false, fmt.Errorf("playwright:evaluate cannot be used as a condition")
 }
 
 // HoverAction implements hovering over elements
@@ -636,6 +713,10 @@ func (a *HoverAction) Execute(ctx context.Context, actionConfig map[string]inter
 	return nil
 }
 
+func (a *HoverAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	return false, fmt.Errorf("playwright:hover cannot be used as a condition")
+}
+
 // ScrollAction implements scrolling
 type ScrollAction struct{}
 
@@ -667,6 +748,10 @@ func (a *ScrollAction) Execute(ctx context.Context, actionConfig map[string]inte
 	return nil
 }
 
+func (a *ScrollAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	return false, fmt.Errorf("playwright:scroll cannot be used as a condition")
+}
+
 // GetTextAction implements getting text content
 type GetTextAction struct {
 	BaseAction
@@ -692,6 +777,10 @@ func (a *GetTextAction) Execute(ctx context.Context, actionConfig map[string]int
 	runContext.Logger.Info("Retrieved text", "selector", selector, "text", text)
 	sendSuccessEvent(runContext, "playwright:get_text", fmt.Sprintf("Successfully retrieved text from element %s", selector), duration)
 	return nil
+}
+
+func (a *GetTextAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	return false, fmt.Errorf("playwright:get_text cannot be used as a condition")
 }
 
 // GetAttributeAction implements getting element attributes
@@ -726,6 +815,10 @@ func (a *GetAttributeAction) Execute(ctx context.Context, actionConfig map[strin
 	return nil
 }
 
+func (a *GetAttributeAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	return false, fmt.Errorf("playwright:get_attribute cannot be used as a condition")
+}
+
 // WaitForLoadStateAction implements waiting for page load states
 type WaitForLoadStateAction struct{}
 
@@ -758,6 +851,10 @@ func (a *WaitForLoadStateAction) Execute(ctx context.Context, actionConfig map[s
 	return nil
 }
 
+func (a *WaitForLoadStateAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	return false, fmt.Errorf("playwright:wait_for_load_state cannot be used as a condition")
+}
+
 // SetViewportAction implements setting viewport size
 type SetViewportAction struct{}
 
@@ -784,6 +881,10 @@ func (a *SetViewportAction) Execute(ctx context.Context, actionConfig map[string
 	return nil
 }
 
+func (a *SetViewportAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	return false, fmt.Errorf("playwright:set_viewport cannot be used as a condition")
+}
+
 // ReloadAction implements page reload
 type ReloadAction struct{}
 
@@ -806,6 +907,10 @@ func (a *ReloadAction) Execute(ctx context.Context, actionConfig map[string]inte
 
 	sendSuccessEvent(runContext, "playwright:reload", "Successfully reloaded page", duration)
 	return nil
+}
+
+func (a *ReloadAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	return false, fmt.Errorf("playwright:reload cannot be used as a condition")
 }
 
 // GoBackAction implements browser back navigation
@@ -832,6 +937,10 @@ func (a *GoBackAction) Execute(ctx context.Context, actionConfig map[string]inte
 	return nil
 }
 
+func (a *GoBackAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	return false, fmt.Errorf("playwright:go_back cannot be used as a condition")
+}
+
 // GoForwardAction implements browser forward navigation
 type GoForwardAction struct{}
 
@@ -854,6 +963,10 @@ func (a *GoForwardAction) Execute(ctx context.Context, actionConfig map[string]i
 
 	sendSuccessEvent(runContext, "playwright:go_forward", "Successfully navigated forward", duration)
 	return nil
+}
+
+func (a *GoForwardAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	return false, fmt.Errorf("playwright:go_forward cannot be used as a condition")
 }
 
 // IfElseAction implements conditional logic with multiple else-if blocks
@@ -966,6 +1079,10 @@ func (a *IfElseAction) Execute(ctx context.Context, actionConfig map[string]any,
 
 	runContext.Logger.Info("No conditions met and no else actions defined")
 	return executionError
+}
+
+func (a *IfElseAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	return false, fmt.Errorf("playwright:if_else cannot be used as a condition")
 }
 
 func (a *IfElseAction) evaluateCondition(runContext *automation.RunContext, selector, conditionType string, actionConfig map[string]interface{}) (bool, error) {
@@ -1138,6 +1255,10 @@ func (a *LogAction) Execute(ctx context.Context, actionConfig map[string]interfa
 	}
 
 	return nil
+}
+
+func (a *LogAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	return false, fmt.Errorf("playwright:log cannot be used as a condition")
 }
 
 // LoopUntilAction implements looping until a condition is met or force stop
@@ -1336,6 +1457,10 @@ func (a *LoopUntilAction) Execute(ctx context.Context, actionConfig map[string]a
 
 	runContext.Logger.Info("Loop completed successfully", "total_loops", loopCount)
 	return executionError
+}
+
+func (a *LoopUntilAction) EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *automation.RunContext) (bool, error) {
+	return false, fmt.Errorf("playwright:loop_until cannot be used as a condition")
 }
 
 func (a *LoopUntilAction) evaluateCondition(runContext *automation.RunContext, selector, conditionType string) (bool, error) {

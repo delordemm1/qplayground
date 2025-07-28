@@ -72,3 +72,35 @@ type ExportedAutomationAction struct {
 	ActionConfig map[string]interface{} `json:"action_config"` // Direct map instead of JSON string
 	ActionOrder  int                    `json:"action_order"`
 }
+
+// ExportedGlobalGroupConfig represents a global group action configuration for export
+type ExportedGlobalGroupConfig struct {
+	Actions []ExportedAutomationAction `json:"actions"`
+}
+
+// ExportedElseIfCondition represents an else-if condition block for export
+type ExportedElseIfCondition struct {
+	ConditionType   string                     `json:"condition_type"`
+	ConditionConfig map[string]interface{}     `json:"condition_config"`
+	Actions         []ExportedAutomationAction `json:"actions"`
+}
+
+// ExportedGlobalIfElseConfig represents a global if-else action configuration for export
+type ExportedGlobalIfElseConfig struct {
+	ConditionType     string                        `json:"condition_type"`
+	ConditionConfig   map[string]interface{}        `json:"condition_config"`
+	IfActions         []ExportedAutomationAction    `json:"if_actions"`
+	ElseIfConditions  []ExportedElseIfCondition     `json:"else_if_conditions"`
+	ElseActions       []ExportedAutomationAction    `json:"else_actions"`
+	FinalActions      []ExportedAutomationAction    `json:"final_actions"`
+}
+
+// ExportedGlobalLoopConfig represents a global loop action configuration for export
+type ExportedGlobalLoopConfig struct {
+	ConditionType     string                     `json:"condition_type,omitempty"`
+	ConditionConfig   map[string]interface{}     `json:"condition_config,omitempty"`
+	MaxLoops          int                        `json:"max_loops,omitempty"`
+	TimeoutMs         int                        `json:"timeout_ms,omitempty"`
+	FailOnForceStop   bool                       `json:"fail_on_force_stop"`
+	LoopActions       []ExportedAutomationAction `json:"loop_actions"`
+}

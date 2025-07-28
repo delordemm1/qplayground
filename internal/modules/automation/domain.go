@@ -41,6 +41,35 @@ type RunEvent struct {
 	Data           map[string]interface{} `json:"data,omitempty"`
 }
 
+// Global action configuration structures
+type GlobalGroupConfig struct {
+	Actions []AutomationAction `json:"actions"`
+}
+
+type ElseIfCondition struct {
+	ConditionType   string                 `json:"condition_type"`
+	ConditionConfig map[string]interface{} `json:"condition_config"`
+	Actions         []AutomationAction     `json:"actions"`
+}
+
+type GlobalIfElseConfig struct {
+	ConditionType     string                 `json:"condition_type"`
+	ConditionConfig   map[string]interface{} `json:"condition_config"`
+	IfActions         []AutomationAction     `json:"if_actions"`
+	ElseIfConditions  []ElseIfCondition      `json:"else_if_conditions"`
+	ElseActions       []AutomationAction     `json:"else_actions"`
+	FinalActions      []AutomationAction     `json:"final_actions"`
+}
+
+type GlobalLoopConfig struct {
+	ConditionType     string                 `json:"condition_type"`
+	ConditionConfig   map[string]interface{} `json:"condition_config"`
+	MaxLoops          int                    `json:"max_loops"`
+	TimeoutMs         int                    `json:"timeout_ms"`
+	FailOnForceStop   bool                   `json:"fail_on_force_stop"`
+	LoopActions       []AutomationAction     `json:"loop_actions"`
+}
+
 // RunContext holds shared resources and state for a single automation run.
 // This will be passed to each plugin action.
 type RunContext struct {
@@ -58,6 +87,7 @@ type RunContext struct {
 	Runner            *Runner           // Reference to runner for variable resolution
 	VariableContext   *VariableContext  // Variable context for resolution
 	AutomationConfig  *AutomationConfig // Automation config for variable resolution
+	LastOutputFiles   []string          // Buffer for output files from nested actions
 }
 
 // PluginAction defines the interface for any executable action provided by a plugin.
@@ -66,6 +96,11 @@ type PluginAction interface {
 	// actionConfig: The specific configuration for this action (from automation_actions.action_config_json).
 	// runContext: Shared context for the entire automation run.
 	Execute(ctx context.Context, actionConfig map[string]interface{}, runContext *RunContext) error
+	
+	// EvaluateCondition evaluates a condition for this action type.
+	// conditionConfig: The specific configuration for the condition.
+	// runContext: Shared context for the entire automation run.
+	EvaluateCondition(ctx context.Context, conditionConfig map[string]interface{}, runContext *RunContext) (bool, error)
 }
 
 // ActionFactory is a function type that creates a new instance of a PluginAction.

@@ -466,7 +466,7 @@ func (s *automationService) assignNestedActionIDs(actionConfig map[string]interf
 	
 	for key, value := range actionConfig {
 		switch key {
-		case "if_actions", "else_actions", "final_actions", "loop_actions":
+		case "if_actions", "else_actions", "final_actions", "loop_actions", "actions":
 			if actions, ok := value.([]interface{}); ok {
 				updatedActions := make([]interface{}, len(actions))
 				for i, actionInterface := range actions {
