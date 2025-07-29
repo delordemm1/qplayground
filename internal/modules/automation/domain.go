@@ -53,21 +53,21 @@ type ElseIfCondition struct {
 }
 
 type GlobalIfElseConfig struct {
-	ConditionType     string                 `json:"condition_type"`
-	ConditionConfig   map[string]interface{} `json:"condition_config"`
-	IfActions         []AutomationAction     `json:"if_actions"`
-	ElseIfConditions  []ElseIfCondition      `json:"else_if_conditions"`
-	ElseActions       []AutomationAction     `json:"else_actions"`
-	FinalActions      []AutomationAction     `json:"final_actions"`
+	ConditionType    string                 `json:"condition_type"`
+	ConditionConfig  map[string]interface{} `json:"condition_config"`
+	IfActions        []AutomationAction     `json:"if_actions"`
+	ElseIfConditions []ElseIfCondition      `json:"else_if_conditions"`
+	ElseActions      []AutomationAction     `json:"else_actions"`
+	FinalActions     []AutomationAction     `json:"final_actions"`
 }
 
 type GlobalLoopConfig struct {
-	ConditionType     string                 `json:"condition_type"`
-	ConditionConfig   map[string]interface{} `json:"condition_config"`
-	MaxLoops          int                    `json:"max_loops"`
-	TimeoutMs         int                    `json:"timeout_ms"`
-	FailOnForceStop   bool                   `json:"fail_on_force_stop"`
-	LoopActions       []AutomationAction     `json:"loop_actions"`
+	ConditionType   string                 `json:"condition_type"`
+	ConditionConfig map[string]interface{} `json:"condition_config"`
+	MaxLoops        int                    `json:"max_loops"`
+	TimeoutMs       int                    `json:"timeout_ms"`
+	FailOnForceStop bool                   `json:"fail_on_force_stop"`
+	LoopActions     []AutomationAction     `json:"loop_actions"`
 }
 
 // RunContext holds shared resources and state for a single automation run.
@@ -88,6 +88,8 @@ type RunContext struct {
 	VariableContext   *VariableContext  // Variable context for resolution
 	AutomationConfig  *AutomationConfig // Automation config for variable resolution
 	LastOutputFiles   []string          // Buffer for output files from nested actions
+	ScreenshotsR2Path string            // Path to store screenshots in R2
+	ReportsR2Path     string            // Path to store reports in R2
 }
 
 // PluginAction defines the interface for any executable action provided by a plugin.
@@ -96,7 +98,7 @@ type PluginAction interface {
 	// actionConfig: The specific configuration for this action (from automation_actions.action_config_json).
 	// runContext: Shared context for the entire automation run.
 	Execute(ctx context.Context, actionConfig map[string]interface{}, runContext *RunContext) error
-	
+
 	// EvaluateCondition evaluates a condition for this action type.
 	// conditionConfig: The specific configuration for the condition.
 	// runContext: Shared context for the entire automation run.
@@ -189,15 +191,15 @@ type StepConfig struct {
 
 // Automation represents an automation workflow
 type Automation struct {
-	ID          string
-	ProjectID   string
-	ProjectName string
-	Name        string
+	ID             string
+	ProjectID      string
+	ProjectName    string
+	Name           string
 	AutomationSlug string
-	Description string
-	ConfigJSON  string // JSON string containing variables, run settings, templates
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	Description    string
+	ConfigJSON     string // JSON string containing variables, run settings, templates
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 // AutomationStep represents a step within an automation
@@ -225,18 +227,18 @@ type AutomationAction struct {
 
 // AutomationRun represents an execution of an automation
 type AutomationRun struct {
-	ID              string
-	AutomationID    string
-	Status          string // pending, running, completed, failed, cancelled
-	StartTime       *time.Time
-	EndTime         *time.Time
-	LogsJSON        string // JSON string containing execution logs
-	OutputFilesJSON string // JSON string containing file paths/URLs
+	ID                   string
+	AutomationID         string
+	Status               string // pending, running, completed, failed, cancelled
+	StartTime            *time.Time
+	EndTime              *time.Time
+	LogsJSON             string // JSON string containing execution logs
+	OutputFilesJSON      string // JSON string containing file paths/URLs
 	DetailedReportURL    string // URL to the detailed HTML report
 	UserJourneyReportURL string // URL to the user journey HTML report
-	ErrorMessage    string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	ErrorMessage         string
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }
 
 // RunProgressMessage represents a progress update for an automation run

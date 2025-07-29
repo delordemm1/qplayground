@@ -268,6 +268,14 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 		}
 	}
 
+	// Generate automation slug from name
+	automationSlug := strings.ToLower(strings.ReplaceAll(automation.Name, " ", "-"))
+	automationSlug = regexp.MustCompile(`[^a-z0-9-]`).ReplaceAllString(automationSlug, "")
+	automation.AutomationSlug = automationSlug
+	// Construct R2 paths
+	baseR2Path := fmt.Sprintf("%s/%s/run-%s", automation.ProjectID, automationSlug, run.ID)
+	screenshotsR2Path := fmt.Sprintf("%s/screenshots", baseR2Path)
+	reportsR2Path := fmt.Sprintf("%s/reports", baseR2Path)
 	// Create RunContext
 	runContext := &RunContext{
 		PlaywrightBrowser: browser,
@@ -280,6 +288,8 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 		VariableContext:   varContext,
 		AutomationConfig:  automationConfig,
 		LastOutputFiles:   make([]string, 0),
+		ScreenshotsR2Path: screenshotsR2Path,
+		ReportsR2Path:     reportsR2Path,
 	}
 
 	// Fetch and execute steps

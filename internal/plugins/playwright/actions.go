@@ -95,7 +95,7 @@ func sendSuccessEvent(runContext *automation.RunContext, actionType, message str
 			Type:           automation.RunEventTypeLog,
 			Timestamp:      time.Now(),
 			StepName:       runContext.StepName,
-			ActionName: runContext.ActionName,
+			ActionName:     runContext.ActionName,
 			StepID:         runContext.StepID,
 			ActionID:       runContext.ActionID,
 			ActionType:     actionType,
@@ -119,7 +119,7 @@ func sendErrorEvent(runContext *automation.RunContext, actionType, errorMsg stri
 			Type:           automation.RunEventTypeError,
 			Timestamp:      time.Now(),
 			StepName:       runContext.StepName,
-			ActionName: runContext.ActionName,
+			ActionName:     runContext.ActionName,
 			StepID:         runContext.StepID,
 			ActionID:       runContext.ActionID,
 			ActionType:     actionType,
@@ -519,7 +519,7 @@ func (a *WaitForSelectorAction) EvaluateCondition(ctx context.Context, condition
 	// Create a timeout context for the condition evaluation
 	conditionCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Millisecond)
 	defer cancel()
-
+	_ = conditionCtx
 	options := playwright.PageWaitForSelectorOptions{
 		Timeout: playwright.Float(timeout),
 	}
