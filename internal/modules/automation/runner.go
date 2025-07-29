@@ -372,7 +372,7 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 			return fmt.Errorf("failed to get actions for step %s: %w", step.Name, err)
 		}
 		// Execute step actions using the new helper function
-		err = r.executeActionsList(ctx, stepActions, runContext)
+		err = r.executeActionsList(ctx, stepActions, runContext, true)
 		if err != nil {
 			return fmt.Errorf("failed to execute actions for step %s: %w", step.Name, err)
 		}
@@ -382,8 +382,9 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 }
 
 // executeActionsList executes a list of automation actions, handling global action types
-func (r *Runner) executeActionsList(ctx context.Context, actions []*AutomationAction, runContext *RunContext) error {
+func (r *Runner) executeActionsList(ctx context.Context, actions []*AutomationAction, runContext *RunContext, processOutputFiles bool) error {
 	for _, action := range actions {
+		slog.Debug("Executing action", "action", action)
 		// Check for cancellation before each action
 		select {
 		case <-ctx.Done():
@@ -397,8 +398,10 @@ func (r *Runner) executeActionsList(ctx context.Context, actions []*AutomationAc
 			if jsonErr := json.Unmarshal([]byte(action.ActionConfigJSON), &actionConfigMap); jsonErr != nil {
 				return fmt.Errorf("failed to parse action config JSON for action %s: %w", action.ActionType, jsonErr)
 			}
+		} else if action.ActionConfig != nil {
+			actionConfigMap = action.ActionConfig
 		}
-
+		slog.Debug("Action config", "action_id", action.ID, "action_config", actionConfigMap)
 		// Resolve variables in action config
 		resolvedActionConfig, resolveErr := r.ResolveVariablesInConfig(actionConfigMap, runContext.VariableContext, runContext.AutomationConfig)
 		if resolveErr != nil {
@@ -433,6 +436,30 @@ func (r *Runner) executeActionsList(ctx context.Context, actions []*AutomationAc
 			if err != nil {
 				return fmt.Errorf("action '%s' failed: %w", action.ActionType, err)
 			}
+		}
+		if processOutputFiles && len(runContext.LastOutputFiles) > 0 {
+			lastFile := runContext.LastOutputFiles[len(runContext.LastOutputFiles)-1]
+			if runContext.EventCh != nil {
+				select {
+				case runContext.EventCh <- RunEvent{
+					Type:           RunEventTypeOutputFile,
+					Timestamp:      time.Now(),
+					StepID:         runContext.StepID,
+					ActionID:       action.ID,
+					ActionName:     action.Name,
+					ParentActionID: runContext.ParentActionID,
+					StepName:       runContext.StepName,
+					ActionType:     action.ActionType,
+					OutputFile:     lastFile,
+					LoopIndex:      runContext.LoopIndex,
+					LocalLoopIndex: runContext.VariableContext.LocalLoopIndex,
+				}:
+				default:
+					// Channel is full, skip this event to avoid blocking
+				}
+			}
+			// Clear the buffer after sending
+			runContext.LastOutputFiles = make([]string, 0)
 		}
 	}
 
@@ -473,19 +500,20 @@ func (r *Runner) executeGlobalGroup(ctx context.Context, actionConfig map[string
 	if err != nil {
 		return fmt.Errorf("failed to marshal group config: %w", err)
 	}
-
+	slog.Debug("Global group config", "config", configBytes)
 	var groupConfig GlobalGroupConfig
 	if err := json.Unmarshal(configBytes, &groupConfig); err != nil {
 		return fmt.Errorf("failed to parse global group config: %w", err)
 	}
 
-	runContext.Logger.Info("Executing global group", "actions_count", len(groupConfig.Actions))
+	runContext.Logger.Info("Executing global group", "actions_count", len(groupConfig.Actions), "actions", groupConfig.Actions)
 
 	// Clear the output files buffer
 	runContext.LastOutputFiles = make([]string, 0)
 
 	// Execute all actions in the group
 	for _, groupAction := range groupConfig.Actions {
+		slog.Debug("Executing global group action", "action", groupAction)
 		// Skip nested group actions to prevent infinite recursion
 		if groupAction.ActionType == "global:group" {
 			runContext.Logger.Warn("Skipping nested global:group action to prevent recursion")
@@ -493,38 +521,44 @@ func (r *Runner) executeGlobalGroup(ctx context.Context, actionConfig map[string
 		}
 
 		// Convert to pointer for executeActionsList
-		actionPtr := &groupAction
-		err := r.executeActionsList(ctx, []*AutomationAction{actionPtr}, runContext)
+		// actionPtr := &groupAction
+		err := r.executeActionsList(ctx, []*AutomationAction{{
+			ActionType: groupAction.ActionType,
+			ID:         groupAction.ID, StepID: groupAction.StepID, Name: groupAction.Name,
+			ActionConfig:     groupAction.ActionConfig,
+			ActionConfigJSON: "",
+			ActionOrder:      groupAction.ActionOrder,
+		}}, runContext, false)
 		if err != nil {
 			return fmt.Errorf("failed to execute group action %s: %w", groupAction.ActionType, err)
 		}
 	}
 
 	// Send only the last output file from the group
-	if len(runContext.LastOutputFiles) > 0 {
-		lastFile := runContext.LastOutputFiles[len(runContext.LastOutputFiles)-1]
-		if runContext.EventCh != nil {
-			select {
-			case runContext.EventCh <- RunEvent{
-				Type:           RunEventTypeOutputFile,
-				Timestamp:      time.Now(),
-				StepID:         runContext.StepID,
-				ActionID:       runContext.ActionID,
-				ActionName:     runContext.ActionName,
-				ParentActionID: runContext.ParentActionID,
-				StepName:       runContext.StepName,
-				ActionType:     "global:group",
-				OutputFile:     lastFile,
-				LoopIndex:      runContext.LoopIndex,
-				LocalLoopIndex: runContext.VariableContext.LocalLoopIndex,
-			}:
-			default:
-				// Channel is full, skip this event to avoid blocking
-			}
-		}
-		// Clear the buffer after sending
-		runContext.LastOutputFiles = make([]string, 0)
-	}
+	// if len(runContext.LastOutputFiles) > 0 {
+	// 	lastFile := runContext.LastOutputFiles[len(runContext.LastOutputFiles)-1]
+	// 	if runContext.EventCh != nil {
+	// 		select {
+	// 		case runContext.EventCh <- RunEvent{
+	// 			Type:           RunEventTypeOutputFile,
+	// 			Timestamp:      time.Now(),
+	// 			StepID:         runContext.StepID,
+	// 			ActionID:       runContext.ActionID,
+	// 			ActionName:     runContext.ActionName,
+	// 			ParentActionID: runContext.ParentActionID,
+	// 			StepName:       runContext.StepName,
+	// 			ActionType:     "global:group",
+	// 			OutputFile:     lastFile,
+	// 			LoopIndex:      runContext.LoopIndex,
+	// 			LocalLoopIndex: runContext.VariableContext.LocalLoopIndex,
+	// 		}:
+	// 		default:
+	// 			// Channel is full, skip this event to avoid blocking
+	// 		}
+	// 	}
+	// 	// Clear the buffer after sending
+	// 	runContext.LastOutputFiles = make([]string, 0)
+	// }
 
 	runContext.Logger.Info("Global group completed successfully")
 	return nil
@@ -587,7 +621,7 @@ func (r *Runner) executeGlobalIfElse(ctx context.Context, actionConfig map[strin
 		for i := range actionsToExecute {
 			actionPtrs[i] = &actionsToExecute[i]
 		}
-		err := r.executeActionsList(ctx, actionPtrs, runContext)
+		err := r.executeActionsList(ctx, actionPtrs, runContext, false)
 		if err != nil {
 			return fmt.Errorf("failed to execute conditional actions: %w", err)
 		}
@@ -600,7 +634,7 @@ func (r *Runner) executeGlobalIfElse(ctx context.Context, actionConfig map[strin
 		for i := range ifElseConfig.FinalActions {
 			finalActionPtrs[i] = &ifElseConfig.FinalActions[i]
 		}
-		err := r.executeActionsList(ctx, finalActionPtrs, runContext)
+		err := r.executeActionsList(ctx, finalActionPtrs, runContext, false)
 		if err != nil {
 			return fmt.Errorf("failed to execute final actions: %w", err)
 		}
@@ -695,9 +729,25 @@ func (r *Runner) executeGlobalLoop(ctx context.Context, actionConfig map[string]
 		if len(loopConfig.LoopActions) > 0 {
 			loopActionPtrs := make([]*AutomationAction, len(loopConfig.LoopActions))
 			for i := range loopConfig.LoopActions {
-				loopActionPtrs[i] = &loopConfig.LoopActions[i]
+				// loopActionPtrs[i] = &loopConfig.LoopActions[i]
+				loopActionPtrs[i] = &AutomationAction{
+					ActionType:       loopConfig.LoopActions[i].ActionType,
+					ID:               loopConfig.LoopActions[i].ID,
+					StepID:           loopConfig.LoopActions[i].StepID,
+					Name:             loopConfig.LoopActions[i].Name,
+					ActionConfig:     loopConfig.LoopActions[i].ActionConfig,
+					ActionConfigJSON: "",
+					ActionOrder:      loopConfig.LoopActions[i].ActionOrder,
+				}
 			}
-			err := r.executeActionsList(ctx, loopActionPtrs, runContext)
+			// err := r.executeActionsList(ctx, []*AutomationAction{{
+			// 	ActionType: groupAction.ActionType,
+			// 	ID:         groupAction.ID, StepID: groupAction.StepID, Name: groupAction.Name,
+			// 	ActionConfig:     groupAction.ActionConfig,
+			// 	ActionConfigJSON: "",
+			// 	ActionOrder:      groupAction.ActionOrder,
+			// }}, runContext, false)
+			err := r.executeActionsList(ctx, loopActionPtrs, runContext, false)
 			if err != nil {
 				return fmt.Errorf("failed to execute loop actions in iteration %d: %w", loopCount, err)
 			}

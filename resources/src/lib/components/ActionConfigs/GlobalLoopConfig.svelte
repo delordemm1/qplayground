@@ -11,8 +11,8 @@
   };
 
   type GlobalLoopConfig = {
-    condition_type?: string;
-    condition_config?: Record<string, any>;
+    condition_type: string;
+    condition_config: Record<string, any>;
     max_loops?: number;
     timeout_ms?: number;
     fail_on_force_stop?: boolean;

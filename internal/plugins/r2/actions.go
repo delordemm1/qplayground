@@ -108,21 +108,21 @@ func (a *UploadAction) Execute(ctx context.Context, actionConfig map[string]inte
 	runContext.Logger.Info("File uploaded to R2", "key", key, "url", publicURL)
 
 	// Send output file event
-	if runContext.EventCh != nil {
-		select {
-		case runContext.EventCh <- automation.RunEvent{
-			Type:       automation.RunEventTypeOutputFile,
-			Timestamp:  time.Now(),
-			StepName:   runContext.StepName,
-			ActionType: "r2:upload",
-			OutputFile: publicURL,
-			Duration:   duration.Milliseconds(),
-			LoopIndex:  runContext.LoopIndex,
-		}:
-		default:
-			// Channel is full, skip this event to avoid blocking
-		}
-	}
+	// if runContext.EventCh != nil {
+	// 	select {
+	// 	case runContext.EventCh <- automation.RunEvent{
+	// 		Type:       automation.RunEventTypeOutputFile,
+	// 		Timestamp:  time.Now(),
+	// 		StepName:   runContext.StepName,
+	// 		ActionType: "r2:upload",
+	// 		OutputFile: publicURL,
+	// 		Duration:   duration.Milliseconds(),
+	// 		LoopIndex:  runContext.LoopIndex,
+	// 	}:
+	// 	default:
+	// 		// Channel is full, skip this event to avoid blocking
+	// 	}
+	// }
 
 	sendR2SuccessEvent(runContext, "r2:upload", fmt.Sprintf("Successfully uploaded file to R2: %s", key), duration)
 	return nil

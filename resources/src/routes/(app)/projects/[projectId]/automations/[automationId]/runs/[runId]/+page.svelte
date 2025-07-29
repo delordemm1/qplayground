@@ -931,158 +931,158 @@
     }
   }
 
-  function exportToHTML() {
-    try {
-      // Get the current page content
-      const reportContent =
-        document.querySelector(".report-container")?.innerHTML || "";
+//   function exportToHTML() {
+//     try {
+//       // Get the current page content
+//       const reportContent =
+//         document.querySelector(".report-container")?.innerHTML || "";
 
-      // Create a complete HTML document
-      const htmlContent = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Automation Report - ${automation.Name}</title>
-    <style>
-        /* Tailwind CSS Reset and Base Styles */
-        *, ::before, ::after { box-sizing: border-box; border-width: 0; border-style: solid; border-color: #e5e7eb; }
-        html { line-height: 1.5; -webkit-text-size-adjust: 100%; -moz-tab-tab-size: 4; tab-size: 4; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif; }
-        body { margin: 0; line-height: inherit; }
+//       // Create a complete HTML document
+//       const htmlContent = `
+// <!DOCTYPE html>
+// <html lang="en">
+// <head>
+//     <meta charset="UTF-8">
+//     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+//     <title>Automation Report - ${automation.Name}</title>
+//     <style>
+//         /* Tailwind CSS Reset and Base Styles */
+//         *, ::before, ::after { box-sizing: border-box; border-width: 0; border-style: solid; border-color: #e5e7eb; }
+//         html { line-height: 1.5; -webkit-text-size-adjust: 100%; -moz-tab-tab-size: 4; tab-size: 4; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif; }
+//         body { margin: 0; line-height: inherit; }
         
-        /* Utility Classes */
-        .px-4 { padding-left: 1rem; padding-right: 1rem; }
-        .py-6 { padding-top: 1.5rem; padding-bottom: 1.5rem; }
-        .mb-6 { margin-bottom: 1.5rem; }
-        .mb-4 { margin-bottom: 1rem; }
-        .text-2xl { font-size: 1.5rem; line-height: 2rem; }
-        .text-lg { font-size: 1.125rem; line-height: 1.75rem; }
-        .text-sm { font-size: 0.875rem; line-height: 1.25rem; }
-        .text-xs { font-size: 0.75rem; line-height: 1rem; }
-        .font-bold { font-weight: 700; }
-        .font-semibold { font-weight: 600; }
-        .font-medium { font-weight: 500; }
-        .text-gray-900 { color: rgb(17 24 39); }
-        .text-gray-700 { color: rgb(55 65 81); }
-        .text-gray-600 { color: rgb(75 85 99); }
-        .text-gray-500 { color: rgb(107 114 128); }
-        .bg-white { background-color: rgb(255 255 255); }
-        .bg-gray-50 { background-color: rgb(249 250 251); }
-        .bg-green-100 { background-color: rgb(220 252 231); }
-        .bg-red-100 { background-color: rgb(254 226 226); }
-        .bg-blue-100 { background-color: rgb(219 234 254); }
-        .bg-yellow-100 { background-color: rgb(254 249 195); }
-        .text-green-800 { color: rgb(22 101 52); }
-        .text-red-800 { color: rgb(153 27 27); }
-        .text-blue-800 { color: rgb(30 64 175); }
-        .text-yellow-800 { color: rgb(146 64 14); }
-        .shadow { box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1); }
-        .rounded-lg { border-radius: 0.5rem; }
-        .rounded-md { border-radius: 0.375rem; }
-        .rounded-full { border-radius: 9999px; }
-        .border { border-width: 1px; }
-        .border-gray-200 { border-color: rgb(229 231 235); }
-        .p-6 { padding: 1.5rem; }
-        .p-4 { padding: 1rem; }
-        .px-6 { padding-left: 1.5rem; padding-right: 1.5rem; }
-        .py-4 { padding-top: 1rem; padding-bottom: 1rem; }
-        .px-2\\.5 { padding-left: 0.625rem; padding-right: 0.625rem; }
-        .py-0\\.5 { padding-top: 0.125rem; padding-bottom: 0.125rem; }
-        .space-y-4 > :not([hidden]) ~ :not([hidden]) { margin-top: 1rem; }
-        .space-y-6 > :not([hidden]) ~ :not([hidden]) { margin-top: 1.5rem; }
-        .grid { display: grid; }
-        .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
-        .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        .grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-        .gap-4 { gap: 1rem; }
-        .gap-6 { gap: 1.5rem; }
-        .flex { display: flex; }
-        .items-center { align-items: center; }
-        .justify-between { justify-content: space-between; }
-        .space-x-3 > :not([hidden]) ~ :not([hidden]) { margin-left: 0.75rem; }
-        .space-x-4 > :not([hidden]) ~ :not([hidden]) { margin-left: 1rem; }
-        .inline-flex { display: inline-flex; }
-        .mt-1 { margin-top: 0.25rem; }
-        .mt-2 { margin-top: 0.5rem; }
-        .overflow-hidden { overflow: hidden; }
-        .cursor-pointer { cursor: pointer; }
-        .hover\\:bg-gray-50:hover { background-color: rgb(249 250 251); }
-        .transition-colors { transition-property: color, background-color, border-color, text-decoration-color, fill, stroke; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); transition-duration: 150ms; }
+//         /* Utility Classes */
+//         .px-4 { padding-left: 1rem; padding-right: 1rem; }
+//         .py-6 { padding-top: 1.5rem; padding-bottom: 1.5rem; }
+//         .mb-6 { margin-bottom: 1.5rem; }
+//         .mb-4 { margin-bottom: 1rem; }
+//         .text-2xl { font-size: 1.5rem; line-height: 2rem; }
+//         .text-lg { font-size: 1.125rem; line-height: 1.75rem; }
+//         .text-sm { font-size: 0.875rem; line-height: 1.25rem; }
+//         .text-xs { font-size: 0.75rem; line-height: 1rem; }
+//         .font-bold { font-weight: 700; }
+//         .font-semibold { font-weight: 600; }
+//         .font-medium { font-weight: 500; }
+//         .text-gray-900 { color: rgb(17 24 39); }
+//         .text-gray-700 { color: rgb(55 65 81); }
+//         .text-gray-600 { color: rgb(75 85 99); }
+//         .text-gray-500 { color: rgb(107 114 128); }
+//         .bg-white { background-color: rgb(255 255 255); }
+//         .bg-gray-50 { background-color: rgb(249 250 251); }
+//         .bg-green-100 { background-color: rgb(220 252 231); }
+//         .bg-red-100 { background-color: rgb(254 226 226); }
+//         .bg-blue-100 { background-color: rgb(219 234 254); }
+//         .bg-yellow-100 { background-color: rgb(254 249 195); }
+//         .text-green-800 { color: rgb(22 101 52); }
+//         .text-red-800 { color: rgb(153 27 27); }
+//         .text-blue-800 { color: rgb(30 64 175); }
+//         .text-yellow-800 { color: rgb(146 64 14); }
+//         .shadow { box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1); }
+//         .rounded-lg { border-radius: 0.5rem; }
+//         .rounded-md { border-radius: 0.375rem; }
+//         .rounded-full { border-radius: 9999px; }
+//         .border { border-width: 1px; }
+//         .border-gray-200 { border-color: rgb(229 231 235); }
+//         .p-6 { padding: 1.5rem; }
+//         .p-4 { padding: 1rem; }
+//         .px-6 { padding-left: 1.5rem; padding-right: 1.5rem; }
+//         .py-4 { padding-top: 1rem; padding-bottom: 1rem; }
+//         .px-2\\.5 { padding-left: 0.625rem; padding-right: 0.625rem; }
+//         .py-0\\.5 { padding-top: 0.125rem; padding-bottom: 0.125rem; }
+//         .space-y-4 > :not([hidden]) ~ :not([hidden]) { margin-top: 1rem; }
+//         .space-y-6 > :not([hidden]) ~ :not([hidden]) { margin-top: 1.5rem; }
+//         .grid { display: grid; }
+//         .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+//         .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+//         .grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+//         .gap-4 { gap: 1rem; }
+//         .gap-6 { gap: 1.5rem; }
+//         .flex { display: flex; }
+//         .items-center { align-items: center; }
+//         .justify-between { justify-content: space-between; }
+//         .space-x-3 > :not([hidden]) ~ :not([hidden]) { margin-left: 0.75rem; }
+//         .space-x-4 > :not([hidden]) ~ :not([hidden]) { margin-left: 1rem; }
+//         .inline-flex { display: inline-flex; }
+//         .mt-1 { margin-top: 0.25rem; }
+//         .mt-2 { margin-top: 0.5rem; }
+//         .overflow-hidden { overflow: hidden; }
+//         .cursor-pointer { cursor: pointer; }
+//         .hover\\:bg-gray-50:hover { background-color: rgb(249 250 251); }
+//         .transition-colors { transition-property: color, background-color, border-color, text-decoration-color, fill, stroke; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); transition-duration: 150ms; }
         
-        @media (min-width: 640px) {
-            .sm\\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        }
-        @media (min-width: 1024px) {
-            .lg\\:grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-        }
+//         @media (min-width: 640px) {
+//             .sm\\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+//         }
+//         @media (min-width: 1024px) {
+//             .lg\\:grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+//         }
         
-        /* Custom styles for report */
-        .report-container { max-width: 1200px; margin: 0 auto; }
-        .step-files-button { 
-            background: none; 
-            border: none; 
-            color: rgb(59 130 246); 
-            text-decoration: underline; 
-            cursor: pointer; 
-            font-size: 0.875rem;
-        }
-        .step-files-button:hover { color: rgb(37 99 235); }
-    </style>
-</head>
-<body>
-    <div class="report-container px-4 py-6">
-        <div class="mb-6">
-            <h1 class="text-2xl font-bold text-gray-900 mb-2">
-                Automation Report - ${automation.Name}
-            </h1>
-            <p class="text-sm text-gray-600">
-                Run ID: ${run.ID} | Project: ${project.Name}
-            </p>
-            <p class="text-sm text-gray-500">
-                Generated: ${new Date().toLocaleString()}
-            </p>
-        </div>
+//         /* Custom styles for report */
+//         .report-container { max-width: 1200px; margin: 0 auto; }
+//         .step-files-button { 
+//             background: none; 
+//             border: none; 
+//             color: rgb(59 130 246); 
+//             text-decoration: underline; 
+//             cursor: pointer; 
+//             font-size: 0.875rem;
+//         }
+//         .step-files-button:hover { color: rgb(37 99 235); }
+//     </style>
+// </head>
+// <body>
+//     <div class="report-container px-4 py-6">
+//         <div class="mb-6">
+//             <h1 class="text-2xl font-bold text-gray-900 mb-2">
+//                 Automation Report - ${automation.Name}
+//             </h1>
+//             <p class="text-sm text-gray-600">
+//                 Run ID: ${run.ID} | Project: ${project.Name}
+//             </p>
+//             <p class="text-sm text-gray-500">
+//                 Generated: ${new Date().toLocaleString()}
+//             </p>
+//         </div>
         
-        ${reportContent}
-    </div>
-</body>
-</html>`;
+//         ${reportContent}
+//     </div>
+// </body>
+// </html>`;
 
-      // Create and download the HTML file
-      const blob = new Blob([htmlContent], {
-        type: "text/html;charset=utf-8;",
-      });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = `automation_report_${runId}.html`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+//       // Create and download the HTML file
+//       const blob = new Blob([htmlContent], {
+//         type: "text/html;charset=utf-8;",
+//       });
+//       const link = document.createElement("a");
+//       link.href = URL.createObjectURL(blob);
+//       link.download = `automation_report_${runId}.html`;
+//       document.body.appendChild(link);
+//       link.click();
+//       document.body.removeChild(link);
 
-      showSuccessToast("Report exported to HTML successfully");
-    } catch (error) {
-      console.error("Failed to export HTML:", error);
-      showErrorToast("Failed to export HTML report");
-    }
-  }
-  function downloadDetailedReport() {
-    if (run.DetailedReportURL) {
-      window.open(run.DetailedReportURL, "_blank");
-      showSuccessToast("Opening detailed report...");
-    } else {
-      showErrorToast("Detailed report not available");
-    }
-  }
+//       showSuccessToast("Report exported to HTML successfully");
+//     } catch (error) {
+//       console.error("Failed to export HTML:", error);
+//       showErrorToast("Failed to export HTML report");
+//     }
+//   }
+  // function downloadDetailedReport() {
+  //   if (run.DetailedReportURL) {
+  //     window.open(run.DetailedReportURL, "_blank");
+  //     showSuccessToast("Opening detailed report...");
+  //   } else {
+  //     showErrorToast("Detailed report not available");
+  //   }
+  // }
 
-  function downloadUserJourneyReport() {
-    if (run.UserJourneyReportURL) {
-      window.open(run.UserJourneyReportURL, "_blank");
-      showSuccessToast("Opening user journey report...");
-    } else {
-      showErrorToast("User journey report not available");
-    }
-  }
+  // function downloadUserJourneyReport() {
+  //   if (run.UserJourneyReportURL) {
+  //     window.open(run.UserJourneyReportURL, "_blank");
+  //     showSuccessToast("Opening user journey report...");
+  //   } else {
+  //     showErrorToast("User journey report not available");
+  //   }
+  // }
 
   // Auto-scroll logs to bottom when new entries are added
   $effect(() => {
@@ -1178,17 +1178,17 @@
         </svg>
         Export HTML
       </button> -->
-      <div class="relative">
+      <!-- <div class="relative"> -->
       <!-- HTML Report Download Dropdown -->
-      <button
+      <!-- <button
         id="html-download-dropdown"
         class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
       >
         <TableColumnOutline class="-ml-1 mr-2 h-5 w-5" />
         Export HTML
         <CaretDownOutline class="ml-2 h-4 w-4" />
-      </button>
-      <Dropdown class="inline-flex" triggeredBy="#html-download-dropdown">
+      </button> -->
+      <!-- <Dropdown class="inline-flex" triggeredBy="#html-download-dropdown">
         <DropdownItem
           onclick={downloadDetailedReport}
           disabled={!run.DetailedReportURL}
@@ -1201,8 +1201,8 @@
         >
           User Journey Report
         </DropdownItem>
-      </Dropdown>
-      </div>
+      </Dropdown> -->
+      <!-- </div> -->
       <a
         href="/projects/{projectId}/automations/{automationId}/runs"
         class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"

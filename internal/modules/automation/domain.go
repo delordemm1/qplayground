@@ -43,7 +43,7 @@ type RunEvent struct {
 
 // Global action configuration structures
 type GlobalGroupConfig struct {
-	Actions []AutomationAction `json:"actions"`
+	Actions []GroupAutomationAction `json:"actions"`
 }
 
 type ElseIfCondition struct {
@@ -62,12 +62,12 @@ type GlobalIfElseConfig struct {
 }
 
 type GlobalLoopConfig struct {
-	ConditionType   string                 `json:"condition_type"`
-	ConditionConfig map[string]interface{} `json:"condition_config"`
-	MaxLoops        int                    `json:"max_loops"`
-	TimeoutMs       int                    `json:"timeout_ms"`
-	FailOnForceStop bool                   `json:"fail_on_force_stop"`
-	LoopActions     []AutomationAction     `json:"loop_actions"`
+	ConditionType   string                  `json:"condition_type"`
+	ConditionConfig map[string]interface{}  `json:"condition_config"`
+	MaxLoops        int                     `json:"max_loops"`
+	TimeoutMs       int                     `json:"timeout_ms"`
+	FailOnForceStop bool                    `json:"fail_on_force_stop"`
+	LoopActions     []GroupAutomationAction `json:"loop_actions"`
 }
 
 // RunContext holds shared resources and state for a single automation run.
@@ -220,9 +220,18 @@ type AutomationAction struct {
 	Name             string // Optional human-readable name for the action
 	ActionType       string // e.g., "playwright:goto", "playwright:click"
 	ActionConfigJSON string // JSON string containing action-specific parameters
+	ActionConfig     map[string]any
 	ActionOrder      int
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
+}
+type GroupAutomationAction struct {
+	ID           string         `json:"id"`
+	StepID       string         `json:"step_id"`
+	Name         string         `json:"name"`          // Optional human-readable name for the action
+	ActionType   string         `json:"action_type"`   // e.g., "playwright:goto", "playwright:click"
+	ActionConfig map[string]any `json:"action_config"` // JSON string containing action-specific parameters
+	ActionOrder  int            `json:"action_order"`
 }
 
 // AutomationRun represents an execution of an automation

@@ -525,7 +525,7 @@ func processReportData(logs []map[string]any, outputFiles []string) ReportData {
 		stepName := getString(log, "step_name")
 		actionID := getString(log, "action_id")
 		actionType := getString(log, "action_type")
-		actionName := getString(log, "action_name")
+		actionName := getString(log, "name")
 		status := getString(log, "status")
 		duration := getNumber(log, "duration_ms")
 		errorMsg := getString(log, "error")
@@ -689,6 +689,7 @@ func groupReportsByUser(logs []map[string]any, outputFiles []string) map[int][]U
 		loopIndex := int(getNumber(log, "loop_index"))
 		stepName := getString(log, "step_name")
 		actionType := getString(log, "action_type")
+		actionName := getString(log, "action_name")
 		status := getString(log, "status")
 		errorMsg := getString(log, "error")
 		outputFile := getString(log, "output_file")
@@ -702,7 +703,7 @@ func groupReportsByUser(logs []map[string]any, outputFiles []string) map[int][]U
 			UserID:     loopIndex,
 			Email:      fmt.Sprintf("user%d@test.com", loopIndex),
 			Feature:    stepName,
-			Scenario:   actionType,
+			Scenario:   fmt.Sprintf("%s (%s)", actionName, actionType),
 			Status:     status,
 			Screenshot: outputFile,
 			Error:      errorMsg,

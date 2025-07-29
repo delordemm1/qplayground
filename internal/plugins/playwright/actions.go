@@ -619,32 +619,33 @@ func (a *ScreenshotAction) Execute(ctx context.Context, actionConfig map[string]
 
 	runContext.Logger.Info("Screenshot saved", "key", screenshotKey, "size", len(screenshotBytes))
 
-	// Add to output files buffer for group handling
-	if runContext.LastOutputFiles != nil {
-		runContext.LastOutputFiles = append(runContext.LastOutputFiles, publicURL)
-	} else {
-		// Send output file event directly if not in a group
-		if runContext.EventCh != nil {
-			select {
-			case runContext.EventCh <- automation.RunEvent{
-				Type:           automation.RunEventTypeOutputFile,
-				Timestamp:      time.Now(),
-				StepID:         runContext.StepID,
-				ActionID:       runContext.ActionID,
-				ActionName:     runContext.ActionName,
-				ParentActionID: runContext.ParentActionID,
-				StepName:       runContext.StepName,
-				ActionType:     "playwright:screenshot",
-				OutputFile:     publicURL,
-				Duration:       duration.Milliseconds(),
-				LoopIndex:      runContext.LoopIndex,
-				LocalLoopIndex: runContext.VariableContext.LocalLoopIndex,
-			}:
-			default:
-				// Channel is full, skip this event to avoid blocking
-			}
-		}
-	}
+	runContext.LastOutputFiles = append(runContext.LastOutputFiles, publicURL)
+	// // Add to output files buffer for group handling
+	// if runContext.LastOutputFiles != nil {
+	// 	runContext.LastOutputFiles = append(runContext.LastOutputFiles, publicURL)
+	// } else {
+	// 	// Send output file event directly if not in a group
+	// 	if runContext.EventCh != nil {
+	// 		select {
+	// 		case runContext.EventCh <- automation.RunEvent{
+	// 			Type:           automation.RunEventTypeOutputFile,
+	// 			Timestamp:      time.Now(),
+	// 			StepID:         runContext.StepID,
+	// 			ActionID:       runContext.ActionID,
+	// 			ActionName:     runContext.ActionName,
+	// 			ParentActionID: runContext.ParentActionID,
+	// 			StepName:       runContext.StepName,
+	// 			ActionType:     "playwright:screenshot",
+	// 			OutputFile:     publicURL,
+	// 			Duration:       duration.Milliseconds(),
+	// 			LoopIndex:      runContext.LoopIndex,
+	// 			LocalLoopIndex: runContext.VariableContext.LocalLoopIndex,
+	// 		}:
+	// 		default:
+	// 			// Channel is full, skip this event to avoid blocking
+	// 		}
+	// 	}
+	// }
 
 	sendSuccessEvent(runContext, "playwright:screenshot", fmt.Sprintf("Successfully took screenshot: %s", screenshotKey), duration)
 	return nil

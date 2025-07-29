@@ -31,11 +31,14 @@ import ApiDeleteConfig from "../components/ActionConfigs/ApiDeleteConfig.svelte"
 import ApiIfElseConfig from "../components/ActionConfigs/ApiIfElseConfig.svelte";
 import ApiRuntimeLoopUntilConfig from "../components/ActionConfigs/ApiRuntimeLoopUntilConfig.svelte";
 import ApiLogConfig from "../components/ActionConfigs/ApiLogConfig.svelte";
+import GlobalLoopConfig from "$lib/components/ActionConfigs/GlobalLoopConfig.svelte";
+import GlobalIfElseConfig from "$lib/components/ActionConfigs/GlobalIfElseConfig.svelte";
+import GlobalGroupConfig from "$lib/components/ActionConfigs/GlobalGroupConfig.svelte";
 
 // List of supported action types
 export const actionTypes = [
   "global:group",
-  "global:if_else", 
+  "global:if_else",
   "global:loop",
   "playwright:goto",
   "playwright:click",
@@ -74,18 +77,19 @@ export const actionTypes = [
 ];
 
 // List of action types that can be used in nested contexts (excluding if_else to prevent infinite nesting)
-export const nestedActionTypes = actionTypes.filter(type => 
-  type !== "playwright:loop_until" && 
-  // type !== "playwright:if_else" && 
-  // type !== "api:if_else" &&
-  type !== "api:runtime_loop_until" &&
-  type !== "global:group" // Prevent nested groups to avoid recursion
+export const nestedActionTypes = actionTypes.filter(
+  (type) =>
+    type !== "playwright:loop_until" &&
+    // type !== "playwright:if_else" &&
+    // type !== "api:if_else" &&
+    type !== "api:runtime_loop_until" &&
+    type !== "global:group" // Prevent nested groups to avoid recursion
 );
 
 // List of condition types that can be used in global actions
 export const conditionTypes = [
   "loop_index_is_even",
-  "loop_index_is_odd", 
+  "loop_index_is_odd",
   "loop_index_is_prime",
   "random",
   "playwright:wait_for_selector", // Can check element visibility/state
@@ -93,9 +97,12 @@ export const conditionTypes = [
 
 // Map action types to their respective config components
 export const actionConfigComponents: Record<string, any> = {
-  "global:group": () => import("../components/ActionConfigs/GlobalGroupConfig.svelte"),
-  "global:if_else": () => import("../components/ActionConfigs/GlobalIfElseConfig.svelte"),
-  "global:loop": () => import("../components/ActionConfigs/GlobalLoopConfig.svelte"),
+  // "global:group": () => import("../components/ActionConfigs/GlobalGroupConfig.svelte"),
+  // "global:if_else": () => import("../components/ActionConfigs/GlobalIfElseConfig.svelte"),
+  // "global:loop": async () => await import("../components/ActionConfigs/GlobalLoopConfig.svelte"),
+  "global:group": GlobalGroupConfig,
+  "global:if_else": GlobalIfElseConfig,
+  "global:loop": GlobalLoopConfig,
   "playwright:goto": PlaywrightGotoConfig,
   "playwright:click": PlaywrightClickConfig,
   "playwright:fill": PlaywrightFillConfig,
@@ -134,7 +141,10 @@ export const actionConfigComponents: Record<string, any> = {
 
 // Map condition types to their respective config components
 export const conditionConfigComponents: Record<string, any> = {
-  "playwright:wait_for_selector": () => import("../components/ConditionConfigs/PlaywrightSelectorConditionConfig.svelte"),
+  "playwright:wait_for_selector": () =>
+    import(
+      "../components/ConditionConfigs/PlaywrightSelectorConditionConfig.svelte"
+    ),
 };
 
 // Validation function for action configurations
@@ -152,12 +162,19 @@ export function validateActionConfig(
         errors.push("At least one action is required for global:group");
       }
       // Check for nested groups to prevent recursion
-      if (config.actions.some((action: any) => action.action_type === "global:group")) {
-        errors.push("Nested global:group actions are not allowed to prevent recursion");
+      if (
+        config.actions.some(
+          (action: any) => action.action_type === "global:group"
+        )
+      ) {
+        errors.push(
+          "Nested global:group actions are not allowed to prevent recursion"
+        );
       }
       break;
     case "global:if_else":
-      if (!config.condition_type) errors.push("Condition type is required for global:if_else");
+      if (!config.condition_type)
+        errors.push("Condition type is required for global:if_else");
       // Validate nested actions have action_type
       if (config.if_actions) {
         for (const action of config.if_actions) {
@@ -203,7 +220,9 @@ export function validateActionConfig(
     case "global:loop":
       // At least one force stop mechanism is required
       if (!config.max_loops && !config.timeout_ms) {
-        errors.push("Either max loops or timeout must be specified to prevent infinite loops");
+        errors.push(
+          "Either max loops or timeout must be specified to prevent infinite loops"
+        );
       }
       if (config.max_loops && config.max_loops <= 0) {
         errors.push("Max loops must be a positive number");
@@ -245,7 +264,12 @@ export function validateActionConfig(
       if (actionType === "playwright:get_attribute" && !config.attribute)
         errors.push("Attribute name is required");
       if (actionType === "playwright:select_option") {
-        if (!config.value && !config.values && !config.label && config.index === undefined) {
+        if (
+          !config.value &&
+          !config.values &&
+          !config.label &&
+          config.index === undefined
+        ) {
           errors.push("Value, label, or index is required");
         }
       }
@@ -265,8 +289,7 @@ export function validateActionConfig(
         errors.push("R2 key is required when uploading to R2");
       break;
     case "playwright:evaluate":
-      if (!config.expression)
-        errors.push("JavaScript expression is required");
+      if (!config.expression) errors.push("JavaScript expression is required");
       break;
     case "r2:upload":
       if (!config.key) errors.push("Object key is required");
@@ -281,27 +304,42 @@ export function validateActionConfig(
     case "api:patch":
     case "api:delete":
       if (!config.url) errors.push("URL is required");
-      if (config.timeout && config.timeout <= 0) errors.push("Timeout must be positive");
-      if (config.auth && config.auth.type === "api_key" && !config.auth.header) {
+      if (config.timeout && config.timeout <= 0)
+        errors.push("Timeout must be positive");
+      if (
+        config.auth &&
+        config.auth.type === "api_key" &&
+        !config.auth.header
+      ) {
         errors.push("Header name is required for API key authentication");
       }
       if (config.after_hooks) {
         for (const hook of config.after_hooks) {
-          if (!hook.path) errors.push("JSON path is required for all after hooks");
-          if (!hook.save_as) errors.push("Save as variable name is required for all after hooks");
+          if (!hook.path)
+            errors.push("JSON path is required for all after hooks");
+          if (!hook.save_as)
+            errors.push(
+              "Save as variable name is required for all after hooks"
+            );
         }
       }
       break;
     case "api:if_else":
-      if (!config.variable_path) errors.push("Runtime variable path is required");
+      if (!config.variable_path)
+        errors.push("Runtime variable path is required");
       if (!config.condition_type) errors.push("Condition type is required");
-      
+
       // Expected value is not required for certain condition types
-      const requiresExpectedValue = !["is_null", "is_not_null", "is_true", "is_false"].includes(config.condition_type);
+      const requiresExpectedValue = ![
+        "is_null",
+        "is_not_null",
+        "is_true",
+        "is_false",
+      ].includes(config.condition_type);
       if (requiresExpectedValue && config.expected_value === undefined) {
         errors.push("Expected value is required for this condition type");
       }
-      
+
       // Validate nested actions have action_type
       if (config.if_actions) {
         for (const action of config.if_actions) {
@@ -349,18 +387,26 @@ export function validateActionConfig(
       }
       break;
     case "api:runtime_loop_until":
-      if (!config.variable_path) errors.push("Runtime variable path is required");
+      if (!config.variable_path)
+        errors.push("Runtime variable path is required");
       if (!config.condition_type) errors.push("Condition type is required");
-      
+
       // Expected value is not required for certain condition types
-      const requiresExpectedValueLoop = !["is_null", "is_not_null", "is_true", "is_false"].includes(config.condition_type);
+      const requiresExpectedValueLoop = ![
+        "is_null",
+        "is_not_null",
+        "is_true",
+        "is_false",
+      ].includes(config.condition_type);
       if (requiresExpectedValueLoop && config.expected_value === undefined) {
         errors.push("Expected value is required for this condition type");
       }
-      
+
       // At least one force stop mechanism is required
       if (!config.max_loops && !config.timeout_ms) {
-        errors.push("Either max loops or timeout must be specified to prevent infinite loops");
+        errors.push(
+          "Either max loops or timeout must be specified to prevent infinite loops"
+        );
       }
       if (config.max_loops && config.max_loops <= 0) {
         errors.push("Max loops must be a positive number");
@@ -368,7 +414,7 @@ export function validateActionConfig(
       if (config.timeout_ms && config.timeout_ms <= 0) {
         errors.push("Timeout must be a positive number");
       }
-      
+
       // Validate nested actions have action_type
       if (config.loop_actions) {
         for (const action of config.loop_actions) {
@@ -381,14 +427,15 @@ export function validateActionConfig(
       break;
     case "playwright:if_else":
       if (!config.condition_type) errors.push("Condition type is required");
-      
+
       // Selector is only required for non-loop-index and non-random conditions
-      const requiresSelector = !config.condition_type?.startsWith("loop_index_is_") && 
-                              config.condition_type !== "random";
+      const requiresSelector =
+        !config.condition_type?.startsWith("loop_index_is_") &&
+        config.condition_type !== "random";
       if (requiresSelector && !config.selector) {
         errors.push("Selector is required for this condition type");
       }
-      
+
       // Validate nested actions have action_type
       if (config.if_actions) {
         for (const action of config.if_actions) {
@@ -400,10 +447,13 @@ export function validateActionConfig(
       }
       if (config.else_if_conditions) {
         for (const condition of config.else_if_conditions) {
-          const elseIfRequiresSelector = !condition.condition_type?.startsWith("loop_index_is_") && 
-                                        condition.condition_type !== "random";
+          const elseIfRequiresSelector =
+            !condition.condition_type?.startsWith("loop_index_is_") &&
+            condition.condition_type !== "random";
           if (elseIfRequiresSelector && !condition.selector) {
-            errors.push("Selector is required for ELSE IF conditions of this type");
+            errors.push(
+              "Selector is required for ELSE IF conditions of this type"
+            );
             break;
           }
           if (!condition.condition_type) {
@@ -443,7 +493,9 @@ export function validateActionConfig(
     case "playwright:loop_until":
       // At least one force stop mechanism is required
       if (!config.max_loops && !config.timeout_ms) {
-        errors.push("Either max loops or timeout must be specified to prevent infinite loops");
+        errors.push(
+          "Either max loops or timeout must be specified to prevent infinite loops"
+        );
       }
       if (config.max_loops && config.max_loops <= 0) {
         errors.push("Max loops must be a positive number");
