@@ -2,6 +2,7 @@ package automation
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -137,6 +138,17 @@ type VariableContext struct {
 	GlobalVars     map[string]interface{} // Variables set during execution (global across all loops)
 }
 
+// ConsolidatedReport represents the final consolidated report from all runners
+type ConsolidatedReport struct {
+	TotalRunners     int                    `json:"total_runners"`
+	TotalRuns        int                    `json:"total_runs"`
+	AllReports       []ReportSummary        `json:"all_reports"`
+	ConsolidatedData ReportSummary          `json:"consolidated_data"`
+	GeneratedAt      time.Time              `json:"generated_at"`
+	GitHubRunID      string                 `json:"github_run_id,omitempty"`
+	GitHubRunNumber  string                 `json:"github_run_number,omitempty"`
+}
+
 // Variable represents a configuration variable
 type Variable struct {
 	Key         string `json:"key"`
@@ -220,14 +232,16 @@ type AutomationAction struct {
 
 // AutomationRun represents an execution of an automation
 type AutomationRun struct {
-	ID              string
-	AutomationID    string
-	Status          string // pending, running, completed, failed, cancelled
-	StartTime       *time.Time
-	EndTime         *time.Time
-	LogsJSON        string // JSON string containing execution logs
-	OutputFilesJSON string // JSON string containing file paths/URLs
-	ErrorMessage    string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	ID                   string
+	AutomationID         string
+	Status               string // pending, running, completed, failed, cancelled
+	StartTime            *time.Time
+	EndTime              *time.Time
+	LogsJSON             string // JSON string containing execution logs
+	OutputFilesJSON      string // JSON string containing file paths/URLs
+	ErrorMessage         string
+	DetailedReportURL    string // URL to the detailed HTML report
+	UserJourneyReportURL string // URL to the user journey HTML report
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }

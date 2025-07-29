@@ -1,6 +1,6 @@
 # QPlayground CLI Automation
 
-A standalone CLI tool for running web automation tests in headless environments, particularly suited for CI/CD pipelines and GitHub Actions. This tool provides powerful browser automation and API testing capabilities without requiring the full QPlayground web interface.
+A completely standalone CLI tool for running web automation tests in headless environments, particularly suited for CI/CD pipelines and GitHub Actions. This tool provides powerful browser automation and API testing capabilities without requiring the full QPlayground web interface, with comprehensive reporting and cloud storage support.
 
 ## 🚀 Features
 
@@ -8,8 +8,12 @@ A standalone CLI tool for running web automation tests in headless environments,
 - **Headless Browser Automation**: Powered by Playwright for reliable web testing
 - **API Testing**: Comprehensive HTTP client with authentication and data extraction
 - **Multi-User Simulation**: Support for concurrent user simulation with parallel/sequential execution
-- **Comprehensive Reporting**: Generates HTML, JSON, and CSV reports with performance metrics
+- **Comprehensive Reporting**: Generates detailed HTML, JSON, and CSV reports with performance metrics
+- **Cloud Storage Integration**: Support for Cloudflare R2 and GCP storage for reports and screenshots
+- **GitHub Actions Ready**: Built-in matrix execution support with consolidated reporting
 - **Variable Resolution**: Static, dynamic (faker), and runtime variable support
+- **Slack Notifications**: Real-time notifications for automation completion and failures
+- **Report Consolidation**: Automatically consolidates results from multiple runners
 - **Local File Storage**: Saves screenshots and reports locally without external dependencies
 - **Docker Ready**: Runs in containerized environments with all dependencies included
 - **GitHub Actions Integration**: Ready-to-use workflow for CI/CD automation
@@ -17,12 +21,12 @@ A standalone CLI tool for running web automation tests in headless environments,
 ### Supported Action Types
 
 #### Playwright Actions
+- **Screenshots**: `playwright:screenshot` with R2/GCP storage integration
 - **Navigation**: `playwright:goto`, `playwright:reload`, `playwright:go_back`, `playwright:go_forward`
 - **Interaction**: `playwright:click`, `playwright:fill`, `playwright:type`, `playwright:press`, `playwright:hover`
 - **Form Controls**: `playwright:check`, `playwright:uncheck`, `playwright:select_option`
 - **Waiting**: `playwright:wait_for_selector`, `playwright:wait_for_timeout`, `playwright:wait_for_load_state`
 - **Data Extraction**: `playwright:get_text`, `playwright:get_attribute`
-- **Screenshots**: `playwright:screenshot` with local storage
 - **JavaScript**: `playwright:evaluate` for custom browser scripts
 - **Viewport**: `playwright:set_viewport`, `playwright:scroll`
 - **Control Flow**: `playwright:if_else`, `playwright:loop_until`
@@ -36,8 +40,13 @@ A standalone CLI tool for running web automation tests in headless environments,
 - **Runtime Loops**: `api:runtime_loop_until` for polling scenarios
 - **Logging**: `api:log` with runtime variable interpolation
 
+#### Global Actions
+- **Grouping**: `global:group` for organizing related actions
+- **Conditional Logic**: `global:if_else` with complex condition support
+- **Looping**: `global:loop` with multiple exit conditions
+
 #### Storage Actions
-- **Local Storage**: `r2:upload`, `r2:delete` for file operations (adapted for local storage)
+- **Cloud Storage**: `r2:upload`, `r2:delete` for Cloudflare R2 and GCP operations
 
 ## 🛠️ Installation
 
@@ -460,76 +469,6 @@ Configure concurrent user simulation:
 }
 ```
 
-## 📊 Output Structure
-
-The CLI generates organized output in the specified directory:
-
-```
-output/
-├── YYYYMMDD-HHMMSS-<runId>/
-│   ├── reports/
-│   │   ├── report.html      # Interactive HTML report
-│   │   ├── report.json      # Raw data dump
-│   │   └── logs.csv         # CSV export
-│   └── screenshots/
-│       ├── screenshot1.png
-│       └── screenshot2.png
-```
-
-### Report Contents
-
-#### HTML Report
-- Interactive dashboard with step-by-step breakdown
-- Performance metrics and charts
-- Screenshot galleries
-- Error details and stack traces
-- User journey visualization
-
-#### JSON Report
-- Complete automation execution data
-- Structured logs and events
-- Performance metrics
-- Variable states and transitions
-
-#### CSV Report
-- Tabular data for spreadsheet analysis
-- Step and action timing
-- Success/failure rates
-- Output file references
-
-## 🔧 Command Line Options
-
-```bash
-qplayground-cli [OPTIONS]
-
-Options:
-  --config-path string    Path to the automation configuration JSON file (required)
-  --output-dir string     Directory to save reports and screenshots (required)
-  --help                  Show help information
-```
-
-### Examples
-
-```bash
-# Basic usage
-./qplayground-cli \
-  --config-path automation.json \
-  --output-dir ./results
-
-# Docker usage
-docker run --rm \
-  -v $(pwd)/config.json:/app/config.json:ro \
-  -v $(pwd)/output:/app/output \
-  qplayground-cli \
-  --config-path /app/config.json \
-  --output-dir /app/output
-
-# With custom configuration
-./qplayground-cli \
-  --config-path ./configs/production-test.json \
-  --output-dir ./reports/$(date +%Y%m%d)
-```
-
 ## 🐳 Docker Usage
 
 ### Building the Image
@@ -541,11 +480,26 @@ docker build -t qplayground-cli .
 
 ### Running Automations
 
+#### Basic Usage
+```bash
+# Single automation with local storage
+./qplayground-cli \
+  --config-path config.json \
+  --output-dir ./output
+```
+
+#### With Cloud Storage
 ```bash
 # Single automation
 docker run --rm \
   -v /path/to/config.json:/app/config.json:ro \
   -v /path/to/output:/app/output \
+  -e STORAGE_PROVIDER=r2 \
+  -e R2_ACCESS_KEY_ID=your_key \
+  -e R2_SECRET_ACCESS_KEY=your_secret \
+  -e R2_BUCKET_NAME=your_bucket \
+  -e R2_PUBLIC_URL=https://your-bucket.r2.dev \
+  -e CLOUDFLARE_ACCOUNT_ID=your_account_id \
   qplayground-cli \
   --config-path /app/config.json \
   --output-dir /app/output
@@ -561,103 +515,365 @@ for config in configs/*.json; do
 done
 ```
 
+#### GitHub Actions Matrix Execution
+```bash
+# Run as part of GitHub Actions matrix (handled automatically)
+./qplayground-cli \
+  --config-path config.json \
+  --output-dir ./output \
+  --runner-index 0
+
+# Consolidate reports from multiple runners
+./qplayground-cli \
+  --output-dir ./consolidated-output \
+  --consolidate
+```
+
 ## 🔄 GitHub Actions Integration
 
-Add this workflow to `.github/workflows/automation.yml`:
+The included workflow supports:
+- **Matrix Execution**: 10 parallel runners by default
+- **Concurrent Runs**: Each runner executes multiple concurrent automations
+- **Report Consolidation**: Automatically combines results from all runners
+- **Cloud Storage**: Uploads reports and screenshots to R2 or GCP
+- **Artifact Management**: Saves all results as GitHub Actions artifacts
+
+### Workflow Configuration
 
 ```yaml
-name: Web Automation Tests
+name: Load Test with Consolidated Reports
 
 on:
-  push:
-    branches: [ main ]
-  schedule:
-    - cron: '0 */6 * * *'  # Run every 6 hours
-  workflow_dispatch:       # Manual trigger
+  workflow_dispatch:
+    inputs:
+      concurrent_runs:
+        description: 'Number of concurrent runs per runner'
+        default: '2'
+      storage_provider:
+        description: 'Storage provider (local, r2, gcp)'
+        default: 'local'
+
+env:
+  STORAGE_PROVIDER: ${{ github.event.inputs.storage_provider }}
+  # Add your storage credentials as repository secrets
 
 jobs:
-  automation:
+  load-test:
     runs-on: ubuntu-latest
-    
     strategy:
       matrix:
-        config: [
-          'configs/smoke-test.json',
-          'configs/regression-test.json',
-          'configs/performance-test.json'
-        ]
+        runner_index: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+      fail-fast: false
+
+    steps:
+      - name: Run automation
+        # ... (see full workflow file)
+
+  consolidate-reports:
+    needs: load-test
+    runs-on: ubuntu-latest
+    if: always()
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Create output directory
-      run: mkdir -p automation_output
-    
-    - name: Run automation
-      run: |
-        docker run --rm \
-          -v ${{ github.workspace }}/${{ matrix.config }}:/app/config.json:ro \
-          -v ${{ github.workspace }}/automation_output:/app/output \
-          ghcr.io/${{ github.repository }}/qplayground-cli:latest \
-          --config-path /app/config.json \
-          --output-dir /app/output
-    
-    - name: Upload reports
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: automation-reports-${{ matrix.config }}
-        path: automation_output/
-        retention-days: 30
-    
-    - name: Comment PR with results
-      if: github.event_name == 'pull_request'
-      uses: actions/github-script@v7
-      with:
-        script: |
-          const fs = require('fs');
-          const path = 'automation_output/reports/report.json';
-          if (fs.existsSync(path)) {
-            const report = JSON.parse(fs.readFileSync(path, 'utf8'));
-            const comment = `## Automation Results
-            
-            **Status**: ${report.run.status}
-            **Duration**: ${report.run.endTime - report.run.startTime}ms
-            **Steps**: ${report.automation.steps?.length || 0}
-            **Success Rate**: ${report.metrics?.overallFailureRate ? (100 - report.metrics.overallFailureRate).toFixed(1) : 'N/A'}%
-            `;
-            
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: comment
-            });
+      - name: Consolidate all results
+        # Combines results from all 10 runners
+      - name: Generate final reports
+        # Creates consolidated HTML, JSON, and CSV reports
+      - name: Upload to cloud storage
+        # Uploads consolidated results to R2 or GCP
+```
+
+## 🔧 Configuration
+
+### Environment Variables
+
+```bash
+# Storage Provider Selection
+STORAGE_PROVIDER=r2  # or 'gcp' or 'local'
+CLI_STORAGE_PROVIDER=r2  # Override for CLI specifically
+
+# Cloudflare R2 Configuration
+CLOUDFLARE_ACCOUNT_ID=your_account_id
+R2_ACCESS_KEY_ID=your_access_key
+R2_SECRET_ACCESS_KEY=your_secret_key
+R2_BUCKET_NAME=your_bucket_name
+R2_PUBLIC_URL=https://your-bucket.r2.dev
+
+# GCP Storage Configuration
+GCP_BUCKET_ACCESS_KEY=your_access_key
+GCP_BUCKET_SECRET=your_secret_key
+GCP_BUCKET_NAME=your_bucket_name
+GCP_BUCKET_ENDPOINT_URL=https://storage.googleapis.com
+GCP_BUCKET_PUBLIC_URL=https://storage.googleapis.com/your_bucket_name
+
+# SMTP Configuration (for email notifications)
+SMTP_SERVER=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=your_email@gmail.com
+SMTP_PASSWORD=your_app_password
+SMTP_FROM_EMAIL=your_email@gmail.com
+
+# GitHub Actions (automatically set)
+GITHUB_RUN_ID=123456789
+GITHUB_RUN_NUMBER=42
+RUNNER_INDEX=0
+```
+
+### Automation Configuration
+
+The CLI supports the full automation configuration format from the main application:
+
+```json
+{
+  "automation": {
+    "name": "CLI Load Test",
+    "description": "Comprehensive load testing via CLI",
+    "config": {
+      "variables": [
+        {
+          "key": "testEmail",
+          "type": "dynamic",
+          "value": "{{faker.email}}"
+        }
+      ],
+      "multirun": {
+        "enabled": true,
+        "mode": "parallel",
+        "count": 5,
+        "delay": 1000
+      },
+      "screenshots": {
+        "enabled": true,
+        "onError": true,
+        "onSuccess": true
+      },
+      "notifications": [
+        {
+          "id": "slack-alerts",
+          "type": "slack",
+          "onComplete": true,
+          "onError": true,
+          "config": {
+            "webhook_url": "https://hooks.slack.com/services/...",
+            "username": "QPlayground CLI Bot"
           }
+        }
+      ]
+    }
+  },
+  "steps": [
+    {
+      "name": "Navigation and Screenshots",
+      "step_order": 1,
+      "actions": [
+        {
+          "action_type": "playwright:goto",
+          "action_config": {
+            "url": "https://example.com"
+          }
+        },
+        {
+          "action_type": "playwright:screenshot",
+          "action_config": {
+            "full_page": true,
+            "format": "png",
+            "upload_to_r2": true,
+            "r2_key": "screenshots/cli-test-{{loopIndex}}.png"
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+## 📊 Output Structure
+
+### Individual Runner Output
+
+```
+output/runner-0/
+├── reports/
+│   ├── detailed_report.html
+│   ├── user_journey_report.html
+│   ├── report.json
+│   └── report.csv
+└── screenshots/
+    ├── cli-user-0-step1.png
+    └── cli-user-1-step1.png
+```
+
+### Consolidated Output
+
+```
+consolidated-output/
+├── reports/
+│   ├── consolidated_detailed_report.html
+│   ├── consolidated_user_journey_report.html
+│   ├── consolidated_report.json
+│   └── consolidated_report.csv
+├── screenshots/
+│   ├── runner-0/
+│   ├── runner-1/
+│   └── ...
+├── raw-data/
+│   ├── runner-0-report.json
+│   ├── runner-1-report.json
+│   └── ...
+└── consolidation_summary.json
+```
+
+### Report Contents
+
+#### HTML Reports
+- **Detailed Report**: Comprehensive analysis with performance metrics, step breakdown, and action statistics
+- **User Journey Report**: Individual user flow analysis with timeline visualization
+- Performance metrics and charts
+- Screenshot galleries
+- Error details and stack traces
+- Bootstrap-based responsive design
+
+#### JSON Report
+- Complete automation execution data
+- Structured logs and events
+- Performance metrics
+- Variable states and transitions
+- Consolidated data from all runners
+
+#### CSV Report
+- Tabular data for spreadsheet analysis
+- Step and action timing
+- Success/failure rates
+- Output file references
+- Cross-runner analysis data
+
+## 🔧 Command Line Options
+
+```bash
+qplayground-cli [OPTIONS]
+
+Options:
+  --config-path string    Path to the automation configuration JSON file (required)
+  --output-dir string     Directory to save reports and screenshots (required)
+  --runner-index string   Index of this runner for GitHub Actions matrix (default: "0")
+  --consolidate          Consolidate reports from multiple runners
+  --help                  Show help information
+```
+
+### Examples
+
+```bash
+# Basic usage
+./qplayground-cli \
+  --config-path automation.json \
+  --output-dir ./results
+
+# GitHub Actions matrix runner
+./qplayground-cli \
+  --config-path automation.json \
+  --output-dir ./results \
+  --runner-index 3
+
+# Consolidate multiple runner results
+./qplayground-cli \
+  --output-dir ./consolidated-results \
+  --consolidate
+
+# Docker usage
+docker run --rm \
+  -v $(pwd)/config.json:/app/config.json:ro \
+  -v $(pwd)/output:/app/output \
+  -e STORAGE_PROVIDER=r2 \
+  qplayground-cli \
+  --config-path /app/config.json \
+  --output-dir /app/output
+
+# With cloud storage
+./qplayground-cli \
+  --config-path config.json \
+  --output-dir ./output
+# (Storage configured via environment variables)
+```
+
+## 🌐 Cloud Storage Integration
+
+### Cloudflare R2
+
+```bash
+export STORAGE_PROVIDER=r2
+export CLOUDFLARE_ACCOUNT_ID=your_account_id
+export R2_ACCESS_KEY_ID=your_access_key
+export R2_SECRET_ACCESS_KEY=your_secret_key
+export R2_BUCKET_NAME=qplayground-reports
+export R2_PUBLIC_URL=https://qplayground-reports.r2.dev
+```
+
+### Google Cloud Storage
+
+```bash
+export STORAGE_PROVIDER=gcp
+export GCP_BUCKET_ACCESS_KEY=your_access_key
+export GCP_BUCKET_SECRET=your_secret_key
+export GCP_BUCKET_NAME=qplayground-reports
+export GCP_BUCKET_ENDPOINT_URL=https://storage.googleapis.com
+export GCP_BUCKET_PUBLIC_URL=https://storage.googleapis.com/qplayground-reports
+```
+
+## 📢 Notifications
+
+### Slack Integration
+
+Configure Slack notifications in your automation config:
+
+```json
+{
+  "notifications": [
+    {
+      "id": "team-alerts",
+      "type": "slack",
+      "onComplete": true,
+      "onError": true,
+      "config": {
+        "webhook_url": "https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX",
+        "username": "QPlayground CLI Bot",
+        "icon_emoji": ":robot_face:",
+        "channel": "#automation-alerts"
+      }
+    }
+  ]
+}
 ```
 
 ## 📈 Performance Metrics
 
-The CLI automatically generates performance insights including:
+The CLI generates comprehensive performance insights:
 
 ### Step Performance
 - **Average Duration**: Mean execution time per step
 - **Failure Rates**: Percentage of failed executions
 - **Concurrent User Analysis**: How steps perform under load
 - **P50/P95 Percentiles**: Performance distribution analysis
+- **Cross-Runner Comparison**: Performance across different runners
 
 ### Run Latency
 - **User Journey Mapping**: Individual user execution paths
 - **Bottleneck Identification**: Slowest steps and actions
 - **Scalability Analysis**: Performance trends across multiple runs
 - **Resource Utilization**: Memory and CPU usage patterns
+- **Matrix Execution Analysis**: Performance across GitHub Actions matrix
 
 ### Success/Failure Analysis
 - **Overall Reliability**: Automation success rates
 - **Error Categorization**: Common failure patterns
 - **Recovery Metrics**: Retry success rates
 - **Trend Analysis**: Performance over time
+- **Runner Reliability**: Success rates per runner
+
+### Consolidated Metrics
+- **Total Execution Time**: Across all runners and runs
+- **Throughput Analysis**: Runs per minute/hour
+- **Resource Efficiency**: Cost per successful run
+- **Scalability Insights**: Performance vs. concurrency
 
 ## 🛠️ Troubleshooting
 
@@ -688,12 +904,28 @@ docker run --memory=2g --rm qplayground-cli ...
 docker stats qplayground-cli
 ```
 
+#### Cloud Storage Issues
+```bash
+# Test R2 connectivity
+export STORAGE_PROVIDER=r2
+# ... set R2 credentials
+./qplayground-cli --config-path config.json --output-dir ./test-output
+
+# Test GCP connectivity
+export STORAGE_PROVIDER=gcp
+# ... set GCP credentials
+./qplayground-cli --config-path config.json --output-dir ./test-output
+```
+
 ### Debug Mode
 
 Enable verbose logging:
 ```bash
 # Set log level to debug
 export LOG_LEVEL=debug
+
+# Enable storage debug logging
+export STORAGE_DEBUG=true
 
 # Run with debug output
 ./qplayground-cli \
@@ -710,6 +942,12 @@ jq . config.json
 
 # Validate required fields
 jq '.automation.name, .automation.config, .steps' config.json
+
+# Validate storage configuration
+jq '.automation.config.screenshots, .automation.config.notifications' config.json
+
+# Check for R2 upload configurations
+jq '.steps[].actions[] | select(.action_config.upload_to_r2 == true)' config.json
 ```
 
 ## 🔗 Integration Examples
@@ -720,6 +958,10 @@ jq '.automation.name, .automation.config, .steps' config.json
 ```groovy
 pipeline {
     agent any
+    environment {
+        STORAGE_PROVIDER = 'r2'
+        // Add storage credentials
+    }
     stages {
         stage('Run Automation') {
             steps {
@@ -737,7 +979,7 @@ pipeline {
                     alwaysLinkToLastBuild: true,
                     keepAll: true,
                     reportDir: 'reports',
-                    reportFiles: 'report.html',
+                    reportFiles: 'detailed_report.html',
                     reportName: 'Automation Report'
                 ])
             }
@@ -750,11 +992,13 @@ pipeline {
 ```yaml
 automation_test:
   image: qplayground-cli:latest
+  variables:
+    STORAGE_PROVIDER: "r2"
   script:
     - qplayground-cli --config-path automation.json --output-dir reports
   artifacts:
     reports:
-      junit: reports/junit.xml
+      junit: reports/report.xml
     paths:
       - reports/
     expire_in: 1 week
@@ -765,21 +1009,30 @@ automation_test:
 #### Prometheus Metrics
 ```bash
 # Export metrics from JSON report
-jq -r '.metrics | to_entries[] | "\(.key) \(.value)"' report.json > metrics.prom
+jq -r '.metrics | to_entries[] | "\(.key) \(.value)"' consolidated_report.json > metrics.prom
 ```
 
 #### Grafana Dashboard
 ```json
 {
   "dashboard": {
-    "title": "QPlayground Automation Metrics",
+    "title": "QPlayground CLI Load Test Metrics",
     "panels": [
       {
-        "title": "Success Rate",
+        "title": "Overall Success Rate",
         "type": "stat",
         "targets": [
           {
-            "expr": "automation_success_rate"
+            "expr": "cli_automation_success_rate"
+          }
+        ]
+      },
+      {
+        "title": "Runner Performance",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "cli_automation_duration_by_runner"
           }
         ]
       }
@@ -788,7 +1041,56 @@ jq -r '.metrics | to_entries[] | "\(.key) \(.value)"' report.json > metrics.prom
 }
 ```
 
+## 🚀 Advanced Features
+
+### Matrix Execution Strategy
+
+The CLI supports sophisticated matrix execution:
+
+- **Parallel Runners**: Up to 10 concurrent GitHub Actions runners
+- **Concurrent Runs**: Each runner executes multiple automation instances
+- **Load Distribution**: Automatic load balancing across runners
+- **Failure Isolation**: Individual runner failures don't affect others
+- **Result Aggregation**: Intelligent consolidation of all results
+
+### Report Consolidation
+
+The consolidation process:
+
+1. **Collection**: Gathers reports from all runners
+2. **Merging**: Combines performance metrics and logs
+3. **Analysis**: Generates cross-runner insights
+4. **Visualization**: Creates unified HTML reports
+5. **Storage**: Uploads consolidated results to cloud storage
+
+### Cloud-First Architecture
+
+- **Storage Abstraction**: Seamless switching between storage providers
+- **Automatic Uploads**: Reports and screenshots uploaded in real-time
+- **Public URLs**: Direct links to cloud-hosted reports
+- **Backup Strategy**: Local storage as fallback
+- **Cost Optimization**: Efficient storage usage patterns
+
 ## 📚 Advanced Usage
+
+### Multi-Environment Testing
+
+```bash
+# Production load test
+STORAGE_PROVIDER=r2 ./qplayground-cli \
+  --config-path configs/production.json \
+  --output-dir ./prod-results
+
+# Staging validation
+STORAGE_PROVIDER=gcp ./qplayground-cli \
+  --config-path configs/staging.json \
+  --output-dir ./staging-results
+
+# Development smoke test
+STORAGE_PROVIDER=local ./qplayground-cli \
+  --config-path configs/dev.json \
+  --output-dir ./dev-results
+```
 
 ### Custom Authentication Flows
 
@@ -796,7 +1098,7 @@ jq -r '.metrics | to_entries[] | "\(.key) \(.value)"' report.json > metrics.prom
 {
   "steps": [
     {
-      "name": "OAuth Authentication",
+      "name": "API Authentication with Storage",
       "step_order": 1,
       "actions": [
         {
@@ -815,10 +1117,46 @@ jq -r '.metrics | to_entries[] | "\(.key) \(.value)"' report.json > metrics.prom
               }
             ]
           }
+        },
+        {
+          "action_type": "playwright:screenshot",
+          "action_config": {
+            "upload_to_r2": true,
+            "r2_key": "auth/oauth-success-{{loopIndex}}.png"
+          }
         }
       ]
     }
   ]
+}
+```
+
+### Performance Testing Scenarios
+
+```json
+{
+  "automation": {
+    "name": "High-Load Performance Test",
+    "config": {
+      "multirun": {
+        "enabled": true,
+        "mode": "parallel",
+        "count": 50,
+        "delay": 100
+      },
+      "notifications": [
+        {
+          "type": "slack",
+          "onComplete": true,
+          "onError": true,
+          "config": {
+            "webhook_url": "https://hooks.slack.com/...",
+            "channel": "#performance-alerts"
+          }
+        }
+      ]
+    }
+  }
 }
 ```
 
@@ -898,6 +1236,10 @@ cd qplayground/cli_automation
 # Install dependencies
 go mod download
 
+# Set up environment
+cp .env.example .env
+# Edit .env with your configuration
+
 # Build the binary
 go build -o qplayground-cli cmd/main.go
 
@@ -912,6 +1254,26 @@ go test ./...
 3. Add tests for new functionality
 4. Ensure all tests pass
 5. Submit a pull request
+
+### Adding New Storage Providers
+
+1. **Implement the `ObjectStorage` interface**:
+   ```go
+   type MyStorage struct{}
+   
+   func (s *MyStorage) Upload(ctx context.Context, key string, data io.Reader, options *UploadOptions) error {
+       // Implementation
+   }
+   ```
+
+2. **Register in the main function**:
+   ```go
+   case "mystorage":
+       objectStorage, err = storage.NewMyStorage()
+   ```
+
+3. **Add environment variables** in `platform/env.go`
+4. **Update documentation** and examples
 
 ### Adding New Action Types
 
@@ -937,10 +1299,30 @@ go test ./...
 3. **Add configuration validation** (optional)
 4. **Update documentation**
 
+## 🎯 Use Cases
+
+### CI/CD Pipeline Integration
+- **Pre-deployment Testing**: Validate functionality before releases
+- **Regression Testing**: Ensure new changes don't break existing features
+- **Performance Monitoring**: Track application performance over time
+- **Load Testing**: Simulate high user loads
+
+### Quality Assurance
+- **Cross-browser Testing**: Validate across different environments
+- **User Journey Validation**: Test complete user workflows
+- **API Integration Testing**: Validate backend integrations
+- **Visual Regression Testing**: Detect UI changes
+
+### Monitoring and Alerting
+- **Health Checks**: Regular application health monitoring
+- **SLA Monitoring**: Track service level agreements
+- **Performance Baselines**: Establish performance benchmarks
+- **Incident Response**: Automated testing during incidents
+
 ## 📄 License
 
 This CLI tool is part of the QPlayground project and follows the same licensing terms.
 
 ---
 
-**QPlayground CLI** - Powerful automation testing for CI/CD pipelines 🚀
+**QPlayground CLI** - Powerful, scalable automation testing for modern CI/CD pipelines 🚀

@@ -3,6 +3,7 @@ package automation
 import (
 	"context"
 	"encoding/json"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"math/rand"
@@ -185,6 +186,20 @@ func (r *Runner) RunAutomation(ctx context.Context, automation *Automation, run 
 		// Send error notifications
 		go r.sendNotifications(context.Background(), automation, run, &automationConfig)
 		err = executionError
+		
+		// Generate reports even on failure
+		automationSlug := strings.ToLower(strings.ReplaceAll(automation.Name, " ", "-"))
+		automationSlug = regexp.MustCompile(`[^a-z0-9-]`).ReplaceAllString(automationSlug, "")
+		reportsR2Path := fmt.Sprintf("%s/%s/run-%s/reports", automation.ProjectID, automationSlug, run.ID)
+		detailedURL, userJourneyURL, reportErr := GenerateReports(automation, run, &automationConfig, outputDir, reportsR2Path, r.storageService)
+		if reportErr != nil {
+			slog.Error("Failed to generate reports on failure", "error", reportErr)
+		} else {
+			detailedReportURL = detailedURL
+			userJourneyReportURL = userJourneyURL
+			run.DetailedReportURL = detailedReportURL
+			run.UserJourneyReportURL = userJourneyReportURL
+		}
 		return "", "", err
 	}
 
@@ -192,6 +207,20 @@ func (r *Runner) RunAutomation(ctx context.Context, automation *Automation, run 
 		"automation_id", run.AutomationID,
 		"run_id", run.ID,
 		"total_runs", runCount)
+
+	// Generate reports on success
+	automationSlug := strings.ToLower(strings.ReplaceAll(automation.Name, " ", "-"))
+	automationSlug = regexp.MustCompile(`[^a-z0-9-]`).ReplaceAllString(automationSlug, "")
+	reportsR2Path := fmt.Sprintf("%s/%s/run-%s/reports", automation.ProjectID, automationSlug, run.ID)
+	detailedURL, userJourneyURL, reportErr := GenerateReports(automation, run, &automationConfig, outputDir, reportsR2Path, r.storageService)
+	if reportErr != nil {
+		slog.Error("Failed to generate reports", "error", reportErr)
+	} else {
+		detailedReportURL = detailedURL
+		userJourneyReportURL = userJourneyURL
+		run.DetailedReportURL = detailedReportURL
+		run.UserJourneyReportURL = userJourneyReportURL
+	}
 
 	// Send completion notifications
 	go r.sendNotifications(context.Background(), automation, run, &automationConfig)
@@ -388,17 +417,17 @@ func (r *Runner) executeActionsList(ctx context.Context, actions []*AutomationAc
 		// Handle global action types
 		switch action.ActionType {
 		case "global:group":
-			err := r.executeGlobalGroup(ctx, resolvedActionConfig, runContext)
+			err := r.executeGlobalGroup(ctx, action, resolvedActionConfig, runContext)
 			if err != nil {
 				return fmt.Errorf("global:group action failed: %w", err)
 			}
 		case "global:if_else":
-			err := r.executeGlobalIfElse(ctx, resolvedActionConfig, runContext)
+			err := r.executeGlobalIfElse(ctx, action, resolvedActionConfig, runContext)
 			if err != nil {
 				return fmt.Errorf("global:if_else action failed: %w", err)
 			}
 		case "global:loop":
-			err := r.executeGlobalLoop(ctx, resolvedActionConfig, runContext)
+			err := r.executeGlobalLoop(ctx, action, resolvedActionConfig, runContext)
 			if err != nil {
 				return fmt.Errorf("global:loop action failed: %w", err)
 			}
@@ -442,16 +471,28 @@ func (r *Runner) executePluginAction(ctx context.Context, action *AutomationActi
 }
 
 // executeGlobalGroup executes a group of actions and saves only the last output file
-func (r *Runner) executeGlobalGroup(ctx context.Context, actionConfig map[string]any, runContext *RunContext) error {
+func (r *Runner) executeGlobalGroup(ctx context.Context, action *AutomationAction, actionConfig map[string]any, runContext *RunContext) error {
 	// Parse group config
-	configBytes, err := json.Marshal(actionConfig)
+	var groupConfig GlobalGroupConfig
+	if action.ActionConfig != nil {
+		// Use ActionConfig map directly
+		configBytes, err := json.Marshal(action.ActionConfig)
+		if err != nil {
+			return fmt.Errorf("failed to marshal group config from ActionConfig: %w", err)
+		}
+		if err := json.Unmarshal(configBytes, &groupConfig); err != nil {
+			return fmt.Errorf("failed to parse global group config from ActionConfig: %w", err)
+		}
+	} else {
+		// Fallback to resolved config
+		configBytes, err := json.Marshal(actionConfig)
 	if err != nil {
 		return fmt.Errorf("failed to marshal group config: %w", err)
 	}
 
-	var groupConfig GlobalGroupConfig
 	if err := json.Unmarshal(configBytes, &groupConfig); err != nil {
 		return fmt.Errorf("failed to parse global group config: %w", err)
+	}
 	}
 
 	runContext.Logger.Info("Executing global group", "actions_count", len(groupConfig.Actions))
@@ -506,16 +547,28 @@ func (r *Runner) executeGlobalGroup(ctx context.Context, actionConfig map[string
 }
 
 // executeGlobalIfElse executes conditional logic with global actions
-func (r *Runner) executeGlobalIfElse(ctx context.Context, actionConfig map[string]any, runContext *RunContext) error {
+func (r *Runner) executeGlobalIfElse(ctx context.Context, action *AutomationAction, actionConfig map[string]any, runContext *RunContext) error {
 	// Parse if-else config
-	configBytes, err := json.Marshal(actionConfig)
+	var ifElseConfig GlobalIfElseConfig
+	if action.ActionConfig != nil {
+		// Use ActionConfig map directly
+		configBytes, err := json.Marshal(action.ActionConfig)
+		if err != nil {
+			return fmt.Errorf("failed to marshal if-else config from ActionConfig: %w", err)
+		}
+		if err := json.Unmarshal(configBytes, &ifElseConfig); err != nil {
+			return fmt.Errorf("failed to parse global if-else config from ActionConfig: %w", err)
+		}
+	} else {
+		// Fallback to resolved config
+		configBytes, err := json.Marshal(actionConfig)
 	if err != nil {
 		return fmt.Errorf("failed to marshal if-else config: %w", err)
 	}
 
-	var ifElseConfig GlobalIfElseConfig
 	if err := json.Unmarshal(configBytes, &ifElseConfig); err != nil {
 		return fmt.Errorf("failed to parse global if-else config: %w", err)
+	}
 	}
 
 	runContext.Logger.Info("Executing global if-else", "condition_type", ifElseConfig.ConditionType)
@@ -586,16 +639,28 @@ func (r *Runner) executeGlobalIfElse(ctx context.Context, actionConfig map[strin
 }
 
 // executeGlobalLoop executes a loop with global actions
-func (r *Runner) executeGlobalLoop(ctx context.Context, actionConfig map[string]any, runContext *RunContext) error {
+func (r *Runner) executeGlobalLoop(ctx context.Context, action *AutomationAction, actionConfig map[string]any, runContext *RunContext) error {
 	// Parse loop config
-	configBytes, err := json.Marshal(actionConfig)
+	var loopConfig GlobalLoopConfig
+	if action.ActionConfig != nil {
+		// Use ActionConfig map directly
+		configBytes, err := json.Marshal(action.ActionConfig)
+		if err != nil {
+			return fmt.Errorf("failed to marshal loop config from ActionConfig: %w", err)
+		}
+		if err := json.Unmarshal(configBytes, &loopConfig); err != nil {
+			return fmt.Errorf("failed to parse global loop config from ActionConfig: %w", err)
+		}
+	} else {
+		// Fallback to resolved config
+		configBytes, err := json.Marshal(actionConfig)
 	if err != nil {
 		return fmt.Errorf("failed to marshal loop config: %w", err)
 	}
 
-	var loopConfig GlobalLoopConfig
 	if err := json.Unmarshal(configBytes, &loopConfig); err != nil {
 		return fmt.Errorf("failed to parse global loop config: %w", err)
+	}
 	}
 
 	runContext.Logger.Info("Executing global loop", "condition_type", loopConfig.ConditionType, "max_loops", loopConfig.MaxLoops, "timeout_ms", loopConfig.TimeoutMs)
