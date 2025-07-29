@@ -47,18 +47,18 @@ type GlobalGroupConfig struct {
 }
 
 type ElseIfCondition struct {
-	ConditionType   string                 `json:"condition_type"`
-	ConditionConfig map[string]interface{} `json:"condition_config"`
-	Actions         []AutomationAction     `json:"actions"`
+	ConditionType   string                  `json:"condition_type"`
+	ConditionConfig map[string]interface{}  `json:"condition_config"`
+	Actions         []GroupAutomationAction `json:"actions"`
 }
 
 type GlobalIfElseConfig struct {
-	ConditionType    string                 `json:"condition_type"`
-	ConditionConfig  map[string]interface{} `json:"condition_config"`
-	IfActions        []AutomationAction     `json:"if_actions"`
-	ElseIfConditions []ElseIfCondition      `json:"else_if_conditions"`
-	ElseActions      []AutomationAction     `json:"else_actions"`
-	FinalActions     []AutomationAction     `json:"final_actions"`
+	ConditionType    string                  `json:"condition_type"`
+	ConditionConfig  map[string]interface{}  `json:"condition_config"`
+	IfActions        []GroupAutomationAction `json:"if_actions"`
+	ElseIfConditions []ElseIfCondition       `json:"else_if_conditions"`
+	ElseActions      []GroupAutomationAction `json:"else_actions"`
+	FinalActions     []GroupAutomationAction `json:"final_actions"`
 }
 
 type GlobalLoopConfig struct {

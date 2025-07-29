@@ -585,7 +585,7 @@ func (r *Runner) executeGlobalIfElse(ctx context.Context, actionConfig map[strin
 		return fmt.Errorf("failed to evaluate main condition: %w", err)
 	}
 
-	var actionsToExecute []AutomationAction
+	var actionsToExecute []GroupAutomationAction
 
 	if conditionMet {
 		runContext.Logger.Info("Main condition is true, executing if_actions")
@@ -619,7 +619,16 @@ func (r *Runner) executeGlobalIfElse(ctx context.Context, actionConfig map[strin
 	if len(actionsToExecute) > 0 {
 		actionPtrs := make([]*AutomationAction, len(actionsToExecute))
 		for i := range actionsToExecute {
-			actionPtrs[i] = &actionsToExecute[i]
+			// actionPtrs[i] = &actionsToExecute[i]
+			actionPtrs[i] = &AutomationAction{
+				ActionType:       actionsToExecute[i].ActionType,
+				ID:               actionsToExecute[i].ID,
+				StepID:           actionsToExecute[i].StepID,
+				Name:             actionsToExecute[i].Name,
+				ActionConfig:     actionsToExecute[i].ActionConfig,
+				ActionConfigJSON: "",
+				ActionOrder:      actionsToExecute[i].ActionOrder,
+			}
 		}
 		err := r.executeActionsList(ctx, actionPtrs, runContext, false)
 		if err != nil {
@@ -632,7 +641,16 @@ func (r *Runner) executeGlobalIfElse(ctx context.Context, actionConfig map[strin
 		runContext.Logger.Info("Executing final actions")
 		finalActionPtrs := make([]*AutomationAction, len(ifElseConfig.FinalActions))
 		for i := range ifElseConfig.FinalActions {
-			finalActionPtrs[i] = &ifElseConfig.FinalActions[i]
+			// finalActionPtrs[i] = &ifElseConfig.FinalActions[i]
+			finalActionPtrs[i] = &AutomationAction{
+				ActionType:       ifElseConfig.FinalActions[i].ActionType,
+				ID:               ifElseConfig.FinalActions[i].ID,
+				StepID:           ifElseConfig.FinalActions[i].StepID,
+				Name:             ifElseConfig.FinalActions[i].Name,
+				ActionConfig:     ifElseConfig.FinalActions[i].ActionConfig,
+				ActionConfigJSON: "",
+				ActionOrder:      ifElseConfig.FinalActions[i].ActionOrder,
+			}
 		}
 		err := r.executeActionsList(ctx, finalActionPtrs, runContext, false)
 		if err != nil {
