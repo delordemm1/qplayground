@@ -111,20 +111,95 @@
       
       // Process action if actionId exists
       if (actionId) {
+        // Check if this is a parent action (group/loop/if-else)
+        const isParentAction = log.action_type && (
+          log.action_type.startsWith('global:') ||
+          log.action_type === 'api:if_else' ||
+          log.action_type === 'api:runtime_loop_until' ||
+          log.action_type === 'playwright:if_else' ||
+          log.action_type === 'playwright:loop_until'
+        );
+        
+        // Check if this action has a parent (nested action)
+        const hasParent = log.parent_action_id && log.parent_action_id !== '';
+        
         if (!step.actions.has(actionId)) {
           step.actions.set(actionId, {
             id: actionId,
+            name: log.action_name || '',
             type: log.action_type || 'Unknown Action',
+            configJson: log.action_config_json || '{}',
+            isParentAction: isParentAction,
+            parentActionId: log.parent_action_id || null,
+            nestedActions: new Map(),
             duration: log.duration_ms || 0,
             status: log.status || 'success',
             error: log.error || null,
             logs: [],
             outputFiles: []
           });
+          
+          // If this is a parent action, parse its config to get nested actions
+          if (isParentAction && log.action_config_json) {
+            try {
+              const config = JSON.parse(log.action_config_json);
+              const action = step.actions.get(actionId);
+              
+              // Extract nested actions based on action type
+              let nestedActionsList = [];
+              if (config.actions) {
+                nestedActionsList = config.actions; // global:group
+              } else if (config.if_actions) {
+                nestedActionsList = [...(config.if_actions || [])];
+                if (config.else_if_conditions) {
+                  config.else_if_conditions.forEach(condition => {
+                    nestedActionsList.push(...(condition.actions || []));
+                  });
+                }
+                nestedActionsList.push(...(config.else_actions || []));
+                nestedActionsList.push(...(config.final_actions || []));
+              } else if (config.loop_actions) {
+                nestedActionsList = config.loop_actions; // global:loop, api:runtime_loop_until, playwright:loop_until
+              }
+              
+              // Store nested actions info
+              nestedActionsList.forEach((nestedAction, index) => {
+                const nestedId = nestedAction.id || `${actionId}-nested-${index}`;
+                action.nestedActions.set(nestedId, {
+                  id: nestedId,
+                  name: nestedAction.name || '',
+                  type: nestedAction.action_type || 'Unknown Action',
+                  config: nestedAction.action_config || {},
+                  logs: [],
+                  outputFiles: [],
+                  duration: 0,
+                  status: 'success'
+                });
+              });
+            } catch (e) {
+              console.warn('Failed to parse action config JSON:', e);
+            }
+          }
         }
         
         const action = step.actions.get(actionId);
         action.logs.push(log);
+        
+        // If this log belongs to a nested action, also add it to the nested action
+        if (hasParent && step.actions.has(log.parent_action_id)) {
+          const parentAction = step.actions.get(log.parent_action_id);
+          if (parentAction.nestedActions.has(actionId)) {
+            const nestedAction = parentAction.nestedActions.get(actionId);
+            nestedAction.logs.push(log);
+            nestedAction.duration += log.duration_ms || 0;
+            if (log.status === 'failed') {
+              nestedAction.status = 'failed';
+            }
+            if (log.output_file) {
+              nestedAction.outputFiles.push(log.output_file);
+            }
+          }
+        }
         
         if (log.output_file) {
           action.outputFiles.push(log.output_file);
@@ -825,6 +900,8 @@
                 {:else}
                   <div class="space-y-3">
                     {#each Array.from(step.actions.values()) as action, actionIndex (action.id)}
+                      <!-- Only show top-level actions (not nested ones) -->
+                      {#if !action.parentActionId}
                       <div class="border border-gray-100 rounded-md">
                         <!-- Action Header -->
                         <button
@@ -833,7 +910,10 @@
                         >
                           <div class="flex items-center justify-between">
                             <div class="flex items-center space-x-3">
-                              <div class="flex-shrink-0">
+                                    Action {actionIndex + 1}: {#if action.name}{action.name} <span class="text-xs text-gray-500">({action.type})</span>{:else}{action.type}{/if}
+                                    {#if action.isParentAction && action.nestedActions.size > 0}
+                                      <span class="text-xs text-blue-600">({action.nestedActions.size} nested actions)</span>
+                                    {/if}
                                 {#if expandedActions.has(action.id)}
                                   <ChevronDownOutline class="h-4 w-4 text-gray-400" />
                                 {:else}
@@ -912,6 +992,96 @@
                                         {#if getFileType(fileUrl) === "image"}
                                           <button
                                             onclick={() => openImageViewer(fileUrl)}
+                              <!-- Show nested actions if this is a parent action -->
+                              {#if action.isParentAction && action.nestedActions.size > 0}
+                                <div class="mb-4">
+                                  <h6 class="text-xs font-medium text-gray-700 mb-2">Nested Actions:</h6>
+                                  <div class="space-y-2 ml-4 border-l-2 border-gray-200 pl-4">
+                                    {#each Array.from(action.nestedActions.values()) as nestedAction}
+                                      <div class="bg-gray-50 p-3 rounded border">
+                                        <div class="flex items-center justify-between mb-2">
+                                          <h6 class="text-sm font-medium text-gray-800">
+                                            {#if nestedAction.name}{nestedAction.name} <span class="text-xs text-gray-500">({nestedAction.type})</span>{:else}{nestedAction.type}{/if}
+                                          </h6>
+                                          <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium {getStatusBadgeClass(nestedAction.status)}">
+                                            {nestedAction.status.toUpperCase()}
+                                          </span>
+                                        </div>
+                                        
+                                        <!-- Nested Action Logs -->
+                                        {#if nestedAction.logs.length > 0}
+                                          <div class="mb-2">
+                                            <div class="space-y-1">
+                                              {#each nestedAction.logs as log}
+                                                <div class="text-xs text-gray-600 bg-white p-2 rounded">
+                                                  <div class="flex justify-between items-start">
+                                                    <span>{log.message || 'Action executed'}</span>
+                                                    <span class="text-gray-400">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                                                  </div>
+                                                  {#if log.error}
+                                                    <div class="mt-1 text-red-600 font-medium">Error: {log.error}</div>
+                                                  {/if}
+                                                </div>
+                                              {/each}
+                                            </div>
+                                          </div>
+                                        {/if}
+
+                                        <!-- Nested Action Output Files -->
+                                        {#if nestedAction.outputFiles.length > 0}
+                                          <div>
+                                            <h6 class="text-xs font-medium text-gray-700 mb-1">Files:</h6>
+                                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                                              {#each nestedAction.outputFiles as fileUrl}
+                                                <div class="border border-gray-200 rounded p-1 text-xs">
+                                                  <div class="flex items-center space-x-1">
+                                                    <div class="flex-shrink-0">
+                                                      {#if getFileType(fileUrl) === "image"}
+                                                        <svg class="h-3 w-3 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                        </svg>
+                                                      {:else}
+                                                        <svg class="h-3 w-3 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                        </svg>
+                                                      {/if}
+                                                    </div>
+                                                    <div class="flex-1 min-w-0">
+                                                      <p class="text-xs font-medium text-gray-900 truncate">
+                                                        {fileUrl.split("/").pop() || "Unknown File"}
+                                                      </p>
+                                                    </div>
+                                                  </div>
+                                                  <div class="mt-1">
+                                                    {#if getFileType(fileUrl) === "image"}
+                                                      <button
+                                                        onclick={() => openImageViewer(fileUrl)}
+                                                        class="text-xs text-primary-600 hover:text-primary-800 font-medium"
+                                                      >
+                                                        View
+                                                      </button>
+                                                    {:else}
+                                                      <a
+                                                        href={fileUrl}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        class="text-xs text-primary-600 hover:text-primary-800 font-medium"
+                                                      >
+                                                        Open
+                                                      </a>
+                                                    {/if}
+                                                  </div>
+                                                </div>
+                                              {/each}
+                                            </div>
+                                          </div>
+                                        {/if}
+                                      </div>
+                                    {/each}
+                                  </div>
+                                </div>
+                              {/if}
+
                                             class="text-xs text-primary-600 hover:text-primary-800 font-medium"
                                           >
                                             View Image
@@ -969,3 +1139,4 @@
     background-color: #fafafa;
   }
 </style>
+                      {/if}

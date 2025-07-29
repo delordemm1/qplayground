@@ -447,6 +447,7 @@ func (r *Runner) executeActionsList(ctx context.Context, actions []*AutomationAc
 					StepID:         runContext.StepID,
 					ActionID:       action.ID,
 					ActionName:     action.Name,
+					ActionConfigJSON: action.ActionConfigJSON,
 					ParentActionID: runContext.ParentActionID,
 					StepName:       runContext.StepName,
 					ActionType:     action.ActionType,
@@ -769,6 +770,34 @@ func (r *Runner) executeGlobalLoop(ctx context.Context, actionConfig map[string]
 			if err != nil {
 				return fmt.Errorf("failed to execute loop actions in iteration %d: %w", loopCount, err)
 			}
+
+			// Process output files from loop actions
+			if len(runContext.LastOutputFiles) > 0 {
+				for _, outputFile := range runContext.LastOutputFiles {
+					if runContext.EventCh != nil {
+						select {
+						case runContext.EventCh <- RunEvent{
+							Type:           RunEventTypeOutputFile,
+							Timestamp:      time.Now(),
+							StepID:         runContext.StepID,
+							ActionID:       runContext.ActionID,
+							ActionName:     runContext.ActionName,
+							ActionConfigJSON: string(configBytes),
+							ParentActionID: runContext.ParentActionID,
+							StepName:       runContext.StepName,
+							ActionType:     "global:loop",
+							OutputFile:     outputFile,
+							LoopIndex:      runContext.LoopIndex,
+							LocalLoopIndex: runContext.VariableContext.LocalLoopIndex,
+						}:
+						default:
+							// Channel is full, skip this event to avoid blocking
+						}
+					}
+				}
+				// Clear the buffer after processing
+				runContext.LastOutputFiles = make([]string, 0)
+			}
 		}
 
 		// Small delay to prevent busy-waiting
@@ -841,6 +870,8 @@ func (r *Runner) processAllEvents(ctx context.Context, eventCh <-chan RunEvent, 
 					"step_name":        event.StepName,
 					"step_id":          event.StepID,
 					"action_id":        event.ActionID,
+					"action_name":      event.ActionName,
+					"action_config_json": event.ActionConfigJSON,
 					"action_type":      event.ActionType,
 					"message":          event.Message,
 					"loop_index":       event.LoopIndex,
@@ -862,6 +893,8 @@ func (r *Runner) processAllEvents(ctx context.Context, eventCh <-chan RunEvent, 
 					"step_name":        event.StepName,
 					"step_id":          event.StepID,
 					"action_id":        event.ActionID,
+					"action_name":      event.ActionName,
+					"action_config_json": event.ActionConfigJSON,
 					"action_type":      event.ActionType,
 					"error":            event.Error,
 					"loop_index":       event.LoopIndex,
@@ -886,6 +919,8 @@ func (r *Runner) processAllEvents(ctx context.Context, eventCh <-chan RunEvent, 
 					"step_name":        event.StepName,
 					"step_id":          event.StepID,
 					"action_id":        event.ActionID,
+					"action_name":      event.ActionName,
+					"action_config_json": event.ActionConfigJSON,
 					"action_type":      event.ActionType,
 					"output_file":      event.OutputFile,
 					"loop_index":       event.LoopIndex,

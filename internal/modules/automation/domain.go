@@ -30,6 +30,7 @@ type RunEvent struct {
 	StepName       string                 `json:"step_name,omitempty"`
 	ActionID       string                 `json:"action_id,omitempty"`
 	ActionName     string                 `json:"action_name,omitempty"`
+	ActionConfigJSON string               `json:"action_config_json,omitempty"`
 	ParentActionID string                 `json:"parent_action_id,omitempty"`
 	ActionType     string                 `json:"action_type,omitempty"`
 	Message        string                 `json:"message,omitempty"`
