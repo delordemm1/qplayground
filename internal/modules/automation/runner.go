@@ -442,18 +442,18 @@ func (r *Runner) executeActionsList(ctx context.Context, actions []*AutomationAc
 			if runContext.EventCh != nil {
 				select {
 				case runContext.EventCh <- RunEvent{
-					Type:           RunEventTypeOutputFile,
-					Timestamp:      time.Now(),
-					StepID:         runContext.StepID,
-					ActionID:       action.ID,
-					ActionName:     action.Name,
+					Type:             RunEventTypeOutputFile,
+					Timestamp:        time.Now(),
+					StepID:           runContext.StepID,
+					ActionID:         action.ID,
+					ActionName:       action.Name,
 					ActionConfigJSON: action.ActionConfigJSON,
-					ParentActionID: runContext.ParentActionID,
-					StepName:       runContext.StepName,
-					ActionType:     action.ActionType,
-					OutputFile:     lastFile,
-					LoopIndex:      runContext.LoopIndex,
-					LocalLoopIndex: runContext.VariableContext.LocalLoopIndex,
+					ParentActionID:   runContext.ParentActionID,
+					StepName:         runContext.StepName,
+					ActionType:       action.ActionType,
+					OutputFile:       lastFile,
+					LoopIndex:        runContext.LoopIndex,
+					LocalLoopIndex:   runContext.VariableContext.LocalLoopIndex,
 				}:
 				default:
 					// Channel is full, skip this event to avoid blocking
@@ -777,18 +777,18 @@ func (r *Runner) executeGlobalLoop(ctx context.Context, actionConfig map[string]
 					if runContext.EventCh != nil {
 						select {
 						case runContext.EventCh <- RunEvent{
-							Type:           RunEventTypeOutputFile,
-							Timestamp:      time.Now(),
-							StepID:         runContext.StepID,
-							ActionID:       runContext.ActionID,
-							ActionName:     runContext.ActionName,
+							Type:             RunEventTypeOutputFile,
+							Timestamp:        time.Now(),
+							StepID:           runContext.StepID,
+							ActionID:         runContext.ActionID,
+							ActionName:       runContext.ActionName,
 							ActionConfigJSON: string(configBytes),
-							ParentActionID: runContext.ParentActionID,
-							StepName:       runContext.StepName,
-							ActionType:     "global:loop",
-							OutputFile:     outputFile,
-							LoopIndex:      runContext.LoopIndex,
-							LocalLoopIndex: runContext.VariableContext.LocalLoopIndex,
+							ParentActionID:   runContext.ParentActionID,
+							StepName:         runContext.StepName,
+							ActionType:       "global:loop",
+							OutputFile:       outputFile,
+							LoopIndex:        runContext.LoopIndex,
+							LocalLoopIndex:   runContext.VariableContext.LocalLoopIndex,
 						}:
 						default:
 							// Channel is full, skip this event to avoid blocking
@@ -864,75 +864,75 @@ func (r *Runner) processAllEvents(ctx context.Context, eventCh <-chan RunEvent, 
 			switch event.Type {
 			case RunEventTypeLog:
 				logEntry := map[string]any{
-					"parent_action_id": event.ParentActionID,
-					"local_loop_index": event.LocalLoopIndex,
-					"timestamp":        event.Timestamp.Format(time.RFC3339),
-					"step_name":        event.StepName,
-					"step_id":          event.StepID,
-					"action_id":        event.ActionID,
-					"action_name":      event.ActionName,
+					"parent_action_id":   event.ParentActionID,
+					"local_loop_index":   event.LocalLoopIndex,
+					"timestamp":          event.Timestamp.Format(time.RFC3339),
+					"step_name":          event.StepName,
+					"step_id":            event.StepID,
+					"action_id":          event.ActionID,
+					"action_name":        event.ActionName,
 					"action_config_json": event.ActionConfigJSON,
-					"action_type":      event.ActionType,
-					"message":          event.Message,
-					"loop_index":       event.LoopIndex,
-					"duration_ms":      event.Duration,
-					"status":           "success",
+					"action_type":        event.ActionType,
+					"message":            event.Message,
+					"loop_index":         event.LoopIndex,
+					"duration_ms":        event.Duration,
+					"status":             "success",
 				}
 				*logs = append(*logs, logEntry)
 
 				// Send SSE update
-				if r.sseManager != nil {
-					r.sseManager.SendRunLog(projectID, run.AutomationID, run.ID, event.StepName, event.ActionType, event.Message, event.Duration)
-				}
+				// if r.sseManager != nil {
+				// 	r.sseManager.SendRunLog(projectID, run.AutomationID, run.ID, event.StepName, event.ActionType, event.Message, event.Duration)
+				// }
 
 			case RunEventTypeError:
 				logEntry := map[string]any{
-					"parent_action_id": event.ParentActionID,
-					"local_loop_index": event.LocalLoopIndex,
-					"timestamp":        event.Timestamp.Format(time.RFC3339),
-					"step_name":        event.StepName,
-					"step_id":          event.StepID,
-					"action_id":        event.ActionID,
-					"action_name":      event.ActionName,
+					"parent_action_id":   event.ParentActionID,
+					"local_loop_index":   event.LocalLoopIndex,
+					"timestamp":          event.Timestamp.Format(time.RFC3339),
+					"step_name":          event.StepName,
+					"step_id":            event.StepID,
+					"action_id":          event.ActionID,
+					"action_name":        event.ActionName,
 					"action_config_json": event.ActionConfigJSON,
-					"action_type":      event.ActionType,
-					"error":            event.Error,
-					"loop_index":       event.LoopIndex,
-					"duration_ms":      event.Duration,
-					"status":           "failed",
+					"action_type":        event.ActionType,
+					"error":              event.Error,
+					"loop_index":         event.LoopIndex,
+					"duration_ms":        event.Duration,
+					"status":             "failed",
 				}
 				*logs = append(*logs, logEntry)
 
 				// Send SSE update
-				if r.sseManager != nil {
-					r.sseManager.SendRunError(projectID, run.AutomationID, run.ID, event.StepName, event.ActionType, event.Error)
-				}
+				// if r.sseManager != nil {
+				// 	r.sseManager.SendRunError(projectID, run.AutomationID, run.ID, event.StepName, event.ActionType, event.Error)
+				// }
 
 			case RunEventTypeOutputFile:
 				*outputFiles = append(*outputFiles, event.OutputFile)
 
 				// Also add to logs for completeness
 				logEntry := map[string]any{
-					"parent_action_id": event.ParentActionID,
-					"local_loop_index": event.LocalLoopIndex,
-					"timestamp":        event.Timestamp.Format(time.RFC3339),
-					"step_name":        event.StepName,
-					"step_id":          event.StepID,
-					"action_id":        event.ActionID,
-					"action_name":      event.ActionName,
+					"parent_action_id":   event.ParentActionID,
+					"local_loop_index":   event.LocalLoopIndex,
+					"timestamp":          event.Timestamp.Format(time.RFC3339),
+					"step_name":          event.StepName,
+					"step_id":            event.StepID,
+					"action_id":          event.ActionID,
+					"action_name":        event.ActionName,
 					"action_config_json": event.ActionConfigJSON,
-					"action_type":      event.ActionType,
-					"output_file":      event.OutputFile,
-					"loop_index":       event.LoopIndex,
-					"duration_ms":      event.Duration,
-					"status":           "success",
+					"action_type":        event.ActionType,
+					"output_file":        event.OutputFile,
+					"loop_index":         event.LoopIndex,
+					"duration_ms":        event.Duration,
+					"status":             "success",
 				}
 				*logs = append(*logs, logEntry)
 
 				// Send SSE update
-				if r.sseManager != nil {
-					r.sseManager.SendRunOutputFile(projectID, run.AutomationID, run.ID, event.OutputFile)
-				}
+				// if r.sseManager != nil {
+				// 	r.sseManager.SendRunOutputFile(projectID, run.AutomationID, run.ID, event.OutputFile)
+				// }
 			}
 			mu.Unlock()
 
