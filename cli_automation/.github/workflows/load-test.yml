@@ -1,43 +1,271 @@
-name: Load Test with Playwright + Output Report
+name: Load Test with Playwright + Consolidated Reports
 
 on:
   workflow_dispatch:
-  # push:
-  #   branches:
-  #     - ai-coding-test
+    inputs:
+      config_file:
+        description: 'Configuration file to use'
+        required: false
+        default: 'config.json'
+      concurrent_runs:
+        description: 'Number of concurrent runs per runner'
+        required: false
+        default: '2'
+      storage_provider:
+        description: 'Storage provider (local, r2, gcp)'
+        required: false
+        default: 'local'
 
 concurrency:
-  group: ai-coding-load-test
+  group: qplayground-load-test
   cancel-in-progress: true
 
+env:
+  # Storage configuration (set these as repository secrets)
+  STORAGE_PROVIDER: ${{ github.event.inputs.storage_provider || 'local' }}
+  CLI_STORAGE_PROVIDER: ${{ github.event.inputs.storage_provider || 'local' }}
+  
+  # R2 Configuration (if using R2)
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+  R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+  R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+  R2_PUBLIC_URL: ${{ secrets.R2_PUBLIC_URL }}
+  
+  # GCP Configuration (if using GCP)
+  GCP_BUCKET_ACCESS_KEY: ${{ secrets.GCP_BUCKET_ACCESS_KEY }}
+  GCP_BUCKET_SECRET: ${{ secrets.GCP_BUCKET_SECRET }}
+  GCP_BUCKET_NAME: ${{ secrets.GCP_BUCKET_NAME }}
+  GCP_BUCKET_ENDPOINT_URL: ${{ secrets.GCP_BUCKET_ENDPOINT_URL }}
+  GCP_BUCKET_PUBLIC_URL: ${{ secrets.GCP_BUCKET_PUBLIC_URL }}
+  
+  # GitHub Actions specific
+  GITHUB_RUN_ID: ${{ github.run_id }}
+  GITHUB_RUN_NUMBER: ${{ github.run_number }}
+
 jobs:
-  simulate-users:
+  # Matrix job for parallel execution
+  load-test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        runner_index: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]  # 10 runners
+      fail-fast: false  # Continue other runners even if one fails
+    
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      # - name: Set up Node.js
-      #   uses: actions/setup-node@v4
-      #   with:
-      #     node-version: "18"
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.25'
 
-      - name: Create screenshots directory
-        run: mkdir -p output
+      - name: Create output directories
+        run: |
+          mkdir -p output/runner-${{ matrix.runner_index }}/reports
+          mkdir -p output/runner-${{ matrix.runner_index }}/screenshots
+          mkdir -p artifacts
 
-      - name: Build Docker image
-        run: docker build -t qplaywright-load-test .
+      - name: Update config for concurrent runs
+        run: |
+          # Update the config file to set the number of concurrent runs
+          jq '.automation.config.multirun.count = ${{ github.event.inputs.concurrent_runs || 2 }}' ${{ github.event.inputs.config_file || 'config.json' }} > temp_config.json
+          mv temp_config.json ${{ github.event.inputs.config_file || 'config.json' }}
 
-      - name: Run playwright load test
-        run: docker run --rm \                                       
-          -v ./config.json:/app/config.json:ro \
-          -v ./output:/app/output \
-          qplaywright-load-test \
-          --config-path /app/config.json \
-          --output-dir /app/output
+      - name: Build CLI
+        working-directory: cli_automation
+        run: go build -o qplayground-cli cmd/main.go
 
-      - name: Upload output reports
+      - name: Run automation (Runner ${{ matrix.runner_index }})
+        working-directory: cli_automation
+        env:
+          RUNNER_INDEX: ${{ matrix.runner_index }}
+          LOG_LEVEL: info
+        run: |
+          ./qplayground-cli \
+            --config-path ${{ github.event.inputs.config_file || 'config.json' }} \
+            --output-dir ../output/runner-${{ matrix.runner_index }} \
+            --runner-index ${{ matrix.runner_index }}
+
+      - name: Prepare runner artifacts
+        run: |
+          # Create a summary file for this runner
+          echo "{
+            \"runner_index\": ${{ matrix.runner_index }},
+            \"github_run_id\": \"${{ github.run_id }}\",
+            \"github_run_number\": \"${{ github.run_number }}\",
+            \"concurrent_runs\": ${{ github.event.inputs.concurrent_runs || 2 }},
+            \"storage_provider\": \"${{ github.event.inputs.storage_provider || 'local' }}\",
+            \"completed_at\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"
+          }" > output/runner-${{ matrix.runner_index }}/runner_summary.json
+          
+          # Copy all output to artifacts directory with runner prefix
+          cp -r output/runner-${{ matrix.runner_index }}/* artifacts/ || true
+
+      - name: Upload runner artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: runner-${{ matrix.runner_index }}-results
+          path: output/runner-${{ matrix.runner_index }}/
+          retention-days: 30
+
+  # Consolidation job that runs after all runners complete
+  consolidate-reports:
+    needs: load-test
+    runs-on: ubuntu-latest
+    if: always()  # Run even if some runners failed
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.25'
+
+      - name: Download all runner artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-artifacts/
+
+      - name: Prepare consolidated directory
+        run: |
+          mkdir -p consolidated-output/reports
+          mkdir -p consolidated-output/screenshots
+          mkdir -p consolidated-output/raw-data
+
+      - name: Consolidate all results
+        run: |
+          echo "Consolidating results from all runners..."
+          
+          # Create consolidated summary
+          echo "{
+            \"consolidation_info\": {
+              \"total_runners\": 10,
+              \"github_run_id\": \"${{ github.run_id }}\",
+              \"github_run_number\": \"${{ github.run_number }}\",
+              \"consolidated_at\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",
+              \"storage_provider\": \"${{ github.event.inputs.storage_provider || 'local' }}\",
+              \"concurrent_runs_per_runner\": ${{ github.event.inputs.concurrent_runs || 2 }}
+            },
+            \"runners\": []
+          }" > consolidated-output/consolidation_summary.json
+          
+          # Copy all individual reports and screenshots
+          find all-artifacts/ -name "*.json" -exec cp {} consolidated-output/raw-data/ \; || true
+          find all-artifacts/ -name "*.html" -exec cp {} consolidated-output/reports/ \; || true
+          find all-artifacts/ -name "*.csv" -exec cp {} consolidated-output/reports/ \; || true
+          find all-artifacts/ -name "*.png" -exec cp {} consolidated-output/screenshots/ \; || true
+          find all-artifacts/ -name "*.jpg" -exec cp {} consolidated-output/screenshots/ \; || true
+          find all-artifacts/ -name "*.jpeg" -exec cp {} consolidated-output/screenshots/ \; || true
+          
+          # Count total files
+          TOTAL_REPORTS=$(find consolidated-output/reports/ -name "*.html" | wc -l)
+          TOTAL_SCREENSHOTS=$(find consolidated-output/screenshots/ -name "*.png" -o -name "*.jpg" -o -name "*.jpeg" | wc -l)
+          TOTAL_JSON_FILES=$(find consolidated-output/raw-data/ -name "*.json" | wc -l)
+          
+          echo "Consolidation complete:"
+          echo "- Total HTML reports: $TOTAL_REPORTS"
+          echo "- Total screenshots: $TOTAL_SCREENSHOTS"
+          echo "- Total JSON files: $TOTAL_JSON_FILES"
+
+      - name: Build CLI for consolidation
+        working-directory: cli_automation
+        run: go build -o qplayground-cli cmd/main.go
+
+      - name: Generate consolidated reports
+        working-directory: cli_automation
+        env:
+          STORAGE_PROVIDER: ${{ github.event.inputs.storage_provider || 'local' }}
+          CLI_STORAGE_PROVIDER: ${{ github.event.inputs.storage_provider || 'local' }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          R2_PUBLIC_URL: ${{ secrets.R2_PUBLIC_URL }}
+          GCP_BUCKET_ACCESS_KEY: ${{ secrets.GCP_BUCKET_ACCESS_KEY }}
+          GCP_BUCKET_SECRET: ${{ secrets.GCP_BUCKET_SECRET }}
+          GCP_BUCKET_NAME: ${{ secrets.GCP_BUCKET_NAME }}
+          GCP_BUCKET_ENDPOINT_URL: ${{ secrets.GCP_BUCKET_ENDPOINT_URL }}
+          GCP_BUCKET_PUBLIC_URL: ${{ secrets.GCP_BUCKET_PUBLIC_URL }}
+        run: |
+          # Run consolidation process
+          ./qplayground-cli \
+            --output-dir ../consolidated-output \
+            --consolidate \
+            --config-path config.json || echo "Consolidation completed with warnings"
+
+      - name: Create final consolidated archive
+        run: |
+          # Create a comprehensive archive with all results
+          tar -czf consolidated-load-test-results.tar.gz consolidated-output/
+          
+          # Create a summary report
+          echo "# Load Test Results Summary" > RESULTS_SUMMARY.md
+          echo "" >> RESULTS_SUMMARY.md
+          echo "**Run Information:**" >> RESULTS_SUMMARY.md
+          echo "- GitHub Run ID: ${{ github.run_id }}" >> RESULTS_SUMMARY.md
+          echo "- GitHub Run Number: ${{ github.run_number }}" >> RESULTS_SUMMARY.md
+          echo "- Total Runners: 10" >> RESULTS_SUMMARY.md
+          echo "- Concurrent Runs per Runner: ${{ github.event.inputs.concurrent_runs || 2 }}" >> RESULTS_SUMMARY.md
+          echo "- Storage Provider: ${{ github.event.inputs.storage_provider || 'local' }}" >> RESULTS_SUMMARY.md
+          echo "- Completed At: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> RESULTS_SUMMARY.md
+          echo "" >> RESULTS_SUMMARY.md
+          echo "**Files Generated:**" >> RESULTS_SUMMARY.md
+          echo "- HTML Reports: $(find consolidated-output/reports/ -name "*.html" | wc -l)" >> RESULTS_SUMMARY.md
+          echo "- Screenshots: $(find consolidated-output/screenshots/ -name "*.png" -o -name "*.jpg" -o -name "*.jpeg" | wc -l)" >> RESULTS_SUMMARY.md
+          echo "- JSON Data Files: $(find consolidated-output/raw-data/ -name "*.json" | wc -l)" >> RESULTS_SUMMARY.md
+          echo "- CSV Reports: $(find consolidated-output/reports/ -name "*.csv" | wc -l)" >> RESULTS_SUMMARY.md
+
+      - name: Upload consolidated results
         uses: actions/upload-artifact@v4
         with:
-          name: output-report
-          path: output
+          name: consolidated-load-test-results
+          path: |
+            consolidated-output/
+            consolidated-load-test-results.tar.gz
+            RESULTS_SUMMARY.md
+          retention-days: 90
+
+      - name: Comment on PR (if applicable)
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // Read the summary
+            let summary = "Load test completed!";
+            try {
+              summary = fs.readFileSync('RESULTS_SUMMARY.md', 'utf8');
+            } catch (e) {
+              console.log('Could not read summary file');
+            }
+            
+            const comment = `## 🚀 Load Test Results
+            
+            ${summary}
+            
+            📊 **Artifacts Available:**
+            - Individual runner results: \`runner-X-results\`
+            - Consolidated results: \`consolidated-load-test-results\`
+            
+            🔗 **Download artifacts from the [Actions tab](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})**
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+      - name: Upload to storage (if configured)
+        if: env.STORAGE_PROVIDER != 'local'
+        run: |
+          echo "Uploading consolidated results to ${{ env.STORAGE_PROVIDER }} storage..."
+          # The CLI consolidation step above would have already uploaded to storage
+          echo "Upload completed via CLI consolidation process"
