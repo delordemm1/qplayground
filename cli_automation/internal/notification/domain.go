@@ -43,3 +43,7 @@ type NotificationChannelConfig struct {
 	OnError    bool                   `json:"onError"`
 	Config     map[string]interface{} `json:"config"`
 }
+
+type ChannelNotifier interface {
+	Send(ctx context.Context, message NotificationMessage, channelConfig map[string]interface{}) error
+}

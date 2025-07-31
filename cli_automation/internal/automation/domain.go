@@ -2,7 +2,6 @@ package automation
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -53,21 +52,21 @@ type ElseIfCondition struct {
 }
 
 type GlobalIfElseConfig struct {
-	ConditionType     string                 `json:"condition_type"`
-	ConditionConfig   map[string]interface{} `json:"condition_config"`
-	IfActions         []AutomationAction     `json:"if_actions"`
-	ElseIfConditions  []ElseIfCondition      `json:"else_if_conditions"`
-	ElseActions       []AutomationAction     `json:"else_actions"`
-	FinalActions      []AutomationAction     `json:"final_actions"`
+	ConditionType    string                 `json:"condition_type"`
+	ConditionConfig  map[string]interface{} `json:"condition_config"`
+	IfActions        []AutomationAction     `json:"if_actions"`
+	ElseIfConditions []ElseIfCondition      `json:"else_if_conditions"`
+	ElseActions      []AutomationAction     `json:"else_actions"`
+	FinalActions     []AutomationAction     `json:"final_actions"`
 }
 
 type GlobalLoopConfig struct {
-	ConditionType     string                 `json:"condition_type"`
-	ConditionConfig   map[string]interface{} `json:"condition_config"`
-	MaxLoops          int                    `json:"max_loops"`
-	TimeoutMs         int                    `json:"timeout_ms"`
-	FailOnForceStop   bool                   `json:"fail_on_force_stop"`
-	LoopActions       []AutomationAction     `json:"loop_actions"`
+	ConditionType   string                 `json:"condition_type"`
+	ConditionConfig map[string]interface{} `json:"condition_config"`
+	MaxLoops        int                    `json:"max_loops"`
+	TimeoutMs       int                    `json:"timeout_ms"`
+	FailOnForceStop bool                   `json:"fail_on_force_stop"`
+	LoopActions     []AutomationAction     `json:"loop_actions"`
 }
 
 // RunContext holds shared resources and state for a single automation run.
@@ -97,7 +96,7 @@ type PluginAction interface {
 	// actionConfig: The specific configuration for this action (from automation_actions.action_config_json).
 	// runContext: Shared context for the entire automation run.
 	Execute(ctx context.Context, actionConfig map[string]interface{}, runContext *RunContext) error
-	
+
 	// EvaluateCondition evaluates a condition for this action type.
 	// conditionConfig: The specific configuration for the condition.
 	// runContext: Shared context for the entire automation run.
@@ -140,13 +139,13 @@ type VariableContext struct {
 
 // ConsolidatedReport represents the final consolidated report from all runners
 type ConsolidatedReport struct {
-	TotalRunners     int                    `json:"total_runners"`
-	TotalRuns        int                    `json:"total_runs"`
-	AllReports       []ReportSummary        `json:"all_reports"`
-	ConsolidatedData ReportSummary          `json:"consolidated_data"`
-	GeneratedAt      time.Time              `json:"generated_at"`
-	GitHubRunID      string                 `json:"github_run_id,omitempty"`
-	GitHubRunNumber  string                 `json:"github_run_number,omitempty"`
+	TotalRunners     int             `json:"total_runners"`
+	TotalRuns        int             `json:"total_runs"`
+	AllReports       []ReportSummary `json:"all_reports"`
+	ConsolidatedData ReportSummary   `json:"consolidated_data"`
+	GeneratedAt      time.Time       `json:"generated_at"`
+	GitHubRunID      string          `json:"github_run_id,omitempty"`
+	GitHubRunNumber  string          `json:"github_run_number,omitempty"`
 }
 
 // Variable represents a configuration variable
@@ -194,16 +193,16 @@ type AutomationConfig struct {
 
 // Automation represents an automation workflow
 type Automation struct {
-	ID          string
-	ProjectID   string
-	ProjectName string
-	Name        string
+	ID             string
+	ProjectID      string
+	ProjectName    string
+	Name           string
 	AutomationSlug string
-	Description string
-	ConfigJSON  string // JSON string containing variables, run settings, templates
-	Steps       []*AutomationStep
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	Description    string
+	ConfigJSON     string // JSON string containing variables, run settings, templates
+	Steps          []*AutomationStep
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 // AutomationStep represents a step within an automation

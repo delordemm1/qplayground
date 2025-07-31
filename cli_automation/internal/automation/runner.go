@@ -3,7 +3,6 @@ package automation
 import (
 	"context"
 	"encoding/json"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"math/rand"
@@ -69,7 +68,7 @@ func (r *Runner) RunAutomation(ctx context.Context, automation *Automation, run 
 	baseR2Path := fmt.Sprintf("%s/%s/run-%s", automation.ProjectID, automationSlug, run.ID)
 	screenshotsR2Path := fmt.Sprintf("%s/screenshots", baseR2Path)
 	reportsR2Path := fmt.Sprintf("%s/reports", baseR2Path)
-
+	_ = screenshotsR2Path
 	// Set start time
 	now := time.Now()
 	run.StartTime = &now
@@ -91,18 +90,20 @@ func (r *Runner) RunAutomation(ctx context.Context, automation *Automation, run 
 				run.Status = "failed"
 				err = fmt.Errorf(run.ErrorMessage)
 			} else {
-		// Generate automation slug from name
-		automationSlug := strings.ToLower(strings.ReplaceAll(automation.Name, " ", "-"))
-		automationSlug = regexp.MustCompile(`[^a-z0-9-]`).ReplaceAllString(automationSlug, "")
+				// Generate automation slug from name
+				automationSlug := strings.ToLower(strings.ReplaceAll(automation.Name, " ", "-"))
+				automationSlug = regexp.MustCompile(`[^a-z0-9-]`).ReplaceAllString(automationSlug, "")
 
-		reportsR2Path := fmt.Sprintf("%s/%s/run-%s/reports", automation.ProjectID, automationSlug, run.ID)
-		detailedURL, userJourneyURL, reportErr := GenerateReports(automation, run, &automationConfig, r.outputDir, reportsR2Path, r.storageService)
-		if reportErr != nil {
-			slog.Error("Failed to generate reports", "error", reportErr)
-			// Don't fail the entire automation for report generation errors
-		} else {
-			detailedReportURL = detailedURL
-			userJourneyReportURL = userJourneyURL
+				reportsR2Path := fmt.Sprintf("%s/%s/run-%s/reports", automation.ProjectID, automationSlug, run.ID)
+				detailedURL, userJourneyURL, reportErr := GenerateReports(automation, run, &automationConfig, r.outputDir, reportsR2Path, r.storageService)
+				if reportErr != nil {
+					slog.Error("Failed to generate reports", "error", reportErr)
+					// Don't fail the entire automation for report generation errors
+				} else {
+					detailedReportURL = detailedURL
+					userJourneyReportURL = userJourneyURL
+				}
+			}
 		}
 	}()
 
@@ -144,7 +145,7 @@ func (r *Runner) RunAutomation(ctx context.Context, automation *Automation, run 
 			wg.Add(1)
 			go func(loopIndex int) {
 				defer wg.Done()
-				err := r.executeSingleRun(ctx, automation, &automationConfig, run, loopIndex, eventCh)
+				err := r.executeSingleRun(ctx, automation, &automationConfig, run, loopIndex, eventCh, screenshotsR2Path)
 
 				if err != nil {
 					// For parallel execution, we'll just log the error
@@ -162,7 +163,7 @@ func (r *Runner) RunAutomation(ctx context.Context, automation *Automation, run 
 	} else {
 		// Sequential execution
 		for i := 0; i < runCount; i++ {
-			err := r.executeSingleRun(ctx, automation, &automationConfig, run, i, eventCh)
+			err := r.executeSingleRun(ctx, automation, &automationConfig, run, i, eventCh, screenshotsR2Path)
 
 			if err != nil {
 				executionError = err
@@ -186,12 +187,12 @@ func (r *Runner) RunAutomation(ctx context.Context, automation *Automation, run 
 		// Send error notifications
 		go r.sendNotifications(context.Background(), automation, run, &automationConfig)
 		err = executionError
-		
+
 		// Generate reports even on failure
 		automationSlug := strings.ToLower(strings.ReplaceAll(automation.Name, " ", "-"))
 		automationSlug = regexp.MustCompile(`[^a-z0-9-]`).ReplaceAllString(automationSlug, "")
 		reportsR2Path := fmt.Sprintf("%s/%s/run-%s/reports", automation.ProjectID, automationSlug, run.ID)
-		detailedURL, userJourneyURL, reportErr := GenerateReports(automation, run, &automationConfig, outputDir, reportsR2Path, r.storageService)
+		detailedURL, userJourneyURL, reportErr := GenerateReports(automation, run, &automationConfig, "", reportsR2Path, r.storageService)
 		if reportErr != nil {
 			slog.Error("Failed to generate reports on failure", "error", reportErr)
 		} else {
@@ -209,10 +210,10 @@ func (r *Runner) RunAutomation(ctx context.Context, automation *Automation, run 
 		"total_runs", runCount)
 
 	// Generate reports on success
-	automationSlug := strings.ToLower(strings.ReplaceAll(automation.Name, " ", "-"))
+	automationSlug = strings.ToLower(strings.ReplaceAll(automation.Name, " ", "-"))
 	automationSlug = regexp.MustCompile(`[^a-z0-9-]`).ReplaceAllString(automationSlug, "")
-	reportsR2Path := fmt.Sprintf("%s/%s/run-%s/reports", automation.ProjectID, automationSlug, run.ID)
-	detailedURL, userJourneyURL, reportErr := GenerateReports(automation, run, &automationConfig, outputDir, reportsR2Path, r.storageService)
+	reportsR2Path = fmt.Sprintf("%s/%s/run-%s/reports", automation.ProjectID, automationSlug, run.ID)
+	detailedURL, userJourneyURL, reportErr := GenerateReports(automation, run, &automationConfig, "", reportsR2Path, r.storageService)
 	if reportErr != nil {
 		slog.Error("Failed to generate reports", "error", reportErr)
 	} else {
@@ -229,7 +230,7 @@ func (r *Runner) RunAutomation(ctx context.Context, automation *Automation, run 
 }
 
 // executeSingleRun executes a single run of the automation
-func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, automationConfig *AutomationConfig, run *AutomationRun, loopIndex int, eventCh chan RunEvent) error {
+func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, automationConfig *AutomationConfig, run *AutomationRun, loopIndex int, eventCh chan RunEvent, screenshotsR2Path string) error {
 
 	// Initialize Playwright for this run
 	pw, err := playwright.Run()
@@ -486,13 +487,13 @@ func (r *Runner) executeGlobalGroup(ctx context.Context, action *AutomationActio
 	} else {
 		// Fallback to resolved config
 		configBytes, err := json.Marshal(actionConfig)
-	if err != nil {
-		return fmt.Errorf("failed to marshal group config: %w", err)
-	}
+		if err != nil {
+			return fmt.Errorf("failed to marshal group config: %w", err)
+		}
 
-	if err := json.Unmarshal(configBytes, &groupConfig); err != nil {
-		return fmt.Errorf("failed to parse global group config: %w", err)
-	}
+		if err := json.Unmarshal(configBytes, &groupConfig); err != nil {
+			return fmt.Errorf("failed to parse global group config: %w", err)
+		}
 	}
 
 	runContext.Logger.Info("Executing global group", "actions_count", len(groupConfig.Actions))
@@ -562,13 +563,13 @@ func (r *Runner) executeGlobalIfElse(ctx context.Context, action *AutomationActi
 	} else {
 		// Fallback to resolved config
 		configBytes, err := json.Marshal(actionConfig)
-	if err != nil {
-		return fmt.Errorf("failed to marshal if-else config: %w", err)
-	}
+		if err != nil {
+			return fmt.Errorf("failed to marshal if-else config: %w", err)
+		}
 
-	if err := json.Unmarshal(configBytes, &ifElseConfig); err != nil {
-		return fmt.Errorf("failed to parse global if-else config: %w", err)
-	}
+		if err := json.Unmarshal(configBytes, &ifElseConfig); err != nil {
+			return fmt.Errorf("failed to parse global if-else config: %w", err)
+		}
 	}
 
 	runContext.Logger.Info("Executing global if-else", "condition_type", ifElseConfig.ConditionType)
@@ -654,13 +655,13 @@ func (r *Runner) executeGlobalLoop(ctx context.Context, action *AutomationAction
 	} else {
 		// Fallback to resolved config
 		configBytes, err := json.Marshal(actionConfig)
-	if err != nil {
-		return fmt.Errorf("failed to marshal loop config: %w", err)
-	}
+		if err != nil {
+			return fmt.Errorf("failed to marshal loop config: %w", err)
+		}
 
-	if err := json.Unmarshal(configBytes, &loopConfig); err != nil {
-		return fmt.Errorf("failed to parse global loop config: %w", err)
-	}
+		if err := json.Unmarshal(configBytes, &loopConfig); err != nil {
+			return fmt.Errorf("failed to parse global loop config: %w", err)
+		}
 	}
 
 	runContext.Logger.Info("Executing global loop", "condition_type", loopConfig.ConditionType, "max_loops", loopConfig.MaxLoops, "timeout_ms", loopConfig.TimeoutMs)

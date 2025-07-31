@@ -145,7 +145,27 @@ func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *Autom
 
 	// 4. Execute runs based on configuration
 	var executionError error
+	// Initialize Playwright for this run
+	pw, err := playwright.Run()
+	if err != nil {
+		return "", "", fmt.Errorf("could not start playwright: %w", err)
+	}
+	defer pw.Stop()
 
+	// Launch browser
+	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
+		Headless: playwright.Bool(true), // Run headless for automation
+		Args: []string{
+			"--no-sandbox",
+			"--disable-setuid-sandbox",
+			"--disable-dev-shm-usage",
+			"--disable-gpu",
+		},
+	})
+	if err != nil {
+		return "", "", fmt.Errorf("could not launch browser: %w", err)
+	}
+	defer browser.Close()
 	if runMode == "parallel" && runCount > 1 {
 		// Parallel execution
 		var wg sync.WaitGroup
@@ -154,7 +174,7 @@ func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *Autom
 			wg.Add(1)
 			go func(loopIndex int) {
 				defer wg.Done()
-				err := r.executeSingleRun(ctx, automation, &automationConfig, run, loopIndex, projectID, eventCh)
+				err := r.executeSingleRun(ctx, automation, &automationConfig, run, loopIndex, projectID, eventCh, browser)
 
 				if err != nil {
 					// For parallel execution, we'll just log the error
@@ -168,7 +188,7 @@ func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *Autom
 	} else {
 		// Sequential execution
 		for i := 0; i < runCount; i++ {
-			err := r.executeSingleRun(ctx, automation, &automationConfig, run, i, projectID, eventCh)
+			err := r.executeSingleRun(ctx, automation, &automationConfig, run, i, projectID, eventCh, browser)
 
 			if err != nil {
 				executionError = err
@@ -215,34 +235,16 @@ func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *Autom
 }
 
 // executeSingleRun executes a single run of the automation
-func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, automationConfig *AutomationConfig, run *AutomationRun, loopIndex int, projectID string, eventCh chan RunEvent) error {
-
-	// Initialize Playwright for this run
-	pw, err := playwright.Run()
-	if err != nil {
-		return fmt.Errorf("could not start playwright: %w", err)
-	}
-	defer pw.Stop()
-
-	// Launch browser
-	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-		Headless: playwright.Bool(true), // Run headless for automation
-		Args: []string{
-			"--no-sandbox",
-			"--disable-setuid-sandbox",
-			"--disable-dev-shm-usage",
-			"--disable-gpu",
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("could not launch browser: %w", err)
-	}
-	defer browser.Close()
-
-	// Create new page with context
-	page, err := browser.NewPage(playwright.BrowserNewPageOptions{
+func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, automationConfig *AutomationConfig, run *AutomationRun, loopIndex int, projectID string, eventCh chan RunEvent, rootBrowser playwright.Browser) error {
+	browserCtx, err := rootBrowser.NewContext(playwright.BrowserNewContextOptions{
 		JavaScriptEnabled: playwright.Bool(true),
 	})
+	if err != nil {
+		return fmt.Errorf("could not create context: %w", err)
+	}
+	defer browserCtx.Close()
+	// Create new page with context
+	page, err := browserCtx.NewPage()
 	if err != nil {
 		return fmt.Errorf("could not create page: %w", err)
 	}
@@ -278,18 +280,18 @@ func (r *Runner) executeSingleRun(ctx context.Context, automation *Automation, a
 	reportsR2Path := fmt.Sprintf("%s/reports", baseR2Path)
 	// Create RunContext
 	runContext := &RunContext{
-		PlaywrightBrowser: browser,
-		PlaywrightPage:    page,
-		StorageService:    r.storageService,
-		Logger:            slog.Default().With("automation_id", automation.ID, "run_id", run.ID, "loop_index", loopIndex),
-		EventCh:           eventCh,
-		LoopIndex:         loopIndex,
-		Runner:            r,
-		VariableContext:   varContext,
-		AutomationConfig:  automationConfig,
-		LastOutputFiles:   make([]string, 0),
-		ScreenshotsR2Path: screenshotsR2Path,
-		ReportsR2Path:     reportsR2Path,
+		PlaywrightBrowserContext: browserCtx,
+		PlaywrightPage:           page,
+		StorageService:           r.storageService,
+		Logger:                   slog.Default().With("automation_id", automation.ID, "run_id", run.ID, "loop_index", loopIndex),
+		EventCh:                  eventCh,
+		LoopIndex:                loopIndex,
+		Runner:                   r,
+		VariableContext:          varContext,
+		AutomationConfig:         automationConfig,
+		LastOutputFiles:          make([]string, 0),
+		ScreenshotsR2Path:        screenshotsR2Path,
+		ReportsR2Path:            reportsR2Path,
 	}
 
 	// Fetch and execute steps

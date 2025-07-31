@@ -3,22 +3,24 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"encoding/json"
 	"flag"
+	"fmt"
 	"log"
 	"log/slog"
 	"os"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/delordemm1/qplayground-cli/internal/automation"
-	"github.com/delordemm1/qplayground-cli/internal/platform"
 	"github.com/delordemm1/qplayground-cli/internal/notification"
+	"github.com/delordemm1/qplayground-cli/internal/platform"
 	"github.com/delordemm1/qplayground-cli/internal/storage"
 	"github.com/delordemm1/qplayground-cli/internal/utils"
 
 	// Import plugin packages so their init() functions run and register actions
-	_ "github.com/delordemm1/qplayground-cli/internal/plugins/playwright"
 	_ "github.com/delordemm1/qplayground-cli/internal/plugins/api"
+	_ "github.com/delordemm1/qplayground-cli/internal/plugins/playwright"
 )
 
 func main() {
@@ -59,7 +61,7 @@ func main() {
 
 	// Convert exported config to internal automation structure
 	automationObj := convertExportedToAutomation(exportedConfig)
-	
+
 	// Handle consolidation mode
 	if *consolidate {
 		err := consolidateReports(*outputDir)
@@ -77,7 +79,7 @@ func main() {
 
 	// Initialize storage service based on configuration
 	var objectStorage storage.ObjectStorage
-	var err error
+	// var err error
 
 	switch platform.ENV_CLI_STORAGE_PROVIDER {
 	case "r2":
@@ -158,93 +160,93 @@ func consolidateReports(outputDir string) error {
 }
 
 // convertExportedToAutomation converts ExportedAutomationConfig to internal Automation structure
-func convertExportedToAutomation(exported automation.ExportedAutomationConfig) *automation.Automation {
-	// Convert config to JSON string
-	configBytes, _ := json.Marshal(exported.Automation.Config)
+// func convertExportedToAutomation(exported automation.ExportedAutomationConfig) *automation.Automation {
+// 	// Convert config to JSON string
+// 	configBytes, _ := json.Marshal(exported.Automation.Config)
 
-	automationObj := &automation.Automation{
-		ID:          utils.UtilGenerateUUID(),
-		ProjectID:   "cli-project",
-		Name:        exported.Automation.Name,
-		Description: exported.Automation.Description,
-		ConfigJSON:  string(configBytes),
-		Steps:       make([]*automation.AutomationStep, 0, len(exported.Steps)),
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
-	}
+// 	automationObj := &automation.Automation{
+// 		ID:          utils.UtilGenerateUUID(),
+// 		ProjectID:   "cli-project",
+// 		Name:        exported.Automation.Name,
+// 		Description: exported.Automation.Description,
+// 		ConfigJSON:  string(configBytes),
+// 		Steps:       make([]*automation.AutomationStep, 0, len(exported.Steps)),
+// 		CreatedAt:   time.Now(),
+// 		UpdatedAt:   time.Now(),
+// 	}
 
-	// Convert steps
-	for _, exportedStep := range exported.Steps {
-		step := &automation.AutomationStep{
-			ID:           utils.UtilGenerateUUID(),
-			AutomationID: automationObj.ID,
-			Name:         exportedStep.Name,
-			StepOrder:    exportedStep.StepOrder,
-			Actions:      make([]*automation.AutomationAction, 0, len(exportedStep.Actions)),
-			CreatedAt:    time.Now(),
-			UpdatedAt:    time.Now(),
-		}
+// 	// Convert steps
+// 	for _, exportedStep := range exported.Steps {
+// 		step := &automation.AutomationStep{
+// 			ID:           utils.UtilGenerateUUID(),
+// 			AutomationID: automationObj.ID,
+// 			Name:         exportedStep.Name,
+// 			StepOrder:    exportedStep.StepOrder,
+// 			Actions:      make([]*automation.AutomationAction, 0, len(exportedStep.Actions)),
+// 			CreatedAt:    time.Now(),
+// 			UpdatedAt:    time.Now(),
+// 		}
 
-		// Convert step config if present
-		if exportedStep.Config != nil {
-			configBytes, _ := json.Marshal(exportedStep.Config)
-			step.ConfigJSON = string(configBytes)
-		}
+// 		// Convert step config if present
+// 		if exportedStep.Config != nil {
+// 			configBytes, _ := json.Marshal(exportedStep.Config)
+// 			step.ConfigJSON = string(configBytes)
+// 		}
 
-		// Convert actions
-		for _, exportedAction := range exportedStep.Actions {
-			action := &automation.AutomationAction{
-				ID:           exportedAction.ID,
-				StepID:       step.ID,
-				Name:         exportedAction.Name,
-				ActionType:   exportedAction.ActionType,
-				ActionConfig: exportedAction.ActionConfig, // Store as map for easier access
-				ActionOrder:  exportedAction.ActionOrder,
-				CreatedAt:    time.Now(),
-				UpdatedAt:    time.Now(),
-			}
+// 		// Convert actions
+// 		for _, exportedAction := range exportedStep.Actions {
+// 			action := &automation.AutomationAction{
+// 				ID:           exportedAction.ID,
+// 				StepID:       step.ID,
+// 				Name:         exportedAction.Name,
+// 				ActionType:   exportedAction.ActionType,
+// 				ActionConfig: exportedAction.ActionConfig, // Store as map for easier access
+// 				ActionOrder:  exportedAction.ActionOrder,
+// 				CreatedAt:    time.Now(),
+// 				UpdatedAt:    time.Now(),
+// 			}
 
-			// Also store as JSON string for compatibility
-			actionConfigBytes, _ := json.Marshal(exportedAction.ActionConfig)
-			action.ActionConfigJSON = string(actionConfigBytes)
+// 			// Also store as JSON string for compatibility
+// 			actionConfigBytes, _ := json.Marshal(exportedAction.ActionConfig)
+// 			action.ActionConfigJSON = string(actionConfigBytes)
 
-			step.Actions = append(step.Actions, action)
-		}
+// 			step.Actions = append(step.Actions, action)
+// 		}
 
-		automationObj.Steps = append(automationObj.Steps, step)
-	}
+// 		automationObj.Steps = append(automationObj.Steps, step)
+// 	}
 
-	return automationObj
-}
-		AutomationID:    automationObj.ID,
-		Status:          "running",
-		LogsJSON:        "[]",
-		OutputFilesJSON: "[]",
-		CreatedAt:       time.Now(),
-		UpdatedAt:       time.Now(),
-	}
+// 	return automationObj
+// }
+// 	AutomationID:    automationObj.ID,
+// 	Status:          "running",
+// 	LogsJSON:        "[]",
+// 	OutputFilesJSON: "[]",
+// 	CreatedAt:       time.Now(),
+// 	UpdatedAt:       time.Now(),
+// }
 
-	slog.Info("Starting automation execution",
-		"automation_name", automationObj.Name,
-		"run_id", run.ID,
-		"output_dir", *outputDir)
+// 	slog.Info("Starting automation execution",
+// 		"automation_name", automationObj.Name,
+// 		"run_id", run.ID,
+// 		"output_dir", *outputDir)
 
-	// Execute automation
-	ctx := context.Background()
-	detailedReportURL, userJourneyReportURL, err := runner.RunAutomation(ctx, automationObj, run)
+// 	// Execute automation
+// 	ctx := context.Background()
+// 	detailedReportURL, userJourneyReportURL, err := runner.RunAutomation(ctx, automationObj, run)
 
-	if err != nil {
-		slog.Error("Automation execution failed", "error", err)
-		os.Exit(1)
-	}
+// 	if err != nil {
+// 		slog.Error("Automation execution failed", "error", err)
+// 		os.Exit(1)
+// 	}
 
-	slog.Info("Automation execution completed successfully",
-		"run_id", run.ID,
-		"status", run.Status,
-		"output_dir", *outputDir,
-		"detailed_report_url", detailedReportURL,
-		"user_journey_report_url", userJourneyReportURL)
-}
+// 	slog.Info("Automation execution completed successfully",
+// 		"run_id", run.ID,
+// 		"status", run.Status,
+// 		"output_dir", *outputDir,
+// 		"detailed_report_url", detailedReportURL,
+// 		"user_journey_report_url", userJourneyReportURL)
+// }
 
 // convertExportedToAutomation converts ExportedAutomationConfig to internal Automation structure
 func convertExportedToAutomation(exported automation.ExportedAutomationConfig) *automation.Automation {

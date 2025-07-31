@@ -24,22 +24,22 @@ const (
 
 // RunEvent represents an event emitted during automation execution
 type RunEvent struct {
-	Type           RunEventType           `json:"type"`
-	Timestamp      time.Time              `json:"timestamp"`
-	StepID         string                 `json:"step_id,omitempty"`
-	StepName       string                 `json:"step_name,omitempty"`
-	ActionID       string                 `json:"action_id,omitempty"`
-	ActionName     string                 `json:"action_name,omitempty"`
-	ActionConfigJSON string               `json:"action_config_json,omitempty"`
-	ParentActionID string                 `json:"parent_action_id,omitempty"`
-	ActionType     string                 `json:"action_type,omitempty"`
-	Message        string                 `json:"message,omitempty"`
-	Error          string                 `json:"error,omitempty"`
-	OutputFile     string                 `json:"output_file,omitempty"`
-	Duration       int64                  `json:"duration_ms,omitempty"`
-	LoopIndex      int                    `json:"loop_index,omitempty"`
-	LocalLoopIndex int                    `json:"local_loop_index,omitempty"`
-	Data           map[string]interface{} `json:"data,omitempty"`
+	Type             RunEventType           `json:"type"`
+	Timestamp        time.Time              `json:"timestamp"`
+	StepID           string                 `json:"step_id,omitempty"`
+	StepName         string                 `json:"step_name,omitempty"`
+	ActionID         string                 `json:"action_id,omitempty"`
+	ActionName       string                 `json:"action_name,omitempty"`
+	ActionConfigJSON string                 `json:"action_config_json,omitempty"`
+	ParentActionID   string                 `json:"parent_action_id,omitempty"`
+	ActionType       string                 `json:"action_type,omitempty"`
+	Message          string                 `json:"message,omitempty"`
+	Error            string                 `json:"error,omitempty"`
+	OutputFile       string                 `json:"output_file,omitempty"`
+	Duration         int64                  `json:"duration_ms,omitempty"`
+	LoopIndex        int                    `json:"loop_index,omitempty"`
+	LocalLoopIndex   int                    `json:"local_loop_index,omitempty"`
+	Data             map[string]interface{} `json:"data,omitempty"`
 }
 
 // Global action configuration structures
@@ -74,23 +74,23 @@ type GlobalLoopConfig struct {
 // RunContext holds shared resources and state for a single automation run.
 // This will be passed to each plugin action.
 type RunContext struct {
-	PlaywrightBrowser playwright.Browser
-	PlaywrightPage    playwright.Page
-	StorageService    storage.StorageService
-	Logger            *slog.Logger
-	EventCh           chan RunEvent
-	StepName          string            // Current step name for context
-	StepID            string            // Current step ID for context
-	ActionID          string            // Current action ID for context
-	ActionName        string            // Current action name for context
-	ParentActionID    string            // Parent action ID for context
-	LoopIndex         int               // Current loop index for multi-run context
-	Runner            *Runner           // Reference to runner for variable resolution
-	VariableContext   *VariableContext  // Variable context for resolution
-	AutomationConfig  *AutomationConfig // Automation config for variable resolution
-	LastOutputFiles   []string          // Buffer for output files from nested actions
-	ScreenshotsR2Path string            // Path to store screenshots in R2
-	ReportsR2Path     string            // Path to store reports in R2
+	PlaywrightBrowserContext playwright.BrowserContext
+	PlaywrightPage           playwright.Page
+	StorageService           storage.StorageService
+	Logger                   *slog.Logger
+	EventCh                  chan RunEvent
+	StepName                 string            // Current step name for context
+	StepID                   string            // Current step ID for context
+	ActionID                 string            // Current action ID for context
+	ActionName               string            // Current action name for context
+	ParentActionID           string            // Parent action ID for context
+	LoopIndex                int               // Current loop index for multi-run context
+	Runner                   *Runner           // Reference to runner for variable resolution
+	VariableContext          *VariableContext  // Variable context for resolution
+	AutomationConfig         *AutomationConfig // Automation config for variable resolution
+	LastOutputFiles          []string          // Buffer for output files from nested actions
+	ScreenshotsR2Path        string            // Path to store screenshots in R2
+	ReportsR2Path            string            // Path to store reports in R2
 }
 
 // PluginAction defines the interface for any executable action provided by a plugin.
