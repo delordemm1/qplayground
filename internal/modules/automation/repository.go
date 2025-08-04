@@ -859,6 +859,11 @@ func (r *automationRepository) UpdateSubRunProgress(ctx context.Context, runID s
 		return fmt.Errorf("failed to update sub-run progress: %w", err)
 	}
 
+	// If total_runs_expected is reached, update the main run status to partial_completed
+	if runsCompleted.Valid && totalRunsExpected.Valid && runsCompleted.Int32 >= totalRunsExpected.Int32 {
+		r.db.Exec(ctx, "UPDATE automation_runs SET status = $1 WHERE id = $2", AutomationRunStatusPartialCompleted, runID)
+	}
+
 	slog.Info("Updated sub-run progress",
 		"run_id", runID,
 		"sub_run_index", subRunIndex,

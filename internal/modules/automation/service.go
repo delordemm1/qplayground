@@ -457,7 +457,7 @@ func (s *automationService) GetFullAutomationConfig(ctx context.Context, automat
 	}
 
 	slog.Info("Automation config exported successfully", "automationID", automationID, "stepsCount", len(exportedSteps))
-	return exportedConfig, nil
+	return exportedConfig, nil // Return the exported configuration
 }
 
 // assignNestedActionIDs recursively assigns IDs to nested actions that don't have them

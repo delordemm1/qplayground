@@ -18,6 +18,7 @@ const (
 	RunEventTypeLog         RunEventType = "log"
 	RunEventTypeError       RunEventType = "error"
 	RunEventTypeOutputFile  RunEventType = "output_file"
+	RunEventTypeStatus      RunEventType = "status"
 	RunEventTypeStep        RunEventType = "step"
 	RunEventTypeStepSummary RunEventType = "step_summary"
 )
@@ -275,6 +276,7 @@ const (
 	AutomationRunStatusCompleted              = "completed"
 	AutomationRunStatusFailed                 = "failed"
 	AutomationRunStatusCancelled              = "cancelled"
+	AutomationRunStatusPartialCompleted       = "partial_completed"
 	AutomationRunStatusQueued                 = "queued"
 	AutomationRunStatusPartialCompleted       = "partial_completed"
 	AutomationRunStatusAwaitingExternalRunner = "awaiting_external_runner"
@@ -307,6 +309,7 @@ type RunProgressMessage struct {
 	TotalUsersForStep int   `json:"totalUsersForStep,omitempty"`
 	AverageDurationMs int64 `json:"averageDurationMs,omitempty"`
 }
+
 
 // AutomationRepository defines the interface for automation data operations
 type AutomationRepository interface {

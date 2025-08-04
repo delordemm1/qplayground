@@ -157,7 +157,7 @@ func main() {
 			"sub_run_index", *subRunIndex,
 			"output_dir", *outputDir)
 
-		_, _, err = automationRunner.RunAutomation(ctx, projectID, run, true, *subRunIndex, overrides)
+		err = automationRunner.RunAutomation(ctx, projectID, run, true, *subRunIndex, overrides)
 	} else {
 		slog.Info("Starting single run execution",
 			"automation_id", *automationID,
@@ -165,7 +165,7 @@ func main() {
 			"output_dir", *outputDir)
 
 		_, _, err = automationRunner.RunAutomation(ctx, projectID, run, false, 0, overrides)
-	}
+	} // The RunAutomation function now returns only error
 
 	if err != nil {
 		log.Fatalf("Automation execution failed: %v", err)
