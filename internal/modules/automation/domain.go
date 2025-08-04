@@ -45,9 +45,9 @@ type RunEvent struct {
 // RunOverrides allows overriding automation configuration at runtime
 type RunOverrides struct {
 	MaxConcurrentRuns *int    `json:"max_concurrent_runs,omitempty"`
-	RunMode           *string `json:"run_mode,omitempty"`           // "sequential" or "parallel"
+	RunMode           *string `json:"run_mode,omitempty"` // "sequential" or "parallel"
 	RunCount          *int    `json:"run_count,omitempty"`
-	RunDelay          *int    `json:"run_delay,omitempty"`           // delay in milliseconds
+	RunDelay          *int    `json:"run_delay,omitempty"` // delay in milliseconds
 }
 
 // Global action configuration structures
@@ -281,12 +281,6 @@ const (
 	AutomationRunStatusConsolidating          = "consolidating"
 )
 
-// SubRunOutput represents the output of an individual sub-run
-type SubRunOutput struct {
-	LogsURL  string `json:"logs_url"`
-	FilesURL string `json:"files_url"`
-}
-
 // RunProgressMessage represents a progress update for an automation run
 type RunProgressMessage struct {
 	Type        string                 `json:"type"` // "status", "log", "step", "action", "error", "complete", "step_summary"
@@ -340,7 +334,7 @@ type AutomationRepository interface {
 	GetRunByID(ctx context.Context, id string) (*AutomationRun, error)
 	GetRunsByAutomationID(ctx context.Context, automationID string) ([]*AutomationRun, error)
 	UpdateRun(ctx context.Context, run *AutomationRun) error
-	
+
 	// Multi-runner support
 	UpdateSubRunProgress(ctx context.Context, runID string, subRunIndex int, logsURL, filesURL string) error
 

@@ -2,14 +2,9 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
-	"fmt"
 	"log"
 	"log/slog"
-	"os"
-	"strconv"
-	"strings"
 
 	"github.com/delordemm1/qplayground/internal/core/config"
 	"github.com/delordemm1/qplayground/internal/modules/automation"
@@ -42,17 +37,17 @@ func main() {
 
 	// Define command-line flags
 	var (
-		automationID             = flag.String("automation-id", "", "ID of the automation to run (required)")
-		runID                    = flag.String("run-id", "", "ID of the automation run (required)")
-		isSubRun                 = flag.Bool("is-sub-run", false, "Whether this is an individual sub-run")
-		subRunIndex              = flag.Int("sub-run-index", 0, "Index of this sub-run (required if --is-sub-run is true)")
-		consolidate              = flag.Bool("consolidate", false, "Whether to consolidate sub-run results")
-		totalExpectedRuns        = flag.Int("total-expected-runs", 0, "Total number of sub-runs expected (required if --consolidate is true)")
-		outputDir                = flag.String("output-dir", "", "Local directory for temporary files")
+		automationID              = flag.String("automation-id", "", "ID of the automation to run (required)")
+		runID                     = flag.String("run-id", "", "ID of the automation run (required)")
+		isSubRun                  = flag.Bool("is-sub-run", false, "Whether this is an individual sub-run")
+		subRunIndex               = flag.Int("sub-run-index", 0, "Index of this sub-run (required if --is-sub-run is true)")
+		consolidate               = flag.Bool("consolidate", false, "Whether to consolidate sub-run results")
+		totalExpectedRuns         = flag.Int("total-expected-runs", 0, "Total number of sub-runs expected (required if --consolidate is true)")
+		outputDir                 = flag.String("output-dir", "", "Local directory for temporary files")
 		overrideMaxConcurrentRuns = flag.Int("override-max-concurrent-runs", 0, "Override max concurrent runs")
-		overrideRunMode          = flag.String("override-run-mode", "", "Override run mode (sequential/parallel)")
-		overrideRunCount         = flag.Int("override-run-count", 0, "Override run count")
-		overrideRunDelay         = flag.Int("override-run-delay", 0, "Override run delay in milliseconds")
+		overrideRunMode           = flag.String("override-run-mode", "", "Override run mode (sequential/parallel)")
+		overrideRunCount          = flag.Int("override-run-count", 0, "Override run count")
+		overrideRunDelay          = flag.Int("override-run-delay", 0, "Override run delay in milliseconds")
 	)
 	flag.Parse()
 
@@ -100,11 +95,11 @@ func main() {
 	automationRepo := automation.NewAutomationRepository(pool)
 	runCache := automation.NewRedisRunCache(redisClient)
 	automationService := automation.NewAutomationService(automationRepo, runCache, pool)
-	
+
 	// Create SSE manager (though it won't be used in CLI)
 	sseManager := automation.NewSSEManager()
 	defer sseManager.Shutdown()
-	
+
 	automationRunner := automation.NewRunner(automationRepo, storageService, notificationService, sseManager)
 
 	ctx := context.Background()
@@ -130,12 +125,12 @@ func main() {
 	if *consolidate {
 		// Consolidation mode
 		slog.Info("Starting consolidation", "run_id", *runID, "total_expected_runs", *totalExpectedRuns)
-		
+
 		err := automationRunner.ConsolidateSubRuns(ctx, *runID)
 		if err != nil {
 			log.Fatalf("Consolidation failed: %v", err)
 		}
-		
+
 		slog.Info("Consolidation completed successfully", "run_id", *runID)
 		return
 	}
@@ -156,19 +151,19 @@ func main() {
 
 	// Execute the automation
 	if *isSubRun {
-		slog.Info("Starting sub-run execution", 
-			"automation_id", *automationID, 
-			"run_id", *runID, 
+		slog.Info("Starting sub-run execution",
+			"automation_id", *automationID,
+			"run_id", *runID,
 			"sub_run_index", *subRunIndex,
 			"output_dir", *outputDir)
-		
+
 		_, _, err = automationRunner.RunAutomation(ctx, projectID, run, true, *subRunIndex, overrides)
 	} else {
-		slog.Info("Starting single run execution", 
-			"automation_id", *automationID, 
+		slog.Info("Starting single run execution",
+			"automation_id", *automationID,
 			"run_id", *runID,
 			"output_dir", *outputDir)
-		
+
 		_, _, err = automationRunner.RunAutomation(ctx, projectID, run, false, 0, overrides)
 	}
 

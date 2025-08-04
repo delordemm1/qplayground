@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"log/slog"
 	"math/rand"
 	"regexp"
@@ -38,7 +37,7 @@ func NewRunner(automationRepo AutomationRepository, storageService storage.Stora
 }
 
 // RunAutomation executes a given automation.
-func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *AutomationRun) (detailedReportURL, userJourneyReportURL string, err error) {
+func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *AutomationRun, isSubRun bool, subRunIndex int, overrides *RunOverrides) (detailedReportURL, userJourneyReportURL string, err error) {
 	// 1. Fetch Automation details from DB
 	automation, err := r.automationRepo.GetAutomationByID(ctx, run.AutomationID)
 	if err != nil {
@@ -1111,12 +1110,6 @@ func (r *Runner) ResolveVariablesInString(input string, varContext *VariableCont
 }
 
 // RunOverrides contains optional overrides for automation configuration
-type RunOverrides struct {
-	MaxConcurrentRuns *int
-	RunMode           *string
-	RunCount          *int
-	RunDelay          *int
-}
 
 // handleSubRunCompletion handles the completion of an individual sub-run
 func (r *Runner) handleSubRunCompletion(ctx context.Context, run *AutomationRun, automation *Automation, allLogs []map[string]any, allOutputFiles []string, subRunIndex int, executionError error) error {
@@ -1222,7 +1215,7 @@ func (r *Runner) ConsolidateSubRuns(ctx context.Context, runID string) error {
 	// Update the main run with consolidated data
 	consolidatedLogsBytes, _ := json.Marshal(consolidatedLogs)
 	consolidatedOutputFilesBytes, _ := json.Marshal(consolidatedOutputFiles)
-	
+
 	run.LogsJSON = string(consolidatedLogsBytes)
 	run.OutputFilesJSON = string(consolidatedOutputFilesBytes)
 	run.Status = AutomationRunStatusCompleted
@@ -1237,7 +1230,7 @@ func (r *Runner) ConsolidateSubRuns(ctx context.Context, runID string) error {
 	automationSlug := strings.ToLower(strings.ReplaceAll(automation.Name, " ", "-"))
 	automationSlug = regexp.MustCompile(`[^a-z0-9-]`).ReplaceAllString(automationSlug, "")
 	reportsR2Path := fmt.Sprintf("%s/%s/run-%s/reports", automation.ProjectID, automationSlug, run.ID)
-	
+
 	detailedURL, userJourneyURL, reportErr := GenerateReports(automation, run, &automationConfig, "", reportsR2Path, r.storageService)
 	if reportErr != nil {
 		slog.Error("Failed to generate consolidated reports", "error", reportErr)

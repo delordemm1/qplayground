@@ -605,7 +605,7 @@ func (h *AutomationHandler) TriggerRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	automation, err := h.automationService.GetAutomationByID(r.Context(), automationID)
+	automatn, err := h.automationService.GetAutomationByID(r.Context(), automationID)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Automation not found"})
@@ -613,7 +613,7 @@ func (h *AutomationHandler) TriggerRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify automation belongs to the project
-	if automation.ProjectID != projectID {
+	if automatn.ProjectID != projectID {
 		w.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Access denied"})
 		return
