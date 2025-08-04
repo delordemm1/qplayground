@@ -42,6 +42,14 @@ type RunEvent struct {
 	Data             map[string]interface{} `json:"data,omitempty"`
 }
 
+// RunOverrides allows overriding automation configuration at runtime
+type RunOverrides struct {
+	MaxConcurrentRuns *int    `json:"max_concurrent_runs,omitempty"`
+	RunMode           *string `json:"run_mode,omitempty"`           // "sequential" or "parallel"
+	RunCount          *int    `json:"run_count,omitempty"`
+	RunDelay          *int    `json:"run_delay,omitempty"`           // delay in milliseconds
+}
+
 // Global action configuration structures
 type GlobalGroupConfig struct {
 	Actions []GroupAutomationAction `json:"actions"`
@@ -252,6 +260,12 @@ type AutomationRun struct {
 	ErrorMessage         string
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
+}
+
+// SubRunOutput represents the output of an individual sub-run
+type SubRunOutput struct {
+	LogsURL  string `json:"logs_url"`
+	FilesURL string `json:"files_url"`
 }
 
 // AutomationRun status constants
