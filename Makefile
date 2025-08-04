@@ -8,7 +8,7 @@ help: Makefile
 	@echo
 	@echo " Choose a make command to run"
 	@echo
-	@sed -n 's/^##//p' $< | column -t -s ':' |  sed -e 's/^/ /'
+	@sed -n 's/^##//p\' $< | column -t -s ':' |  sed -e 's/^/ /'
 	@echo
 
 ## init: initialize project (make init module=github.com/user/project)
