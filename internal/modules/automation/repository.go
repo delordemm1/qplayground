@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	sq "github.com/Masterminds/squirrel"
@@ -851,18 +852,18 @@ func (r *automationRepository) UpdateSubRunProgress(ctx context.Context, runID s
 		WHERE id = $1
 		RETURNING runs_completed, total_runs_expected
 	`
-	
+
 	var runsCompleted, totalRunsExpected pgtype.Int4
 	err := r.db.QueryRow(ctx, query, runID, fmt.Sprintf("%d", subRunIndex), logsURL, filesURL).Scan(&runsCompleted, &totalRunsExpected)
 	if err != nil {
 		return fmt.Errorf("failed to update sub-run progress: %w", err)
 	}
-	
-	slog.Info("Updated sub-run progress", 
-		"run_id", runID, 
+
+	slog.Info("Updated sub-run progress",
+		"run_id", runID,
 		"sub_run_index", subRunIndex,
 		"runs_completed", runsCompleted.Int32,
 		"total_runs_expected", totalRunsExpected.Int32)
-	
+
 	return nil
 }
