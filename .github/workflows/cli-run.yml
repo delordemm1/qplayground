@@ -1,0 +1,229 @@
+name: Run QPlayground CLI
+
+on:
+  workflow_dispatch:
+    inputs:
+      automation_id:
+        description: 'ID of the automation to run (required)'
+        required: true
+        type: string
+      run_id:
+        description: 'ID of the automation run (required)'
+        required: true
+        type: string
+      is_sub_run:
+        description: 'Whether this is an individual sub-run (true/false)'
+        required: false
+        type: boolean
+        default: false
+      sub_run_index:
+        description: 'Index of this sub-run (required if is_sub_run is true)'
+        required: false
+        type: number
+        default: 0
+      consolidate:
+        description: 'Whether to consolidate sub-run results (true/false)'
+        required: false
+        type: boolean
+        default: false
+      total_expected_runs:
+        description: 'Total number of sub-runs expected (required if consolidate is true)'
+        required: false
+        type: number
+        default: 0
+      output_dir:
+        description: 'Local directory for temporary files (e.g., output/)'
+        required: false
+        type: string
+        default: 'output'
+      override_max_concurrent_runs:
+        description: 'Override max concurrent runs (number)'
+        required: false
+        type: number
+      override_run_mode:
+        description: 'Override run mode (sequential/parallel)'
+        required: false
+        type: string
+      override_run_count:
+        description: 'Override run count (number)'
+        required: false
+        type: number
+      override_run_delay:
+        description: 'Override run delay in milliseconds (number)'
+        required: false
+        type: number
+      storage_provider:
+        description: 'Storage provider (r2/gcp)'
+        required: false
+        type: string
+        default: 'r2'
+
+jobs:
+  run-cli:
+    runs-on: ubuntu-latest
+
+    env:
+      # Database and Redis Configuration (set these as repository secrets)
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      REDIS_URL: ${{ secrets.REDIS_URL }}
+      
+      # Application Configuration
+      APP_URL: ${{ secrets.APP_URL || 'http://localhost:8084' }}
+      LOG_LEVEL: debug
+      
+      # Cloudflare R2 Configuration (if using R2)
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+      R2_PUBLIC_URL: ${{ secrets.R2_PUBLIC_URL }}
+      
+      # GCP Configuration (if using GCP)
+      GCP_BUCKET_ACCESS_KEY: ${{ secrets.GCP_BUCKET_ACCESS_KEY }}
+      GCP_BUCKET_SECRET: ${{ secrets.GCP_BUCKET_SECRET }}
+      GCP_BUCKET_NAME: ${{ secrets.GCP_BUCKET_NAME }}
+      GCP_BUCKET_ENDPOINT_URL: ${{ secrets.GCP_BUCKET_ENDPOINT_URL }}
+      GCP_BUCKET_PUBLIC_URL: ${{ secrets.GCP_BUCKET_PUBLIC_URL }}
+
+      # Storage Provider Configuration
+      STORAGE_PROVIDER: ${{ github.event.inputs.storage_provider }}
+      CLI_STORAGE_PROVIDER: ${{ github.event.inputs.storage_provider }}
+
+      # Automation Configuration
+      MAX_CONCURRENT_RUNS: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.25'
+
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Download Go dependencies
+        run: go mod download
+
+      - name: Create output directory
+        run: mkdir -p ${{ github.event.inputs.output_dir }}
+
+      - name: Build QPlayground CLI
+        run: |
+          echo "Building QPlayground CLI..."
+          go build -o bin/qplayground-cli cmd/cli/main.go
+          chmod +x bin/qplayground-cli
+          echo "CLI built successfully"
+
+      - name: Validate CLI arguments
+        run: |
+          echo "Validating CLI arguments..."
+          
+          # Check required arguments
+          if [ -z "${{ github.event.inputs.automation_id }}" ]; then
+            echo "Error: automation_id is required"
+            exit 1
+          fi
+          
+          if [ -z "${{ github.event.inputs.run_id }}" ]; then
+            echo "Error: run_id is required"
+            exit 1
+          fi
+          
+          # Validate sub-run arguments
+          if ${{ github.event.inputs.is_sub_run }} && [ "${{ github.event.inputs.sub_run_index }}" -lt 0 ]; then
+            echo "Error: sub_run_index must be >= 0 when is_sub_run is true"
+            exit 1
+          fi
+          
+          # Validate consolidation arguments
+          if ${{ github.event.inputs.consolidate }} && [ "${{ github.event.inputs.total_expected_runs }}" -le 0 ]; then
+            echo "Error: total_expected_runs must be > 0 when consolidate is true"
+            exit 1
+          fi
+          
+          echo "CLI arguments validated successfully"
+
+      - name: Run QPlayground CLI
+        run: |
+          echo "Preparing CLI execution..."
+          
+          CLI_ARGS=""
+          CLI_ARGS+=" --automation-id ${{ github.event.inputs.automation_id }}"
+          CLI_ARGS+=" --run-id ${{ github.event.inputs.run_id }}"
+          CLI_ARGS+=" --output-dir ${{ github.event.inputs.output_dir }}"
+
+          if ${{ github.event.inputs.is_sub_run }}; then
+            CLI_ARGS+=" --is-sub-run"
+            CLI_ARGS+=" --sub-run-index ${{ github.event.inputs.sub_run_index }}"
+            echo "Configured for sub-run execution (index: ${{ github.event.inputs.sub_run_index }})"
+          fi
+
+          if ${{ github.event.inputs.consolidate }}; then
+            CLI_ARGS+=" --consolidate"
+            CLI_ARGS+=" --total-expected-runs ${{ github.event.inputs.total_expected_runs }}"
+            echo "Configured for consolidation (expected runs: ${{ github.event.inputs.total_expected_runs }})"
+          fi
+
+          # Add override arguments if provided
+          if [ -n "${{ github.event.inputs.override_max_concurrent_runs }}" ]; then
+            CLI_ARGS+=" --override-max-concurrent-runs ${{ github.event.inputs.override_max_concurrent_runs }}"
+            echo "Override: max concurrent runs = ${{ github.event.inputs.override_max_concurrent_runs }}"
+          fi
+          
+          if [ -n "${{ github.event.inputs.override_run_mode }}" ]; then
+            CLI_ARGS+=" --override-run-mode ${{ github.event.inputs.override_run_mode }}"
+            echo "Override: run mode = ${{ github.event.inputs.override_run_mode }}"
+          fi
+          
+          if [ -n "${{ github.event.inputs.override_run_count }}" ]; then
+            CLI_ARGS+=" --override-run-count ${{ github.event.inputs.override_run_count }}"
+            echo "Override: run count = ${{ github.event.inputs.override_run_count }}"
+          fi
+          
+          if [ -n "${{ github.event.inputs.override_run_delay }}" ]; then
+            CLI_ARGS+=" --override-run-delay ${{ github.event.inputs.override_run_delay }}"
+            echo "Override: run delay = ${{ github.event.inputs.override_run_delay }}ms"
+          fi
+
+          echo "Executing CLI with arguments: $CLI_ARGS"
+          echo "Storage provider: ${{ github.event.inputs.storage_provider }}"
+          echo "Output directory: ${{ github.event.inputs.output_dir }}"
+          
+          # Execute the CLI
+          ./bin/qplayground-cli $CLI_ARGS
+
+      - name: Upload CLI output artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qplayground-cli-output-${{ github.run_number }}
+          path: ${{ github.event.inputs.output_dir }}
+          retention-days: 30
+
+      - name: Display execution summary
+        if: always()
+        run: |
+          echo "=== QPlayground CLI Execution Summary ==="
+          echo "Automation ID: ${{ github.event.inputs.automation_id }}"
+          echo "Run ID: ${{ github.event.inputs.run_id }}"
+          echo "Is Sub-run: ${{ github.event.inputs.is_sub_run }}"
+          if ${{ github.event.inputs.is_sub_run }}; then
+            echo "Sub-run Index: ${{ github.event.inputs.sub_run_index }}"
+          fi
+          if ${{ github.event.inputs.consolidate }}; then
+            echo "Consolidation: true"
+            echo "Total Expected Runs: ${{ github.event.inputs.total_expected_runs }}"
+          fi
+          echo "Storage Provider: ${{ github.event.inputs.storage_provider }}"
+          echo "Output Directory: ${{ github.event.inputs.output_dir }}"
+          echo "GitHub Run Number: ${{ github.run_number }}"
+          echo "Artifacts uploaded with retention: 30 days"
+          echo "============================================"
