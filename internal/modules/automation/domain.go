@@ -262,6 +262,12 @@ type AutomationRun struct {
 	UpdatedAt            time.Time
 }
 
+// SubRunOutput represents the output of an individual sub-run
+type SubRunOutput struct {
+	LogsURL  string `json:"logs_url"`
+	FilesURL string `json:"files_url"`
+}
+
 // AutomationRun status constants
 const (
 	AutomationRunStatusPending                = "pending"
