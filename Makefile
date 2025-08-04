@@ -51,3 +51,8 @@ migrate-status:
 .PHONY: migrate-version
 migrate-version:
 	go run cmd/migrate/main.go version
+
+## build-cli: build CLI tool
+.PHONY: build-cli
+build-cli:
+	go build -o bin/qplayground-cli cmd/cli/main.go

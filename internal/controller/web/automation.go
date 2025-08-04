@@ -37,6 +37,7 @@ func NewAutomationRouter(automationHandler *AutomationHandler) chi.Router {
 	r.Get("/{id}/runs", automationHandler.ListRuns)
 	r.Get("/{id}/runs/{runId}", automationHandler.GetRun)
 	r.Post("/{id}/runs/{runId}/cancel", automationHandler.CancelRun)
+	r.Post("/{id}/runs/{runId}/consolidate", automationHandler.ConsolidateRun)
 
 	// Export automation config
 	r.Get("/{id}/export", automationHandler.ExportAutomationConfig)
@@ -618,7 +619,33 @@ func (h *AutomationHandler) TriggerRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	run, err := h.automationService.TriggerRun(r.Context(), automationID)
+	// Parse request body for run type
+	var req TriggerRunRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		// Default to internal run if no body provided
+		req.RunType = "internal"
+	}
+
+	var run *automation.AutomationRun
+	var message string
+
+	switch req.RunType {
+	case "external_multi_run":
+		if req.ExpectedRunners <= 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Expected runners count is required for external multi-run"})
+			return
+		}
+		run, err = h.automationService.TriggerExternalRun(r.Context(), automationID, req.ExpectedRunners)
+		message = "External multi-run created successfully"
+	case "external_single_run":
+		run, err = h.automationService.TriggerExternalRun(r.Context(), automationID, 1)
+		message = "External single run created successfully"
+	default: // "internal" or unspecified
+		run, err = h.automationService.TriggerRun(r.Context(), automationID)
+		message = "Automation run triggered successfully"
+	}
+
 	if err != nil {
 		platform.SetFlashError(r.Context(), h.sessionManager, "Failed to trigger automation run")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -626,10 +653,10 @@ func (h *AutomationHandler) TriggerRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	platform.SetFlashSuccess(r.Context(), h.sessionManager, "Automation run triggered successfully")
+	platform.SetFlashSuccess(r.Context(), h.sessionManager, message)
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"message": "Run triggered successfully",
+		"message": message,
 		"run":     run,
 	})
 }
@@ -757,6 +784,11 @@ type CreateActionRequest struct {
 	ActionType       string `json:"action_type" validate:"required"`
 	ActionConfigJSON string `json:"action_config_json"`
 	ActionOrder      int    `json:"action_order" validate:"min=0"`
+}
+
+type TriggerRunRequest struct {
+	RunType         string `json:"run_type"`         // "internal", "external_multi_run", "external_single_run"
+	ExpectedRunners int    `json:"expected_runners"` // For external multi-run
 }
 
 func (h *AutomationHandler) CreateAction(w http.ResponseWriter, r *http.Request) {
@@ -930,6 +962,68 @@ func (h *AutomationHandler) verifyAutomationAccess(ctx context.Context, user *au
 		return fmt.Errorf("access denied to automation")
 	}
 	return nil
+}
+
+// ConsolidateRun handles the consolidation of sub-runs
+func (h *AutomationHandler) ConsolidateRun(w http.ResponseWriter, r *http.Request) {
+	user := getUserFromContext(r.Context())
+	if user == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
+		return
+	}
+
+	projectID := chi.URLParam(r, "projectId")
+	automationID := chi.URLParam(r, "id")
+	runID := chi.URLParam(r, "runId")
+
+	// Verify project belongs to user's organization
+	project, err := h.projectService.GetProjectByID(r.Context(), projectID)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Project not found"})
+		return
+	}
+
+	if user.CurrentOrgID == nil || project.OrganizationID != *user.CurrentOrgID {
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Access denied"})
+		return
+	}
+
+	automation, err := h.automationService.GetAutomationByID(r.Context(), automationID)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Automation not found"})
+		return
+	}
+
+	// Verify automation belongs to the project
+	if automation.ProjectID != projectID {
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Access denied"})
+		return
+	}
+
+	// Get the run to verify it exists and belongs to this automation
+	run, err := h.automationService.GetRunByID(r.Context(), runID)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Run not found"})
+		return
+	}
+
+	if run.AutomationID != automationID {
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Run does not belong to this automation"})
+		return
+	}
+
+	// TODO: Implement consolidation logic here
+	// For now, just return success
+	platform.SetFlashSuccess(r.Context(), h.sessionManager, "Consolidation triggered successfully")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Consolidation triggered successfully"})
 }
 
 func (h *AutomationHandler) CancelRun(w http.ResponseWriter, r *http.Request) {

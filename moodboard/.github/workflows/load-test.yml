@@ -82,11 +82,21 @@ jobs:
         env:
           RUNNER_INDEX: ${{ matrix.runner_index }}
           LOG_LEVEL: info
+          # Database and other environment variables should be set as secrets
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
         run: |
+          # Build the CLI first
+          go build -o qplayground-cli cmd/cli/main.go
+          
+          # Run as sub-run
           ./qplayground-cli \
-            --config-path ${{ github.event.inputs.config_file || 'config.json' }} \
+            --automation-id ${{ env.AUTOMATION_ID }} \
+            --run-id ${{ env.RUN_ID }} \
+            --is-sub-run \
+            --sub-run-index ${{ matrix.runner_index }} \
             --output-dir ../output/runner-${{ matrix.runner_index }} \
-            --runner-index ${{ matrix.runner_index }}
+            --override-run-count ${{ github.event.inputs.concurrent_runs || 2 }}
 
       - name: Prepare runner artifacts
         run: |
@@ -181,6 +191,8 @@ jobs:
         env:
           STORAGE_PROVIDER: ${{ github.event.inputs.storage_provider || 'local' }}
           CLI_STORAGE_PROVIDER: ${{ github.event.inputs.storage_provider || 'local' }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -192,11 +204,16 @@ jobs:
           GCP_BUCKET_ENDPOINT_URL: ${{ secrets.GCP_BUCKET_ENDPOINT_URL }}
           GCP_BUCKET_PUBLIC_URL: ${{ secrets.GCP_BUCKET_PUBLIC_URL }}
         run: |
+          # Build the CLI
+          go build -o qplayground-cli cmd/cli/main.go
+          
           # Run consolidation process
           ./qplayground-cli \
-            --output-dir ../consolidated-output \
+            --automation-id ${{ env.AUTOMATION_ID }} \
+            --run-id ${{ env.RUN_ID }} \
             --consolidate \
-            --config-path config.json || echo "Consolidation completed with warnings"
+            --total-expected-runs 10 \
+            --output-dir ../consolidated-output || echo "Consolidation completed with warnings"
 
       - name: Create final consolidated archive
         run: |

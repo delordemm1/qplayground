@@ -244,11 +244,33 @@ type AutomationRun struct {
 	EndTime              *time.Time
 	LogsJSON             string // JSON string containing execution logs
 	OutputFilesJSON      string // JSON string containing file paths/URLs
+	SubRunOutputsJSON    string // JSON string mapping subRunIndex to storage URLs
+	TotalRunsExpected    *int   // Total number of sub-runs expected for multi-runner jobs
+	RunsCompleted        *int   // Number of sub-runs that have completed
 	DetailedReportURL    string // URL to the detailed HTML report
 	UserJourneyReportURL string // URL to the user journey HTML report
 	ErrorMessage         string
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
+}
+
+// AutomationRun status constants
+const (
+	AutomationRunStatusPending                = "pending"
+	AutomationRunStatusRunning                = "running"
+	AutomationRunStatusCompleted              = "completed"
+	AutomationRunStatusFailed                 = "failed"
+	AutomationRunStatusCancelled              = "cancelled"
+	AutomationRunStatusQueued                 = "queued"
+	AutomationRunStatusPartialCompleted       = "partial_completed"
+	AutomationRunStatusAwaitingExternalRunner = "awaiting_external_runner"
+	AutomationRunStatusConsolidating          = "consolidating"
+)
+
+// SubRunOutput represents the output of an individual sub-run
+type SubRunOutput struct {
+	LogsURL  string `json:"logs_url"`
+	FilesURL string `json:"files_url"`
 }
 
 // RunProgressMessage represents a progress update for an automation run
@@ -304,6 +326,9 @@ type AutomationRepository interface {
 	GetRunByID(ctx context.Context, id string) (*AutomationRun, error)
 	GetRunsByAutomationID(ctx context.Context, automationID string) ([]*AutomationRun, error)
 	UpdateRun(ctx context.Context, run *AutomationRun) error
+	
+	// Multi-runner support
+	UpdateSubRunProgress(ctx context.Context, runID string, subRunIndex int, logsURL, filesURL string) error
 
 	// Order management
 	GetStepByID(ctx context.Context, id string) (*AutomationStep, error)
@@ -341,6 +366,7 @@ type AutomationService interface {
 
 	// Run management
 	TriggerRun(ctx context.Context, automationID string) (*AutomationRun, error)
+	TriggerExternalRun(ctx context.Context, automationID string, expectedRunners int) (*AutomationRun, error)
 	GetRunsByAutomation(ctx context.Context, automationID string) ([]*AutomationRun, error)
 	GetRunByID(ctx context.Context, id string) (*AutomationRun, error)
 

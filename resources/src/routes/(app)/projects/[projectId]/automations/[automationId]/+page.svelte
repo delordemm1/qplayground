@@ -67,6 +67,11 @@
   let isDeletingAction = $state(false);
   let currentStepForAction = $state<Step | null>(null); // To know which step an action belongs to
   let currentMaxActionOrder = $state(0); // To track max action order for the current step
+  
+  // Run trigger modal state
+  let showRunTriggerModal = $state(false);
+  let runType = $state("internal");
+  let expectedRunners = $state(10);
 
   // --- Automation Handlers ---
   function openEditAutomationModal() {
@@ -144,11 +149,29 @@
   }
 
   async function handleTriggerRun() {
+    showRunTriggerModal = true;
+  }
+
+  async function executeTriggerRun() {
     try {
+      const requestBody: any = {
+        run_type: runType
+      };
+      
+      if (runType === "external_multi_run") {
+        requestBody.expected_runners = expectedRunners;
+      } else if (runType === "external_single_run") {
+        requestBody.expected_runners = 1;
+      }
+
       const response = await fetch(
         `/projects/${projectId}/automations/${automationId}/runs`,
         {
           method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestBody),
         }
       );
 
@@ -156,9 +179,20 @@
       console.log(result);
 
       if (response.ok) {
-        // showSuccessToast("Automation run triggered successfully!");
-        // Optionally redirect to runs page or update runs list
-        router.visit(`/projects/${projectId}/automations/${automationId}/runs/${result.run.ID}`);
+        if (runType === "internal") {
+          showSuccessToast("Automation run triggered successfully!");
+          router.visit(`/projects/${projectId}/automations/${automationId}/runs/${result.run.ID}`);
+        } else {
+          showSuccessToast(`External run created! Run ID: ${result.run.ID}`);
+          // Show CLI command for external runs
+          const cliCommand = runType === "external_multi_run" 
+            ? `# For each runner (0-${expectedRunners-1}):\nqplayground-cli --automation-id ${automationId} --run-id ${result.run.ID} --is-sub-run --sub-run-index <RUNNER_INDEX>\n\n# After all runners complete:\nqplayground-cli --automation-id ${automationId} --run-id ${result.run.ID} --consolidate --total-expected-runs ${expectedRunners}`
+            : `qplayground-cli --automation-id ${automationId} --run-id ${result.run.ID} --is-sub-run --sub-run-index 0`;
+          
+          // You could show this in a modal or copy to clipboard
+          console.log("CLI Command:", cliCommand);
+        }
+        showRunTriggerModal = false;
       } else {
         showErrorToast(result.error || "Failed to trigger automation run");
       }
@@ -841,3 +875,66 @@
   onCancel={() => (showDeleteActionConfirm = false)}
   loading={isDeletingAction}
 />
+
+<!-- Run Trigger Modal -->
+{#if showRunTriggerModal}
+  <div class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+      <div class="mt-3">
+        <h3 class="text-lg font-medium text-gray-900 mb-4">Run Automation</h3>
+        
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Run Type</label>
+            <select bind:value={runType} class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm">
+              <option value="internal">Run in QPlayground (Internal)</option>
+              <option value="external_single_run">External Single Run</option>
+              <option value="external_multi_run">External Multi-Run</option>
+            </select>
+          </div>
+          
+          {#if runType === "external_multi_run"}
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Expected Runners</label>
+              <input 
+                type="number" 
+                bind:value={expectedRunners} 
+                min="1" 
+                max="100"
+                class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+              />
+              <p class="text-xs text-gray-500 mt-1">Number of parallel runners that will execute this automation</p>
+            </div>
+          {/if}
+          
+          <div class="bg-blue-50 border border-blue-200 rounded-md p-3">
+            <p class="text-sm text-blue-800">
+              {#if runType === "internal"}
+                The automation will run immediately in QPlayground's internal system.
+              {:else if runType === "external_single_run"}
+                A run ID will be created for external execution. Use the CLI tool to execute it.
+              {:else}
+                A run ID will be created for {expectedRunners} parallel external runners. Each runner should use the CLI tool with a unique sub-run index.
+              {/if}
+            </p>
+          </div>
+        </div>
+        
+        <div class="flex justify-end space-x-3 mt-6">
+          <button
+            onclick={() => showRunTriggerModal = false}
+            class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+          >
+            Cancel
+          </button>
+          <button
+            onclick={executeTriggerRun}
+            class="px-4 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+          >
+            {runType === "internal" ? "Run Now" : "Create External Run"}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}

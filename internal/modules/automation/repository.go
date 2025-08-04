@@ -310,7 +310,7 @@ func (r *automationRepository) GetActionsByStepID(ctx context.Context, stepID st
 		OrderBy("action_order ASC").
 		ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("failed to build query: %w", err)
+		return nil, fmt.Errorf("failed to query actions: %w", err)
 	}
 
 	rows, err := r.db.Query(ctx, query, args...)
@@ -382,18 +382,19 @@ func (r *automationRepository) DeleteAction(ctx context.Context, id string) erro
 // Run CRUD
 func (r *automationRepository) CreateRun(ctx context.Context, run *AutomationRun) error {
 	query, args, err := r.sq.Insert("automation_runs").
-		Columns("id", "automation_id", "status", "logs_json", "output_files_json", "error_message").
-		Values(run.ID, run.AutomationID, run.Status, run.LogsJSON, run.OutputFilesJSON, run.ErrorMessage).
-		Suffix("RETURNING id, automation_id, status, start_time, end_time, logs_json, output_files_json, error_message, created_at, updated_at").
+		Columns("id", "automation_id", "status", "logs_json", "output_files_json", "sub_run_outputs_json", "total_runs_expected", "runs_completed", "error_message").
+		Values(run.ID, run.AutomationID, run.Status, run.LogsJSON, run.OutputFilesJSON, run.SubRunOutputsJSON, run.TotalRunsExpected, run.RunsCompleted, run.ErrorMessage).
+		Suffix("RETURNING id, automation_id, status, start_time, end_time, logs_json, output_files_json, sub_run_outputs_json, total_runs_expected, runs_completed, error_message, created_at, updated_at").
 		ToSql()
 	if err != nil {
 		return fmt.Errorf("failed to build query: %w", err)
 	}
 
 	var createdAt, updatedAt, startTime, endTime pgtype.Timestamp
-	var logsJSON, outputFilesJSON, errorMessage pgtype.Text
+	var logsJSON, outputFilesJSON, subRunOutputsJSON, errorMessage pgtype.Text
+	var totalRunsExpected, runsCompleted pgtype.Int4
 	err = r.db.QueryRow(ctx, query, args...).Scan(
-		&run.ID, &run.AutomationID, &run.Status, &startTime, &endTime, &logsJSON, &outputFilesJSON, &errorMessage, &createdAt, &updatedAt,
+		&run.ID, &run.AutomationID, &run.Status, &startTime, &endTime, &logsJSON, &outputFilesJSON, &subRunOutputsJSON, &totalRunsExpected, &runsCompleted, &errorMessage, &createdAt, &updatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create run: %w", err)
@@ -411,6 +412,17 @@ func (r *automationRepository) CreateRun(ctx context.Context, run *AutomationRun
 	if outputFilesJSON.Valid {
 		run.OutputFilesJSON = outputFilesJSON.String
 	}
+	if subRunOutputsJSON.Valid {
+		run.SubRunOutputsJSON = subRunOutputsJSON.String
+	}
+	if totalRunsExpected.Valid {
+		val := int(totalRunsExpected.Int32)
+		run.TotalRunsExpected = &val
+	}
+	if runsCompleted.Valid {
+		val := int(runsCompleted.Int32)
+		run.RunsCompleted = &val
+	}
 	if errorMessage.Valid {
 		run.ErrorMessage = errorMessage.String
 	}
@@ -420,7 +432,7 @@ func (r *automationRepository) CreateRun(ctx context.Context, run *AutomationRun
 }
 
 func (r *automationRepository) GetRunByID(ctx context.Context, id string) (*AutomationRun, error) {
-	query, args, err := r.sq.Select("id", "automation_id", "status", "start_time", "end_time", "logs_json", "output_files_json", "error_message", "created_at", "updated_at", "user_journey_report_url", "detailed_report_url").
+	query, args, err := r.sq.Select("id", "automation_id", "status", "start_time", "end_time", "logs_json", "output_files_json", "sub_run_outputs_json", "total_runs_expected", "runs_completed", "error_message", "created_at", "updated_at", "user_journey_report_url", "detailed_report_url").
 		From("automation_runs").
 		Where(sq.Eq{"id": id}).
 		ToSql()
@@ -430,9 +442,10 @@ func (r *automationRepository) GetRunByID(ctx context.Context, id string) (*Auto
 
 	var run AutomationRun
 	var createdAt, updatedAt, startTime, endTime pgtype.Timestamp
-	var logsJSON, outputFilesJSON, errorMessage, userJourneyReportURL, detailedReportURL pgtype.Text
+	var logsJSON, outputFilesJSON, subRunOutputsJSON, errorMessage, userJourneyReportURL, detailedReportURL pgtype.Text
+	var totalRunsExpected, runsCompleted pgtype.Int4
 	err = r.db.QueryRow(ctx, query, args...).Scan(
-		&run.ID, &run.AutomationID, &run.Status, &startTime, &endTime, &logsJSON, &outputFilesJSON, &errorMessage, &createdAt, &updatedAt, &userJourneyReportURL,
+		&run.ID, &run.AutomationID, &run.Status, &startTime, &endTime, &logsJSON, &outputFilesJSON, &subRunOutputsJSON, &totalRunsExpected, &runsCompleted, &errorMessage, &createdAt, &updatedAt, &userJourneyReportURL,
 		&detailedReportURL,
 	)
 	if err != nil {
@@ -453,6 +466,17 @@ func (r *automationRepository) GetRunByID(ctx context.Context, id string) (*Auto
 	}
 	if outputFilesJSON.Valid {
 		run.OutputFilesJSON = outputFilesJSON.String
+	}
+	if subRunOutputsJSON.Valid {
+		run.SubRunOutputsJSON = subRunOutputsJSON.String
+	}
+	if totalRunsExpected.Valid {
+		val := int(totalRunsExpected.Int32)
+		run.TotalRunsExpected = &val
+	}
+	if runsCompleted.Valid {
+		val := int(runsCompleted.Int32)
+		run.RunsCompleted = &val
 	}
 	if errorMessage.Valid {
 		run.ErrorMessage = errorMessage.String
@@ -523,6 +547,9 @@ func (r *automationRepository) UpdateRun(ctx context.Context, run *AutomationRun
 		Set("end_time", run.EndTime).
 		Set("logs_json", run.LogsJSON).
 		Set("output_files_json", run.OutputFilesJSON).
+		Set("sub_run_outputs_json", run.SubRunOutputsJSON).
+		Set("total_runs_expected", run.TotalRunsExpected).
+		Set("runs_completed", run.RunsCompleted).
 		Set("detailed_report_url", run.DetailedReportURL).
 		Set("user_journey_report_url", run.UserJourneyReportURL).
 		Set("error_message", run.ErrorMessage).
@@ -809,5 +836,33 @@ func (r *automationRepository) ShiftActionOrders(ctx context.Context, stepID str
 		return fmt.Errorf("failed to shift action orders: %w", err)
 	}
 
+	return nil
+}
+
+// UpdateSubRunProgress atomically updates sub-run progress and increments completed count
+func (r *automationRepository) UpdateSubRunProgress(ctx context.Context, runID string, subRunIndex int, logsURL, filesURL string) error {
+	// Use JSONB functions to atomically update the sub_run_outputs_json field
+	query := `
+		UPDATE automation_runs 
+		SET 
+			sub_run_outputs_json = COALESCE(sub_run_outputs_json, '{}'::jsonb) || jsonb_build_object($2::text, jsonb_build_object('logs_url', $3, 'files_url', $4)),
+			runs_completed = COALESCE(runs_completed, 0) + 1,
+			updated_at = NOW()
+		WHERE id = $1
+		RETURNING runs_completed, total_runs_expected
+	`
+	
+	var runsCompleted, totalRunsExpected pgtype.Int4
+	err := r.db.QueryRow(ctx, query, runID, fmt.Sprintf("%d", subRunIndex), logsURL, filesURL).Scan(&runsCompleted, &totalRunsExpected)
+	if err != nil {
+		return fmt.Errorf("failed to update sub-run progress: %w", err)
+	}
+	
+	slog.Info("Updated sub-run progress", 
+		"run_id", runID, 
+		"sub_run_index", subRunIndex,
+		"runs_completed", runsCompleted.Int32,
+		"total_runs_expected", totalRunsExpected.Int32)
+	
 	return nil
 }

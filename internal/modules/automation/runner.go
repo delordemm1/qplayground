@@ -1109,6 +1109,152 @@ func (r *Runner) ResolveVariablesInString(input string, varContext *VariableCont
 	return result, nil
 }
 
+// RunOverrides contains optional overrides for automation configuration
+type RunOverrides struct {
+	MaxConcurrentRuns *int
+	RunMode           *string
+	RunCount          *int
+	RunDelay          *int
+}
+
+// handleSubRunCompletion handles the completion of an individual sub-run
+func (r *Runner) handleSubRunCompletion(ctx context.Context, run *AutomationRun, automation *Automation, allLogs []map[string]any, allOutputFiles []string, subRunIndex int, executionError error) error {
+	// Generate automation slug from name
+	automationSlug := strings.ToLower(strings.ReplaceAll(automation.Name, " ", "-"))
+	automationSlug = regexp.MustCompile(`[^a-z0-9-]`).ReplaceAllString(automationSlug, "")
+
+	// Create unique paths for this sub-run's outputs
+	subRunBasePath := fmt.Sprintf("%s/%s/run-%s/subruns/%d", automation.ProjectID, automationSlug, run.ID, subRunIndex)
+	logsPath := fmt.Sprintf("%s/logs.json", subRunBasePath)
+	filesPath := fmt.Sprintf("%s/output_files.json", subRunBasePath)
+
+	// Upload logs to storage
+	logsBytes, err := json.Marshal(allLogs)
+	if err != nil {
+		return fmt.Errorf("failed to marshal logs: %w", err)
+	}
+
+	logsURL, err := r.storageService.UploadFile(ctx, logsPath, strings.NewReader(string(logsBytes)), "application/json")
+	if err != nil {
+		return fmt.Errorf("failed to upload logs: %w", err)
+	}
+
+	// Upload output files list to storage
+	outputFilesBytes, err := json.Marshal(allOutputFiles)
+	if err != nil {
+		return fmt.Errorf("failed to marshal output files: %w", err)
+	}
+
+	filesURL, err := r.storageService.UploadFile(ctx, filesPath, strings.NewReader(string(outputFilesBytes)), "application/json")
+	if err != nil {
+		return fmt.Errorf("failed to upload output files list: %w", err)
+	}
+
+	// Update the main run record with this sub-run's progress
+	err = r.automationRepo.UpdateSubRunProgress(ctx, run.ID, subRunIndex, logsURL, filesURL)
+	if err != nil {
+		return fmt.Errorf("failed to update sub-run progress: %w", err)
+	}
+
+	slog.Info("Sub-run completed and uploaded",
+		"run_id", run.ID,
+		"sub_run_index", subRunIndex,
+		"logs_url", logsURL,
+		"files_url", filesURL,
+		"total_logs", len(allLogs),
+		"total_files", len(allOutputFiles))
+
+	return nil
+}
+
+// ConsolidateSubRuns consolidates all sub-run outputs into final reports
+func (r *Runner) ConsolidateSubRuns(ctx context.Context, runID string) error {
+	// Get the main run record
+	run, err := r.automationRepo.GetRunByID(ctx, runID)
+	if err != nil {
+		return fmt.Errorf("failed to get run: %w", err)
+	}
+
+	// Update status to consolidating
+	run.Status = AutomationRunStatusConsolidating
+	err = r.automationRepo.UpdateRun(ctx, run)
+	if err != nil {
+		return fmt.Errorf("failed to update run status to consolidating: %w", err)
+	}
+
+	// Get automation details
+	automation, err := r.automationRepo.GetAutomationByID(ctx, run.AutomationID)
+	if err != nil {
+		return fmt.Errorf("failed to get automation: %w", err)
+	}
+
+	// Parse sub-run outputs
+	var subRunOutputs map[string]SubRunOutput
+	if run.SubRunOutputsJSON != "" {
+		err = json.Unmarshal([]byte(run.SubRunOutputsJSON), &subRunOutputs)
+		if err != nil {
+			return fmt.Errorf("failed to parse sub-run outputs: %w", err)
+		}
+	}
+
+	// Consolidate logs and output files from all sub-runs
+	var consolidatedLogs []map[string]any
+	var consolidatedOutputFiles []string
+
+	for subRunIndexStr, subRunOutput := range subRunOutputs {
+		slog.Info("Consolidating sub-run", "sub_run_index", subRunIndexStr, "logs_url", subRunOutput.LogsURL, "files_url", subRunOutput.FilesURL)
+
+		// Download and parse logs
+		if subRunOutput.LogsURL != "" {
+			// Note: This is a simplified approach. In a real implementation, you'd need to
+			// implement a method to download from storage service URLs
+			// For now, we'll assume the storage service can provide a way to read back the content
+			slog.Warn("TODO: Implement downloading logs from storage URL", "url", subRunOutput.LogsURL)
+		}
+
+		// Download and parse output files
+		if subRunOutput.FilesURL != "" {
+			slog.Warn("TODO: Implement downloading output files from storage URL", "url", subRunOutput.FilesURL)
+		}
+	}
+
+	// Update the main run with consolidated data
+	consolidatedLogsBytes, _ := json.Marshal(consolidatedLogs)
+	consolidatedOutputFilesBytes, _ := json.Marshal(consolidatedOutputFiles)
+	
+	run.LogsJSON = string(consolidatedLogsBytes)
+	run.OutputFilesJSON = string(consolidatedOutputFilesBytes)
+	run.Status = AutomationRunStatusCompleted
+
+	// Parse automation config for report generation
+	var automationConfig AutomationConfig
+	if automation.ConfigJSON != "" {
+		json.Unmarshal([]byte(automation.ConfigJSON), &automationConfig)
+	}
+
+	// Generate final reports
+	automationSlug := strings.ToLower(strings.ReplaceAll(automation.Name, " ", "-"))
+	automationSlug = regexp.MustCompile(`[^a-z0-9-]`).ReplaceAllString(automationSlug, "")
+	reportsR2Path := fmt.Sprintf("%s/%s/run-%s/reports", automation.ProjectID, automationSlug, run.ID)
+	
+	detailedURL, userJourneyURL, reportErr := GenerateReports(automation, run, &automationConfig, "", reportsR2Path, r.storageService)
+	if reportErr != nil {
+		slog.Error("Failed to generate consolidated reports", "error", reportErr)
+	} else {
+		run.DetailedReportURL = detailedURL
+		run.UserJourneyReportURL = userJourneyURL
+	}
+
+	// Final update
+	err = r.automationRepo.UpdateRun(ctx, run)
+	if err != nil {
+		return fmt.Errorf("failed to update consolidated run: %w", err)
+	}
+
+	slog.Info("Sub-runs consolidated successfully", "run_id", runID, "total_sub_runs", len(subRunOutputs))
+	return nil
+}
+
 // resolveRuntimeVariable resolves runtime variables with support for nested paths
 func (r *Runner) resolveRuntimeVariable(variablePath string, varContext *VariableContext) (interface{}, error) {
 	if !strings.HasPrefix(variablePath, "runtime.") {

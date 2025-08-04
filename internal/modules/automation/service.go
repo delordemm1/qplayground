@@ -545,9 +545,10 @@ func (s *automationService) TriggerRun(ctx context.Context, automationID string)
 		run := &AutomationRun{
 			ID:              platform.UtilGenerateUUID(),
 			AutomationID:    automationID,
-			Status:          "queued",
+			Status:          AutomationRunStatusQueued,
 			LogsJSON:        "[]",
 			OutputFilesJSON: "[]",
+			SubRunOutputsJSON: "{}",
 		}
 
 		err := s.automationRepo.CreateRun(ctx, run)
@@ -557,7 +558,7 @@ func (s *automationService) TriggerRun(ctx context.Context, automationID string)
 		}
 
 		// Set status in Redis
-		if cacheErr := s.runCache.SetRunStatus(ctx, run.ID, "queued"); cacheErr != nil {
+		if cacheErr := s.runCache.SetRunStatus(ctx, run.ID, AutomationRunStatusQueued); cacheErr != nil {
 			slog.Warn("Failed to set queued status in cache", "run_id", run.ID, "error", cacheErr)
 		}
 
@@ -568,9 +569,10 @@ func (s *automationService) TriggerRun(ctx context.Context, automationID string)
 	run := &AutomationRun{
 		ID:              platform.UtilGenerateUUID(),
 		AutomationID:    automationID,
-		Status:          "pending",
+		Status:          AutomationRunStatusPending,
 		LogsJSON:        "[]",
 		OutputFilesJSON: "[]",
+		SubRunOutputsJSON: "{}",
 	}
 
 	err = s.automationRepo.CreateRun(ctx, run)
@@ -580,11 +582,43 @@ func (s *automationService) TriggerRun(ctx context.Context, automationID string)
 	}
 
 	// Set status in Redis
-	if err := s.runCache.SetRunStatus(ctx, run.ID, "pending"); err != nil {
+	if err := s.runCache.SetRunStatus(ctx, run.ID, AutomationRunStatusPending); err != nil {
 		slog.Warn("Failed to set pending status in cache", "run_id", run.ID, "error", err)
 	}
 
 	slog.Info("Run triggered", "runID", run.ID, "automationID", automationID)
+	return run, nil
+}
+
+// TriggerExternalRun creates a run for external execution
+func (s *automationService) TriggerExternalRun(ctx context.Context, automationID string, expectedRunners int) (*AutomationRun, error) {
+	run := &AutomationRun{
+		ID:                platform.UtilGenerateUUID(),
+		AutomationID:      automationID,
+		Status:            AutomationRunStatusAwaitingExternalRunner,
+		LogsJSON:          "[]",
+		OutputFilesJSON:   "[]",
+		SubRunOutputsJSON: "{}",
+	}
+	
+	if expectedRunners > 0 {
+		run.TotalRunsExpected = &expectedRunners
+		runsCompleted := 0
+		run.RunsCompleted = &runsCompleted
+	}
+
+	err := s.automationRepo.CreateRun(ctx, run)
+	if err != nil {
+		slog.Error("Failed to create external run", "error", err, "automationID", automationID)
+		return nil, fmt.Errorf("failed to create external run: %w", err)
+	}
+
+	// Set status in Redis
+	if err := s.runCache.SetRunStatus(ctx, run.ID, AutomationRunStatusAwaitingExternalRunner); err != nil {
+		slog.Warn("Failed to set awaiting external runner status in cache", "run_id", run.ID, "error", err)
+	}
+
+	slog.Info("External run created", "runID", run.ID, "automationID", automationID, "expected_runners", expectedRunners)
 	return run, nil
 }
 

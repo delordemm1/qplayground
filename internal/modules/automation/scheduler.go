@@ -143,7 +143,7 @@ func (s *Scheduler) startRun(ctx context.Context, projectID string, run *Automat
 	slog.Info("Starting automation run", "run_id", run.ID, "automation_id", run.AutomationID)
 
 	// Update status to running in DB and Redis
-	run.Status = "running"
+	run.Status = AutomationRunStatusRunning
 	startTime := time.Now()
 	run.StartTime = &startTime
 
@@ -153,7 +153,7 @@ func (s *Scheduler) startRun(ctx context.Context, projectID string, run *Automat
 		return
 	}
 
-	err = s.runCache.SetRunStatus(ctx, run.ID, "running")
+	err = s.runCache.SetRunStatus(ctx, run.ID, AutomationRunStatusRunning)
 	if err != nil {
 		slog.Error("Failed to update run status in cache", "run_id", run.ID, "error", err)
 	}
@@ -165,7 +165,7 @@ func (s *Scheduler) startRun(ctx context.Context, projectID string, run *Automat
 
 	// Send status update via SSE
 	if s.sseManager != nil {
-		s.sseManager.SendRunStatusUpdate(projectID, run.AutomationID, run.ID, "running")
+		s.sseManager.SendRunStatusUpdate(projectID, run.AutomationID, run.ID, AutomationRunStatusRunning)
 	}
 
 	// Create cancellable context for this run
@@ -192,18 +192,18 @@ func (s *Scheduler) startRun(ctx context.Context, projectID string, run *Automat
 		}()
 
 		// Execute the automation
-		detailedReportURL, userJourneyReportURL, err := s.runner.RunAutomation(runCtx, projectID, run)
+		detailedReportURL, userJourneyReportURL, err := s.runner.RunAutomation(runCtx, projectID, run, false, 0, nil)
 
 		// Update final status
 		endTime := time.Now()
 		run.EndTime = &endTime
 
 		if err != nil {
-			run.Status = "failed"
+			run.Status = AutomationRunStatusFailed
 			run.ErrorMessage = err.Error()
 			slog.Error("Automation run failed", "run_id", run.ID, "error", err)
 		} else {
-			run.Status = "completed"
+			run.Status = AutomationRunStatusCompleted
 			run.DetailedReportURL = detailedReportURL
 			run.UserJourneyReportURL = userJourneyReportURL
 			slog.Info("Automation run completed", "run_id", run.ID)
@@ -248,7 +248,7 @@ func (s *Scheduler) CancelRun(ctx context.Context, projectID, runID string) erro
 		return fmt.Errorf("failed to get run: %w", err)
 	}
 
-	run.Status = "cancelled"
+	run.Status = AutomationRunStatusCancelled
 	endTime := time.Now()
 	run.EndTime = &endTime
 
@@ -258,14 +258,14 @@ func (s *Scheduler) CancelRun(ctx context.Context, projectID, runID string) erro
 	}
 
 	// Update status in Redis with expiry
-	err = s.runCache.SetRunStatusWithExpiry(ctx, runID, "cancelled", 1*time.Minute)
+	err = s.runCache.SetRunStatusWithExpiry(ctx, runID, AutomationRunStatusCancelled, 1*time.Minute)
 	if err != nil {
 		slog.Error("Failed to update cancelled status in cache", "run_id", runID, "error", err)
 	}
 
 	// Send cancellation update via SSE
 	if s.sseManager != nil {
-		s.sseManager.SendRunStatusUpdate(projectID, run.AutomationID, runID, "cancelled")
+		s.sseManager.SendRunStatusUpdate(projectID, run.AutomationID, runID, AutomationRunStatusCancelled)
 	}
 
 	slog.Info("Automation run cancelled", "run_id", runID)
