@@ -7,6 +7,7 @@ import (
 
 	"log/slog"
 
+	"github.com/delordemm1/qplayground/internal/modules/notification"
 	"github.com/delordemm1/qplayground/internal/modules/storage"
 	"github.com/playwright-community/playwright-go"
 )
@@ -184,12 +185,12 @@ type NotificationChannelConfig struct {
 
 // AutomationConfig represents the parsed automation configuration
 type AutomationConfig struct {
-	Variables     []Variable                  `json:"variables"`
-	Multirun      MultiRunConfig              `json:"multirun"`
-	Timeout       int                         `json:"timeout"` // in seconds
-	Retries       int                         `json:"retries"`
-	Screenshots   ScreenshotConfig            `json:"screenshots"`
-	Notifications []NotificationChannelConfig `json:"notifications"`
+	Variables     []Variable                               `json:"variables"`
+	Multirun      MultiRunConfig                           `json:"multirun"`
+	Timeout       int                                      `json:"timeout"` // in seconds
+	Retries       int                                      `json:"retries"`
+	Screenshots   ScreenshotConfig                         `json:"screenshots"`
+	Notifications []notification.NotificationChannelConfig `json:"notifications"`
 }
 
 // StepConfig represents the parsed step configuration
@@ -276,7 +277,6 @@ const (
 	AutomationRunStatusCompleted              = "completed"
 	AutomationRunStatusFailed                 = "failed"
 	AutomationRunStatusCancelled              = "cancelled"
-	AutomationRunStatusPartialCompleted       = "partial_completed"
 	AutomationRunStatusQueued                 = "queued"
 	AutomationRunStatusPartialCompleted       = "partial_completed"
 	AutomationRunStatusAwaitingExternalRunner = "awaiting_external_runner"
@@ -309,7 +309,6 @@ type RunProgressMessage struct {
 	TotalUsersForStep int   `json:"totalUsersForStep,omitempty"`
 	AverageDurationMs int64 `json:"averageDurationMs,omitempty"`
 }
-
 
 // AutomationRepository defines the interface for automation data operations
 type AutomationRepository interface {

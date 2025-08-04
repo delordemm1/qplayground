@@ -4,10 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
-	"os"
-	"os/exec"
-	"path/filepath"
+	"net/http"
 	"sort"
 	"strconv"
 	"strings"
@@ -45,7 +44,7 @@ func NewRunner(
 // RunAutomation executes an automation workflow
 func (r *Runner) RunAutomation(ctx context.Context, projectID string, run *AutomationRun, isSubRun bool, subRunIndex int, overrides *RunOverrides) error {
 	startTime := time.Now()
-	
+	_ = startTime
 	// Get automation details
 	automation, err := r.automationRepo.GetAutomationByID(ctx, run.AutomationID)
 	if err != nil {
@@ -101,18 +100,18 @@ func (r *Runner) applyRunOverrides(config *AutomationConfig, overrides *RunOverr
 		// This would be used by the scheduler, not directly in config
 		slog.Info("Override: MaxConcurrentRuns", "value", *overrides.MaxConcurrentRuns)
 	}
-	
+
 	if overrides.RunMode != nil {
 		config.Multirun.Mode = *overrides.RunMode
 		slog.Info("Override: RunMode", "value", *overrides.RunMode)
 	}
-	
+
 	if overrides.RunCount != nil {
 		config.Multirun.Count = *overrides.RunCount
 		config.Multirun.Enabled = *overrides.RunCount > 1
 		slog.Info("Override: RunCount", "value", *overrides.RunCount)
 	}
-	
+
 	if overrides.RunDelay != nil {
 		config.Multirun.Delay = *overrides.RunDelay
 		slog.Info("Override: RunDelay", "value", *overrides.RunDelay)
@@ -188,13 +187,13 @@ func (r *Runner) executeMultiRun(ctx context.Context, projectID string, automati
 
 	// For internal multi-runs, we would spawn multiple goroutines or processes
 	// For external multi-runs, this would just set up the run record and wait for external runners
-	
+
 	// Update run record to track expected sub-runs
 	run.TotalRunsExpected = &config.Multirun.Count
 	runsCompleted := 0
 	run.RunsCompleted = &runsCompleted
 	run.Status = AutomationRunStatusRunning
-	
+
 	err := r.automationRepo.UpdateRun(ctx, run)
 	if err != nil {
 		return fmt.Errorf("failed to update run for multi-run: %w", err)
@@ -210,7 +209,7 @@ func (r *Runner) executeMultiRun(ctx context.Context, projectID string, automati
 		}
 
 		slog.Info("Starting sub-run", "index", i, "total", config.Multirun.Count)
-		
+
 		// Execute individual sub-run
 		subRunErr := r.executeSubRun(ctx, projectID, automation, run, i, config)
 		if subRunErr != nil {
@@ -265,14 +264,14 @@ func (r *Runner) executeSingleRun(ctx context.Context, projectID string, automat
 	// Update run with final status and report URLs
 	endTime := time.Now()
 	run.EndTime = &endTime
-	
+
 	if err != nil {
 		run.Status = AutomationRunStatusFailed
 		run.ErrorMessage = err.Error()
 	} else {
 		run.Status = AutomationRunStatusCompleted
 	}
-	
+
 	run.DetailedReportURL = detailedReportURL
 	run.UserJourneyReportURL = userJourneyReportURL
 
@@ -297,13 +296,13 @@ func (r *Runner) executeSingleRun(ctx context.Context, projectID string, automat
 func (r *Runner) uploadSubRunResults(ctx context.Context, runID string, subRunIndex int, logs []RunEvent, outputFiles []string) (logsURL, filesURL string, err error) {
 	// Create unique paths for this sub-run
 	subRunPath := fmt.Sprintf("runs/%s/sub_runs/%d", runID, subRunIndex)
-	
+
 	// Upload logs as JSON
 	logsJSON, err := json.MarshalIndent(logs, "", "  ")
 	if err != nil {
 		return "", "", fmt.Errorf("failed to marshal logs: %w", err)
 	}
-	
+
 	logsKey := fmt.Sprintf("%s/logs.json", subRunPath)
 	logsURL, err = r.storageService.UploadFile(ctx, logsKey, strings.NewReader(string(logsJSON)), "application/json")
 	if err != nil {
@@ -315,14 +314,14 @@ func (r *Runner) uploadSubRunResults(ctx context.Context, runID string, subRunIn
 	if err != nil {
 		return logsURL, "", fmt.Errorf("failed to marshal output files: %w", err)
 	}
-	
+
 	filesKey := fmt.Sprintf("%s/output_files.json", subRunPath)
 	filesURL, err = r.storageService.UploadFile(ctx, filesKey, strings.NewReader(string(outputFilesJSON)), "application/json")
 	if err != nil {
 		return logsURL, "", fmt.Errorf("failed to upload output files list: %w", err)
 	}
 
-	slog.Info("Uploaded sub-run results", 
+	slog.Info("Uploaded sub-run results",
 		"sub_run_index", subRunIndex,
 		"logs_url", logsURL,
 		"files_url", filesURL,
@@ -413,7 +412,7 @@ func (r *Runner) ConsolidateSubRuns(ctx context.Context, runID string) error {
 	// Send notifications for consolidated results
 	r.sendNotifications(ctx, automation, run, &automationConfig, allLogs, allOutputFiles)
 
-	slog.Info("Consolidation completed successfully", 
+	slog.Info("Consolidation completed successfully",
 		"run_id", runID,
 		"final_status", finalStatus,
 		"total_logs", len(allLogs),
@@ -444,7 +443,7 @@ func (r *Runner) downloadAndAggregateSubRuns(ctx context.Context, subRunOutputs 
 
 		// Download and parse logs
 		if subRunOutput.LogsURL != "" {
-			logs, err := r.downloadAndParseJSON[[]RunEvent](ctx, subRunOutput.LogsURL)
+			logs, err := downloadAndParseJSON[[]RunEvent](ctx, subRunOutput.LogsURL)
 			if err != nil {
 				slog.Error("Failed to download sub-run logs", "index", index, "error", err)
 				continue
@@ -454,7 +453,7 @@ func (r *Runner) downloadAndAggregateSubRuns(ctx context.Context, subRunOutputs 
 
 		// Download and parse output files list
 		if subRunOutput.FilesURL != "" {
-			files, err := r.downloadAndParseJSON[[]string](ctx, subRunOutput.FilesURL)
+			files, err := downloadAndParseJSON[[]string](ctx, subRunOutput.FilesURL)
 			if err != nil {
 				slog.Error("Failed to download sub-run files list", "index", index, "error", err)
 				continue
@@ -467,18 +466,36 @@ func (r *Runner) downloadAndAggregateSubRuns(ctx context.Context, subRunOutputs 
 	return allLogs, allOutputFiles, nil
 }
 
-// downloadAndParseJSON downloads and parses JSON data from a URL
-func (r *Runner) downloadAndParseJSON[T any](ctx context.Context, url string) (T, error) {
+// downloadAndParseJSON downloads and parses JSON data from a URL into the specified type T.
+// This is a standalone function because Go does not allow type parameters on methods.
+func downloadAndParseJSON[T any](ctx context.Context, url string) (T, error) {
 	var result T
-	
-	// For now, we'll assume the URL is accessible via HTTP
-	// In a production system, you might want to use the storage service's download method
-	// This is a simplified implementation
-	
-	// Since we're using object storage URLs, we can't directly download them here
-	// This would need to be implemented based on your storage service interface
-	// For now, return empty result
-	slog.Warn("downloadAndParseJSON not fully implemented", "url", url)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return result, fmt.Errorf("failed to create HTTP request for %s: %w", url, err)
+	}
+
+	client := &http.Client{Timeout: 30 * time.Second} // Add a reasonable timeout
+	resp, err := client.Do(req)
+	if err != nil {
+		return result, fmt.Errorf("failed to download data from %s: %w", url, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return result, fmt.Errorf("failed to download data from %s: received status code %d", url, resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return result, fmt.Errorf("failed to read response body from %s: %w", url, err)
+	}
+
+	if err := json.Unmarshal(body, &result); err != nil {
+		return result, fmt.Errorf("failed to unmarshal JSON from %s: %w", url, err)
+	}
+
 	return result, nil
 }
 
@@ -552,7 +569,7 @@ func (r *Runner) generateAndUploadReports(ctx context.Context, runID string, log
 func (r *Runner) generateDetailedHTMLReport(logs []RunEvent, outputFiles []string, isConsolidated bool) (string, error) {
 	// This is a simplified implementation
 	// In a production system, you would use a proper HTML template
-	
+
 	reportType := "Single Run"
 	if isConsolidated {
 		reportType = "Consolidated Multi-Run"
@@ -627,7 +644,7 @@ func (r *Runner) generateDetailedHTMLReport(logs []RunEvent, outputFiles []strin
 func (r *Runner) generateUserJourneyHTMLReport(logs []RunEvent, outputFiles []string, isConsolidated bool) (string, error) {
 	// This is a simplified implementation
 	// In a production system, you would use a proper HTML template with charts and visualizations
-	
+
 	reportType := "Single Run"
 	if isConsolidated {
 		reportType = "Consolidated Multi-Run"
@@ -669,7 +686,7 @@ func (r *Runner) generateUserJourneyHTMLReport(logs []RunEvent, outputFiles []st
 	for stepName, stepLogs := range stepMap {
 		hasError := false
 		totalDuration := int64(0)
-		
+
 		for _, log := range stepLogs {
 			if log.Type == RunEventTypeError {
 				hasError = true
@@ -1027,7 +1044,7 @@ func (r *Runner) sendNotifications(ctx context.Context, automation *Automation, 
 // ResolveVariablesInConfig resolves variables in action configuration
 func (r *Runner) ResolveVariablesInConfig(config map[string]interface{}, varContext *VariableContext, automationConfig *AutomationConfig) (map[string]interface{}, error) {
 	result := make(map[string]interface{})
-	
+
 	for key, value := range config {
 		switch v := value.(type) {
 		case string:
@@ -1066,46 +1083,46 @@ func (r *Runner) ResolveVariablesInConfig(config map[string]interface{}, varCont
 			result[key] = value
 		}
 	}
-	
+
 	return result, nil
 }
 
 // ResolveVariablesInString resolves variables in a string template
 func (r *Runner) ResolveVariablesInString(template string, varContext *VariableContext, automationConfig *AutomationConfig) (string, error) {
 	result := template
-	
+
 	// Replace static variables
 	for key, value := range varContext.StaticVars {
 		placeholder := fmt.Sprintf("{{%s}}", key)
 		result = strings.ReplaceAll(result, placeholder, value)
 	}
-	
+
 	// Replace runtime variables
 	for key, value := range varContext.RuntimeVars {
 		placeholder := fmt.Sprintf("{{runtime.%s}}", key)
 		result = strings.ReplaceAll(result, placeholder, fmt.Sprintf("%v", value))
 	}
-	
+
 	// Replace global variables
 	for key, value := range varContext.GlobalVars {
 		placeholder := fmt.Sprintf("{{runtime.%s}}", key)
 		result = strings.ReplaceAll(result, placeholder, fmt.Sprintf("%v", value))
 	}
-	
+
 	// Replace environment variables
 	envVars := map[string]string{
-		"loopIndex":     strconv.Itoa(varContext.LoopIndex),
-		"timestamp":     varContext.Timestamp,
-		"runId":         varContext.RunID,
-		"projectId":     varContext.ProjectID,
-		"automationId":  varContext.AutomationID,
+		"loopIndex":    strconv.Itoa(varContext.LoopIndex),
+		"timestamp":    varContext.Timestamp,
+		"runId":        varContext.RunID,
+		"projectId":    varContext.ProjectID,
+		"automationId": varContext.AutomationID,
 	}
-	
+
 	for key, value := range envVars {
 		placeholder := fmt.Sprintf("{{%s}}", key)
 		result = strings.ReplaceAll(result, placeholder, value)
 	}
-	
+
 	// Replace faker variables (simplified implementation)
 	fakerVars := map[string]func() string{
 		"faker.name":     func() string { return "John Doe" },
@@ -1115,13 +1132,13 @@ func (r *Runner) ResolveVariablesInString(template string, varContext *VariableC
 		"faker.username": func() string { return "testuser" },
 		"faker.password": func() string { return "password123" },
 	}
-	
+
 	for placeholder, generator := range fakerVars {
 		fullPlaceholder := fmt.Sprintf("{{%s}}", placeholder)
 		if strings.Contains(result, fullPlaceholder) {
 			result = strings.ReplaceAll(result, fullPlaceholder, generator())
 		}
 	}
-	
+
 	return result, nil
 }
